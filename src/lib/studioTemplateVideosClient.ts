@@ -17,7 +17,7 @@ export function warmStudioTemplateVideosFetch(): void {
 export function getStudioTemplateVideosCached(): Promise<StudioTemplateVideoItem[]> {
   if (cached) return Promise.resolve(cached);
   if (inflight) return inflight;
-  inflight = fetch("/api/studio/template-videos", { priority: "high" })
+  inflight = fetch("/api/studio/template-videos?kind=product", { priority: "high" })
     .then((res) => res.json().catch(() => null))
     .then((json: { videos?: StudioTemplateVideoItem[] } | null) => {
       const videos = Array.isArray(json?.videos) ? json.videos : [];

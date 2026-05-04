@@ -184,6 +184,8 @@ const ADS_STUDIO_MAX_ACTIVE_JOB_AGE_MS = 1000 * 60 * 60 * 24;
 
 type TemplateVideoItem = { filename: string; label: string; url: string };
 
+type AdsStudioTemplateGalleryKind = "product" | "app";
+
 const TEMPLATE_PROMPT_HYPER_MOTION = `chocolate japanese style commercial, with chocolate crunching, pieces breaking, hands passing chocolate to each other, japanese happy people smiling while biting, and these little characters animated`;
 
 const TEMPLATE_PROMPT_UNBOXING = `VIDEO — 10-second vertical (9:16) satisfying ASMR unboxing of "FROGGY PRINCE" by "MELON STUDIO × PLAY PALS"
@@ -837,7 +839,7 @@ async function pollVideo(taskId: string, personalApiKey?: string, piapiApiKey?: 
 export default function AdsStudioPanel() {
   const { planId } = useCreditsPlan();
   const [assetType, setAssetType] = useState<"product" | "app">("product");
-  const [videoDurationSec, setVideoDurationSec] = useState(10);
+  const [videoDurationSec, setVideoDurationSec] = useState(15);
   const [outputAspect, setOutputAspect] = useState<AdsStudioOutputAspect>("9:16");
   const [videoResolution, setVideoResolution] = useState<AdsStudioVideoResolution>("720p");
   const [prompt, setPrompt] = useState("");
@@ -847,6 +849,7 @@ export default function AdsStudioPanel() {
   const [selectedSidebarKey, setSelectedSidebarKey] = useState<string | null>(null);
   const [history, setHistory] = useState<AdsStudioHistoryItem[]>([]);
   const [templateVideos, setTemplateVideos] = useState<TemplateVideoItem[]>([]);
+  const [adsTemplateGalleryKind, setAdsTemplateGalleryKind] = useState<AdsStudioTemplateGalleryKind>("product");
   const [uploadingRefSlot, setUploadingRefSlot] = useState(false);
   const [uploadingAvatar, setUploadingAvatar] = useState(false);
   const [refSourceDialogOpen, setRefSourceDialogOpen] = useState(false);
@@ -920,7 +923,10 @@ export default function AdsStudioPanel() {
   useEffect(() => {
     let cancelled = false;
     (async () => {
-      const res = await fetch(`/api/studio/template-videos?t=${Date.now()}`, { cache: "no-store" });
+      const res = await fetch(
+        `/api/studio/template-videos?kind=${encodeURIComponent(adsTemplateGalleryKind)}&t=${Date.now()}`,
+        { cache: "no-store" },
+      );
       const json = (await res.json().catch(() => null)) as { videos?: TemplateVideoItem[] } | null;
       if (cancelled) return;
       const videos = Array.isArray(json?.videos) ? json.videos : [];
@@ -929,7 +935,7 @@ export default function AdsStudioPanel() {
     return () => {
       cancelled = true;
     };
-  }, []);
+  }, [adsTemplateGalleryKind]);
 
   useEffect(() => {
     let cancelled = false;
@@ -1351,7 +1357,11 @@ export default function AdsStudioPanel() {
     window.setTimeout(() => align("auto"), 900);
   }
 
-  async function recreateFromTemplate(label: string, tpl?: TemplateVideoItem) {
+  async function recreateFromTemplate(
+    label: string,
+    tpl: TemplateVideoItem | undefined,
+    templateGalleryKind: AdsStudioTemplateGalleryKind,
+  ) {
     const n = normalizeTemplateLabel(label);
     const isTutorial2 =
       n.includes("tutorial 2") || n.includes("tutorial2") || n.includes("tutorial (2)");
@@ -1488,7 +1498,7 @@ export default function AdsStudioPanel() {
       setUploadingAvatar(true);
       try {
         const { productUrl, avatarUrl } = await uploadTemplateRefsFromPreviewVideo(tplUrl);
-        setAssetType("product");
+        setAssetType(templateGalleryKind === "app" ? "app" : "product");
         setAppRefUrl(productUrl);
         setAvatarUrl(avatarUrl);
         toast.success("References added", {
@@ -2023,7 +2033,7 @@ export default function AdsStudioPanel() {
         </div>
 
       <section className="w-full min-w-0">
-        <div className="mb-5 flex justify-center sm:mb-6">
+        <div className="mb-5 flex flex-col items-center gap-3 sm:mb-6">
           <h2 className="flex items-center gap-2.5 text-center text-xl font-semibold tracking-tight text-white sm:gap-3 sm:text-2xl md:text-[1.75rem] md:leading-snug">
             <Zap
               className="size-7 shrink-0 text-fuchsia-400 drop-shadow-[0_0_14px_rgba(232,121,249,0.55)] sm:size-8 md:size-9"
@@ -2032,6 +2042,40 @@ export default function AdsStudioPanel() {
             />
             Generate across formats
           </h2>
+          <div
+            className="flex rounded-full border border-white/10 bg-black/35 p-0.5 shadow-[inset_0_1px_0_0_rgba(255,255,255,0.06)]"
+            role="tablist"
+            aria-label="Template gallery"
+          >
+            <button
+              type="button"
+              role="tab"
+              aria-selected={adsTemplateGalleryKind === "product"}
+              onClick={() => setAdsTemplateGalleryKind("product")}
+              className={cn(
+                "rounded-full px-3 py-1.5 text-[11px] font-semibold uppercase tracking-wide transition sm:px-4",
+                adsTemplateGalleryKind === "product"
+                  ? "bg-white/[0.12] text-white shadow-sm ring-1 ring-white/15"
+                  : "text-white/50 hover:text-white/75",
+              )}
+            >
+              Product templates
+            </button>
+            <button
+              type="button"
+              role="tab"
+              aria-selected={adsTemplateGalleryKind === "app"}
+              onClick={() => setAdsTemplateGalleryKind("app")}
+              className={cn(
+                "rounded-full px-3 py-1.5 text-[11px] font-semibold uppercase tracking-wide transition sm:px-4",
+                adsTemplateGalleryKind === "app"
+                  ? "bg-white/[0.12] text-white shadow-sm ring-1 ring-white/15"
+                  : "text-white/50 hover:text-white/75",
+              )}
+            >
+              App templates
+            </button>
+          </div>
         </div>
         <div className="grid grid-cols-2 gap-2 md:grid-cols-3 lg:grid-cols-5">
           {templateVideos.map((tpl, idx) => {
@@ -2072,7 +2116,7 @@ export default function AdsStudioPanel() {
                 <p className="pointer-events-none absolute left-3 top-2 text-[11px] font-semibold text-white/90">{label}</p>
                 <button
                   type="button"
-                  onClick={() => void recreateFromTemplate(label, tpl)}
+                  onClick={() => void recreateFromTemplate(label, tpl, adsTemplateGalleryKind)}
                   className={cn(
                     "absolute bottom-3 left-1/2 z-20 flex h-9 -translate-x-1/2 items-center justify-center gap-1.5 rounded-full px-4 text-[13px] font-semibold text-white opacity-0 shadow-[0_4px_0_0_rgba(76,29,149,0.88)] ring-1 ring-violet-300/35 transition",
                     "border border-violet-300/45 bg-violet-500 hover:bg-violet-400 hover:shadow-[0_5px_0_0_rgba(76,29,149,0.88)] active:-translate-x-1/2 active:translate-y-px active:shadow-none",
@@ -2087,7 +2131,16 @@ export default function AdsStudioPanel() {
           })}
           {templateVideos.length === 0 ? (
             <div className="col-span-full rounded-xl border border-white/10 bg-black/20 px-4 py-3 text-sm text-white/50">
-              No template videos found in <code>/public/studio/template</code>.
+              {adsTemplateGalleryKind === "app" ? (
+                <>
+                  No app template videos yet. Add <code className="text-white/65">.mp4</code> files under{" "}
+                  <code className="text-white/65">/public/studio/template-app</code>.
+                </>
+              ) : (
+                <>
+                  No template videos found in <code className="text-white/65">/public/studio/template</code>.
+                </>
+              )}
             </div>
           ) : null}
         </div>
