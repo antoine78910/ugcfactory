@@ -44,7 +44,7 @@ export function isRedeemAccessGranted(meta: TrialAppMetadata): boolean {
  * - Paid subscription (plan not free): true.
  * - Else:
  *   - Active redeem-link entitlement: positive ledger balance is enough.
- *   - Otherwise: must have an active $1 trial window AND a positive ledger balance.
+ *   - Otherwise: allow access (free plan can enter studio; paywalls live inside features).
  */
 export function computeStudioAccessAllowed(opts: {
   planId: "free" | string;
@@ -53,7 +53,5 @@ export function computeStudioAccessAllowed(opts: {
 }): boolean {
   if (opts.planId !== "free") return true;
   if (isRedeemAccessGranted(opts.trialMeta)) return opts.creditBalance > 0;
-  if (!isTrialMetadataActive(opts.trialMeta)) return false;
-  if (!isTrialTimeWindowOpen(opts.trialMeta)) return false;
-  return opts.creditBalance > 0;
+  return true;
 }

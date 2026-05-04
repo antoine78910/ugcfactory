@@ -10,6 +10,7 @@ import { useSupabaseBrowserClient } from "@/lib/supabase/BrowserSupabaseProvider
 import { DATAFAST_GOALS, trackDatafastGoal } from "@/lib/analytics/datafastGoals";
 import { cn } from "@/lib/utils";
 import SetupClient from "@/app/setup/SetupClient";
+import { sectionToPath } from "@/lib/studioPaths";
 
 const OTHER_MAX_LEN = 160;
 
@@ -175,6 +176,10 @@ export default function OnboardingClient() {
     }
   }
 
+  function handleStartForFree() {
+    window.location.href = sectionToPath("link_to_ad");
+  }
+
   return (
     <div className="min-h-[100dvh] overflow-x-clip bg-[#050507] text-white antialiased selection:bg-violet-500/30">
       {/* Nav, same shell as landing (page.tsx header) */}
@@ -222,10 +227,10 @@ export default function OnboardingClient() {
               <div className="mt-5 flex justify-center">
                 <button
                   type="button"
-                  onClick={() => void handleLogout()}
-                  className="text-[11px] font-medium text-white/35 transition hover:text-white/60"
+                  onClick={handleStartForFree}
+                  className="h-11 w-full max-w-[280px] rounded-2xl border border-white/15 bg-white/[0.06] text-base font-extrabold text-white/90 transition hover:bg-white/[0.09] hover:text-white"
                 >
-                  Logout
+                  Start for Free
                 </button>
               </div>
             </div>

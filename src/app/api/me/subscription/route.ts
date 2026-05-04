@@ -180,7 +180,8 @@ export async function GET() {
     const credits = typeof withBal.creditBalance === "number" && Number.isFinite(withBal.creditBalance)
       ? withBal.creditBalance
       : 0;
-    const trialUi = isTrialMetadataActive(trialMeta) && isTrialTimeWindowOpen(trialMeta);
+    // $1 trial UI has been removed; keep returning `isTrial=false` so client doesn't gate surfaces.
+    const trialUi = false;
     // Comp plans already force studioAccessAllowed=true; keep that override.
     const studioAccessAllowed =
       withBal.studioAccessAllowed ??

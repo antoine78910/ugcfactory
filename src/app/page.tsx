@@ -6,7 +6,6 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { HeroVideoCarousel3D } from "./HeroVideoCarousel3D";
 import { LandingSeedanceTopButton } from "./LandingSeedanceTopButton";
-import { LandingTrialPriceText } from "./LandingTrialPriceText";
 import { ArrowRight, Sparkles } from "lucide-react";
 
 /**
@@ -20,8 +19,7 @@ const LandingFaq = nextDynamic(() => import("./LandingFaq").then((m) => m.Landin
 
 /**
  * Force-static: TTFB drops from ~13s (per-request `headers()` geo lookup) to
- * an edge-cached HTML response. The trial price `$1`/`1€` is rendered by a tiny
- * client component (`LandingTrialPriceText`) talking to `/api/landing/trial-currency`.
+ * an edge-cached HTML response.
  */
 export const dynamic = "force-static";
 export const revalidate = 3600;
@@ -170,7 +168,7 @@ export default function LandingPage() {
                   className="inline-flex items-center justify-center gap-1.5"
                 >
                   <Sparkles className="h-4 w-4 shrink-0 sm:h-4 sm:w-4" aria-hidden />
-                  <span className="text-balance">Create your Ad For <LandingTrialPriceText className="inline" /></span>
+                  <span className="text-balance">Start for Free</span>
                 </Link>
               </Button>
             </div>
@@ -246,7 +244,7 @@ export default function LandingPage() {
         >
           <Link href={studioAppPath("/signup")} prefetch={false} className="inline-flex items-center justify-center gap-2">
             <Sparkles className="h-4 w-4 shrink-0" />
-            <span>Start your <LandingTrialPriceText className="inline" /> trial</span>
+            <span>Start for Free</span>
             <ArrowRight className="h-4 w-4 shrink-0" />
           </Link>
         </Button>
@@ -313,7 +311,7 @@ export default function LandingPage() {
           >
             <Link href={studioAppPath("/signup")} prefetch={false} className="inline-flex items-center justify-center gap-1.5">
               <Sparkles className="h-4 w-4 shrink-0" />
-              <span className="inline">Try for <LandingTrialPriceText className="inline" /></span>
+              <span className="inline">Start for Free</span>
             </Link>
           </Button>
         </div>
