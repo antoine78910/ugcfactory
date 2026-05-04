@@ -61,7 +61,14 @@ export async function POST(req: Request) {
     }
     charged = await spendUserCredits(admin, auth.user.id, PROMPT_ENHANCE_CREDITS);
     if (charged < PROMPT_ENHANCE_CREDITS) {
-      return NextResponse.json({ error: "Not enough credits." }, { status: 402 });
+      if (charged > 0) {
+        await refundUserCredits(admin, auth.user.id, charged);
+      }
+      const { balance } = await getUserCreditBalance(admin, auth.user.id);
+      return NextResponse.json(
+        { error: "Not enough credits.", balance },
+        { status: 402 },
+      );
     }
   }
 

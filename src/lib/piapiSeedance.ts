@@ -26,6 +26,11 @@ export const SEEDANCE_PREVIEW_MAX_IMAGE_URLS = 9;
 /** Studio compact upload UI for Preview / Fast Preview (ordered `image_urls`). Matches Preview API max. */
 export const SEEDANCE_COMPACT_PREVIEW_MAX_IMAGE_URLS = SEEDANCE_PREVIEW_MAX_IMAGE_URLS;
 
+/** PiAPI rejects very long prompts on Seedance Preview; matches workflow cap. */
+export const SEEDANCE_PREVIEW_PROMPT_MAX_CHARS = 1800;
+/** Seedance 2 / 2 Fast (non-preview): practical upper bound before provider returns invalid-parameters errors. */
+export const SEEDANCE_PRO_PROMPT_MAX_CHARS = 3500;
+
 /**
  * Exponential backoff with jitter. PiAPI 502/503 storms last 1–4s; the previous flat
  * 350ms × n window often expired before recovery, surfacing the failure to the user.

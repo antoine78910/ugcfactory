@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useState } from "react";
 import { Dialog } from "radix-ui";
-import { ImageIcon, Loader2, Sparkles, Upload, X } from "lucide-react";
+import { ImageIcon, Loader2, Sparkles, Upload, UserRound, X } from "lucide-react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import {
@@ -17,6 +17,11 @@ import { userMessageFromCaughtError } from "@/lib/generationUserMessage";
 import { cn } from "@/lib/utils";
 
 const ADS_STUDIO_MEDIA_KIND_PARAM = [...STUDIO_VIDEO_TAB_KINDS, "studio_image", "studio_upscale"].join(",");
+
+/** Avatar picker: one Element source at a time (same pattern as product). */
+type AvatarRefTab = "library" | "generations" | "upload";
+
+type ProductRefTab = "generations" | "lta" | "upload";
 
 type Props = {
   open: boolean;
@@ -39,6 +44,8 @@ export function AdsStudioRefSourceDialog({
   const [imageItems, setImageItems] = useState<StudioHistoryItem[]>([]);
   const [ltaGroups, setLtaGroups] = useState<ElementRefPickLtaGroup[]>([]);
   const [avatarUrls, setAvatarUrls] = useState<string[]>([]);
+  const [avatarTab, setAvatarTab] = useState<AvatarRefTab>("library");
+  const [productTab, setProductTab] = useState<ProductRefTab>("generations");
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -88,6 +95,15 @@ export function AdsStudioRefSourceDialog({
     if (open) void load();
   }, [open, load]);
 
+  useEffect(() => {
+    if (!open) return;
+    if (mode === "avatar") {
+      setAvatarTab("library");
+    } else {
+      setProductTab("generations");
+    }
+  }, [open, mode]);
+
   function pick(url: string) {
     const u = url.trim();
     if (!u || !isKieServableReferenceImageUrl(u)) {
@@ -100,6 +116,9 @@ export function AdsStudioRefSourceDialog({
 
   const productPhotoUrls = ltaGroups.flatMap((g) => g.productMedia.filter((m) => m.kind === "image").map((m) => m.url));
   const uniqueProductPhotos = [...new Set(productPhotoUrls)];
+
+  const tabBarBtn =
+    "rounded-lg border px-2.5 py-1.5 text-[11px] font-semibold uppercase tracking-wide transition sm:px-3";
 
   return (
     <Dialog.Root open={open} onOpenChange={onOpenChange}>
@@ -124,19 +143,137 @@ export function AdsStudioRefSourceDialog({
             Choose an image from generations, Link to Ad, or your avatar library.
           </Dialog.Description>
 
+          {!loading ? (
+            <div
+              role="tablist"
+              aria-label={mode === "avatar" ? "Avatar reference source" : "Product reference source"}
+              className="flex flex-wrap gap-1.5 border-b border-white/10 px-4 pb-3 pt-1"
+            >
+              {mode === "avatar" ? (
+                <>
+                  <button
+                    type="button"
+                    role="tab"
+                    aria-selected={avatarTab === "library"}
+                    onClick={() => setAvatarTab("library")}
+                    className={cn(
+                      tabBarBtn,
+                      avatarTab === "library"
+                        ? "border-violet-400/45 bg-violet-500/20 text-violet-100"
+                        : "border-white/10 bg-white/[0.04] text-white/55 hover:border-white/20 hover:bg-white/[0.07] hover:text-white/80",
+                    )}
+                  >
+                    <span className="inline-flex items-center gap-1">
+                      <UserRound className="size-3.5 opacity-90" aria-hidden />
+                      Avatar library
+                    </span>
+                  </button>
+                  <button
+                    type="button"
+                    role="tab"
+                    aria-selected={avatarTab === "generations"}
+                    onClick={() => setAvatarTab("generations")}
+                    className={cn(
+                      tabBarBtn,
+                      avatarTab === "generations"
+                        ? "border-violet-400/45 bg-violet-500/20 text-violet-100"
+                        : "border-white/10 bg-white/[0.04] text-white/55 hover:border-white/20 hover:bg-white/[0.07] hover:text-white/80",
+                    )}
+                  >
+                    <span className="inline-flex items-center gap-1">
+                      <ImageIcon className="size-3.5 opacity-90" aria-hidden />
+                      Image generations
+                    </span>
+                  </button>
+                  <button
+                    type="button"
+                    role="tab"
+                    aria-selected={avatarTab === "upload"}
+                    onClick={() => setAvatarTab("upload")}
+                    className={cn(
+                      tabBarBtn,
+                      avatarTab === "upload"
+                        ? "border-violet-400/45 bg-violet-500/20 text-violet-100"
+                        : "border-white/10 bg-white/[0.04] text-white/55 hover:border-white/20 hover:bg-white/[0.07] hover:text-white/80",
+                    )}
+                  >
+                    <span className="inline-flex items-center gap-1">
+                      <Upload className="size-3.5 opacity-90" aria-hidden />
+                      Upload
+                    </span>
+                  </button>
+                </>
+              ) : (
+                <>
+                  <button
+                    type="button"
+                    role="tab"
+                    aria-selected={productTab === "generations"}
+                    onClick={() => setProductTab("generations")}
+                    className={cn(
+                      tabBarBtn,
+                      productTab === "generations"
+                        ? "border-violet-400/45 bg-violet-500/20 text-violet-100"
+                        : "border-white/10 bg-white/[0.04] text-white/55 hover:border-white/20 hover:bg-white/[0.07] hover:text-white/80",
+                    )}
+                  >
+                    <span className="inline-flex items-center gap-1">
+                      <ImageIcon className="size-3.5 opacity-90" aria-hidden />
+                      Image generations
+                    </span>
+                  </button>
+                  <button
+                    type="button"
+                    role="tab"
+                    aria-selected={productTab === "lta"}
+                    onClick={() => setProductTab("lta")}
+                    className={cn(
+                      tabBarBtn,
+                      productTab === "lta"
+                        ? "border-violet-400/45 bg-violet-500/20 text-violet-100"
+                        : "border-white/10 bg-white/[0.04] text-white/55 hover:border-white/20 hover:bg-white/[0.07] hover:text-white/80",
+                    )}
+                  >
+                    <span className="inline-flex items-center gap-1">
+                      <Sparkles className="size-3.5 opacity-90" aria-hidden />
+                      Link to Ad
+                    </span>
+                  </button>
+                  <button
+                    type="button"
+                    role="tab"
+                    aria-selected={productTab === "upload"}
+                    onClick={() => setProductTab("upload")}
+                    className={cn(
+                      tabBarBtn,
+                      productTab === "upload"
+                        ? "border-violet-400/45 bg-violet-500/20 text-violet-100"
+                        : "border-white/10 bg-white/[0.04] text-white/55 hover:border-white/20 hover:bg-white/[0.07] hover:text-white/80",
+                    )}
+                  >
+                    <span className="inline-flex items-center gap-1">
+                      <Upload className="size-3.5 opacity-90" aria-hidden />
+                      Upload
+                    </span>
+                  </button>
+                </>
+              )}
+            </div>
+          ) : null}
+
           <div className="min-h-0 flex-1 overflow-y-auto px-4 py-4 studio-params-scroll">
             {loading ? (
               <div className="flex items-center justify-center gap-2 py-12 text-sm text-white/55">
                 <Loader2 className="size-5 animate-spin" aria-hidden />
                 Loading…
               </div>
-            ) : (
-              <div className="flex flex-col gap-4">
-                {mode === "avatar" ? (
+            ) : mode === "avatar" ? (
+              <div className="flex flex-col gap-3">
+                {avatarTab === "library" ? (
                   <section className="rounded-xl border border-white/10 bg-white/[0.03] p-4">
                     <h3 className="mb-3 flex items-center gap-2 text-xs font-semibold uppercase tracking-wide text-white/55">
                       <span className="inline-flex size-6 items-center justify-center rounded-lg bg-violet-500/15 text-violet-200">
-                        A
+                        <UserRound className="size-3.5" aria-hidden />
                       </span>
                       Element — Avatar library
                     </h3>
@@ -166,40 +303,122 @@ export function AdsStudioRefSourceDialog({
                   </section>
                 ) : null}
 
-                <section className="rounded-xl border border-white/10 bg-white/[0.03] p-4">
-                  <h3 className="mb-3 flex items-center gap-2 text-xs font-semibold uppercase tracking-wide text-white/55">
-                    <span className="inline-flex size-6 items-center justify-center rounded-lg bg-violet-500/15 text-violet-200">
-                      <ImageIcon className="size-3.5" aria-hidden />
-                    </span>
-                    Element — Image generations
-                  </h3>
-                  {imageItems.length > 0 ? (
-                    <div className="grid grid-cols-3 gap-2 sm:grid-cols-4">
-                      {imageItems.slice(0, 24).map((row) => {
-                        const u = row.mediaUrl?.trim() ?? "";
-                        if (!u) return null;
-                        return (
-                          <button
-                            key={row.id}
-                            type="button"
-                            onClick={() => pick(u)}
-                            className="group relative aspect-square overflow-hidden rounded-lg border border-white/15 bg-black/30 transition hover:border-violet-400/55"
-                          >
-                            {/* eslint-disable-next-line @next/next/no-img-element */}
-                            <img src={u} alt="" className="h-full w-full object-cover" />
-                            <span className="pointer-events-none absolute inset-x-0 bottom-0 bg-gradient-to-t from-black/85 to-transparent px-1 py-1 text-[9px] font-medium text-white/80 opacity-0 transition group-hover:opacity-100 line-clamp-2">
-                              {row.label.slice(0, 48)}
-                            </span>
-                          </button>
-                        );
-                      })}
-                    </div>
-                  ) : (
-                    <p className="text-sm text-white/45">No studio images yet. Create some in Image tab first.</p>
-                  )}
-                </section>
+                {avatarTab === "generations" ? (
+                  <section className="rounded-xl border border-white/10 bg-white/[0.03] p-4">
+                    <h3 className="mb-3 flex items-center gap-2 text-xs font-semibold uppercase tracking-wide text-white/55">
+                      <span className="inline-flex size-6 items-center justify-center rounded-lg bg-violet-500/15 text-violet-200">
+                        <ImageIcon className="size-3.5" aria-hidden />
+                      </span>
+                      Element — Image generations
+                    </h3>
+                    {imageItems.length > 0 ? (
+                      <div className="grid grid-cols-3 gap-2 sm:grid-cols-4">
+                        {imageItems.slice(0, 24).map((row) => {
+                          const u = row.mediaUrl?.trim() ?? "";
+                          if (!u) return null;
+                          return (
+                            <button
+                              key={row.id}
+                              type="button"
+                              onClick={() => pick(u)}
+                              className="group relative aspect-square overflow-hidden rounded-lg border border-white/15 bg-black/30 transition hover:border-violet-400/55"
+                            >
+                              {/* eslint-disable-next-line @next/next/no-img-element */}
+                              <img src={u} alt="" className="h-full w-full object-cover" />
+                              <span className="pointer-events-none absolute inset-x-0 bottom-0 bg-gradient-to-t from-black/85 to-transparent px-1 py-1 text-[9px] font-medium text-white/80 opacity-0 transition group-hover:opacity-100 line-clamp-2">
+                                {row.label.slice(0, 48)}
+                              </span>
+                            </button>
+                          );
+                        })}
+                      </div>
+                    ) : (
+                      <p className="text-sm text-white/45">No studio images yet. Create some in Image tab first.</p>
+                    )}
+                  </section>
+                ) : null}
 
-                {mode === "product" ? (
+                {avatarTab === "upload" ? (
+                  <div className="flex flex-col gap-4">
+                    <section className="rounded-xl border border-dashed border-white/15 bg-white/[0.02] p-4">
+                      <h3 className="mb-2 text-xs font-semibold uppercase tracking-wide text-white/45">
+                        Upload library (coming soon)
+                      </h3>
+                      <p className="text-sm leading-relaxed text-white/40">
+                        Dedicated avatar uploads for Ads Studio will appear here in a future update. Until then, use{" "}
+                        <span className="font-medium text-white/55">Avatar library</span> or{" "}
+                        <span className="font-medium text-white/55">Image generations</span>.
+                      </p>
+                    </section>
+                    <section
+                      className={cn(
+                        "rounded-xl border border-white/10 bg-white/[0.03] p-4",
+                        !onRequestFileUpload && "opacity-60",
+                      )}
+                    >
+                      <h3 className="mb-2 flex items-center gap-2 text-xs font-semibold uppercase tracking-wide text-white/55">
+                        <span className="inline-flex size-6 items-center justify-center rounded-lg bg-violet-500/15 text-violet-200">
+                          <Upload className="size-3.5" aria-hidden />
+                        </span>
+                        Upload from device
+                      </h3>
+                      <p className="mb-3 text-sm text-white/45">
+                        Upload a new image from your device (same as the slot&apos;s + control).
+                      </p>
+                      <Button
+                        type="button"
+                        variant="secondary"
+                        disabled={!onRequestFileUpload}
+                        className="border-white/15 bg-white/5 text-white hover:bg-white/10"
+                        onClick={() => {
+                          onRequestFileUpload?.();
+                          onOpenChange(false);
+                        }}
+                      >
+                        Choose file…
+                      </Button>
+                    </section>
+                  </div>
+                ) : null}
+              </div>
+            ) : (
+              <div className="flex flex-col gap-3">
+                {productTab === "generations" ? (
+                  <section className="rounded-xl border border-white/10 bg-white/[0.03] p-4">
+                    <h3 className="mb-3 flex items-center gap-2 text-xs font-semibold uppercase tracking-wide text-white/55">
+                      <span className="inline-flex size-6 items-center justify-center rounded-lg bg-violet-500/15 text-violet-200">
+                        <ImageIcon className="size-3.5" aria-hidden />
+                      </span>
+                      Element — Image generations
+                    </h3>
+                    {imageItems.length > 0 ? (
+                      <div className="grid grid-cols-3 gap-2 sm:grid-cols-4">
+                        {imageItems.slice(0, 24).map((row) => {
+                          const u = row.mediaUrl?.trim() ?? "";
+                          if (!u) return null;
+                          return (
+                            <button
+                              key={row.id}
+                              type="button"
+                              onClick={() => pick(u)}
+                              className="group relative aspect-square overflow-hidden rounded-lg border border-white/15 bg-black/30 transition hover:border-violet-400/55"
+                            >
+                              {/* eslint-disable-next-line @next/next/no-img-element */}
+                              <img src={u} alt="" className="h-full w-full object-cover" />
+                              <span className="pointer-events-none absolute inset-x-0 bottom-0 bg-gradient-to-t from-black/85 to-transparent px-1 py-1 text-[9px] font-medium text-white/80 opacity-0 transition group-hover:opacity-100 line-clamp-2">
+                                {row.label.slice(0, 48)}
+                              </span>
+                            </button>
+                          );
+                        })}
+                      </div>
+                    ) : (
+                      <p className="text-sm text-white/45">No studio images yet. Create some in Image tab first.</p>
+                    )}
+                  </section>
+                ) : null}
+
+                {productTab === "lta" ? (
                   <section className="rounded-xl border border-white/10 bg-white/[0.03] p-4">
                     <h3 className="mb-3 flex items-center gap-2 text-xs font-semibold uppercase tracking-wide text-white/55">
                       <span className="inline-flex size-6 items-center justify-center rounded-lg bg-violet-500/15 text-violet-200">
@@ -232,45 +451,36 @@ export function AdsStudioRefSourceDialog({
                   </section>
                 ) : null}
 
-                {mode === "avatar" ? (
-                  <section className="rounded-xl border border-dashed border-white/15 bg-white/[0.02] p-4">
-                    <h3 className="mb-2 text-xs font-semibold uppercase tracking-wide text-white/45">
-                      Element — Upload library (coming soon)
+                {productTab === "upload" ? (
+                  <section
+                    className={cn(
+                      "rounded-xl border border-white/10 bg-white/[0.03] p-4",
+                      !onRequestFileUpload && "opacity-60",
+                    )}
+                  >
+                    <h3 className="mb-2 flex items-center gap-2 text-xs font-semibold uppercase tracking-wide text-white/55">
+                      <span className="inline-flex size-6 items-center justify-center rounded-lg bg-violet-500/15 text-violet-200">
+                        <Upload className="size-3.5" aria-hidden />
+                      </span>
+                      Element — Upload file
                     </h3>
-                    <p className="text-sm leading-relaxed text-white/40">
-                      Dedicated avatar uploads for Ads Studio will appear here in a future update. Until then, use{" "}
-                      <span className="font-medium text-white/55">Avatar library</span> above or{" "}
-                      <span className="font-medium text-white/55">Image generations</span>.
+                    <p className="mb-3 text-sm text-white/45">
+                      Upload a new image from your device (same as the slot&apos;s + control).
                     </p>
+                    <Button
+                      type="button"
+                      variant="secondary"
+                      disabled={!onRequestFileUpload}
+                      className="border-white/15 bg-white/5 text-white hover:bg-white/10"
+                      onClick={() => {
+                        onRequestFileUpload?.();
+                        onOpenChange(false);
+                      }}
+                    >
+                      Choose file…
+                    </Button>
                   </section>
                 ) : null}
-
-                <section
-                  className={cn(
-                    "rounded-xl border border-white/10 bg-white/[0.03] p-4",
-                    !onRequestFileUpload && "opacity-60",
-                  )}
-                >
-                  <h3 className="mb-2 flex items-center gap-2 text-xs font-semibold uppercase tracking-wide text-white/55">
-                    <span className="inline-flex size-6 items-center justify-center rounded-lg bg-violet-500/15 text-violet-200">
-                      <Upload className="size-3.5" aria-hidden />
-                    </span>
-                    Element — Upload file
-                  </h3>
-                  <p className="mb-3 text-sm text-white/45">Upload a new image from your device (same as the slot&apos;s + control).</p>
-                  <Button
-                    type="button"
-                    variant="secondary"
-                    disabled={!onRequestFileUpload}
-                    className="border-white/15 bg-white/5 text-white hover:bg-white/10"
-                    onClick={() => {
-                      onRequestFileUpload?.();
-                      onOpenChange(false);
-                    }}
-                  >
-                    Choose file…
-                  </Button>
-                </section>
               </div>
             )}
           </div>

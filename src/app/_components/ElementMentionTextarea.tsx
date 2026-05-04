@@ -1,7 +1,7 @@
 "use client";
 
 import type { ReactNode } from "react";
-import { useCallback, useLayoutEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { AtSign, Music2, VideoIcon } from "lucide-react";
 import { cn } from "@/lib/utils";
 
@@ -13,6 +13,12 @@ export type MentionElementOption = {
   chipLabel?: string;
   previewUrl?: string;
   previewKind?: "image" | "video" | "audio";
+};
+
+/** Group @-mention options behind a tab strip (one category visible at a time). */
+export type MentionElementTabConfig = {
+  tabs: readonly { id: string; label: string }[];
+  getTabId: (el: MentionElementOption) => string;
 };
 
 type Props = {
@@ -30,6 +36,10 @@ type Props = {
   emptyElementsHint?: string;
   /** When false, hides “Create element” in the empty state (e.g. Ads Studio). */
   showCreateElementButton?: boolean;
+  /** When set, dropdown shows one tab at a time (e.g. Attached vs Avatar library in Ads Studio). */
+  mentionTabs?: MentionElementTabConfig;
+  /** Thin visible scrollbar instead of fully hidden (e.g. Ads Studio prompt). */
+  minimalScrollbar?: boolean;
 };
 
 /** Padding + type scale shared by textarea and highlight overlay so the caret stays aligned (twMerge with className). */
@@ -172,10 +182,13 @@ export default function ElementMentionTextarea({
   onCreateNew,
   emptyElementsHint,
   showCreateElementButton = true,
+  mentionTabs,
+  minimalScrollbar = false,
 }: Props) {
   const textareaRef = useRef<HTMLTextAreaElement | null>(null);
   const [open, setOpen] = useState(false);
   const [activeIdx, setActiveIdx] = useState(0);
+  const [mentionTabId, setMentionTabId] = useState("");
   const [token, setToken] = useState("");
   const [tokenStart, setTokenStart] = useState<number | null>(null);
   const [overlayScrollTop, setOverlayScrollTop] = useState(0);
@@ -220,14 +233,29 @@ export default function ElementMentionTextarea({
     return [...starts, ...contains];
   }, [elements, token]);
 
+  const effectiveMentionTabId = useMemo(() => {
+    if (!mentionTabs) return "";
+    const { tabs, getTabId } = mentionTabs;
+    if (mentionTabId && filtered.some((e) => getTabId(e) === mentionTabId)) return mentionTabId;
+    const first = tabs.find((t) => filtered.some((e) => getTabId(e) === t.id));
+    return first?.id ?? tabs[0]?.id ?? "";
+  }, [mentionTabs, mentionTabId, filtered]);
+
+  const displayedFiltered = useMemo(() => {
+    if (!mentionTabs) return filtered;
+    if (!effectiveMentionTabId) return filtered;
+    return filtered.filter((e) => mentionTabs.getTabId(e) === effectiveMentionTabId);
+  }, [filtered, mentionTabs, effectiveMentionTabId]);
+
   const menuHighlightIdx =
-    open && filtered.length > 0 ? Math.min(activeIdx, filtered.length - 1) : 0;
+    open && displayedFiltered.length > 0 ? Math.min(activeIdx, displayedFiltered.length - 1) : 0;
 
   const closeMenu = useCallback(() => {
     setOpen(false);
     setToken("");
     setTokenStart(null);
     setActiveIdx(0);
+    setMentionTabId("");
   }, []);
 
   const updateMentionFromState = useCallback(
@@ -300,16 +328,16 @@ export default function ElementMentionTextarea({
     }
 
     if (!open) return;
-    if (filtered.length === 0 && e.key !== "Escape") return;
+    if (displayedFiltered.length === 0 && e.key !== "Escape") return;
     if (e.key === "ArrowDown") {
       e.preventDefault();
-      setActiveIdx((i) => (i + 1) % filtered.length);
+      setActiveIdx((i) => (i + 1) % displayedFiltered.length);
     } else if (e.key === "ArrowUp") {
       e.preventDefault();
-      setActiveIdx((i) => (i - 1 + filtered.length) % filtered.length);
+      setActiveIdx((i) => (i - 1 + displayedFiltered.length) % displayedFiltered.length);
     } else if (e.key === "Enter" || e.key === "Tab") {
       e.preventDefault();
-      const pick = filtered[menuHighlightIdx];
+      const pick = displayedFiltered[menuHighlightIdx];
       if (pick) handleSelect(pick);
     } else if (e.key === "Escape") {
       e.preventDefault();
@@ -326,6 +354,11 @@ export default function ElementMentionTextarea({
   const showMenu =
     open && (filtered.length > 0 || (!hasAnyElements && token.length === 0));
 
+  useEffect(() => {
+    if (!mentionTabs) return;
+    setActiveIdx(0);
+  }, [mentionTabId, mentionTabs]);
+
   const mentionByName = new Map(
     elements.map((el) => [el.name.trim().toLowerCase(), el] as const),
   );
@@ -341,6 +374,78 @@ export default function ElementMentionTextarea({
   }, []);
 
   const renderedOverlay = value ? buildMentionOverlayNodes(value, elements, formatMentionLabel) : null;
+
+  function renderFilteredMentionList() {
+    if (filtered.length === 0) return null;
+    if (displayedFiltered.length > 0) {
+      return (
+        <ul className="max-h-[14rem] overflow-y-auto py-1">
+          {displayedFiltered.map((el, i) => (
+            <li key={el.id}>
+              <button
+                type="button"
+                role="option"
+                aria-selected={i === menuHighlightIdx}
+                className={cn(
+                  "flex w-full items-center gap-2.5 px-2.5 py-1.5 text-left transition",
+                  i === menuHighlightIdx ? "bg-violet-500/20" : "hover:bg-white/[0.05]",
+                )}
+                onMouseEnter={() => setActiveIdx(i)}
+                onClick={() => handleSelect(el)}
+              >
+                <span className="relative h-9 w-9 shrink-0 overflow-hidden rounded-md border border-white/10 bg-black/50">
+                  {el.previewUrl && el.previewKind === "video" ? (
+                    <video
+                      src={el.previewUrl}
+                      className="h-full w-full object-cover"
+                      muted
+                      playsInline
+                      preload="metadata"
+                    />
+                  ) : el.previewUrl ? (
+                    // eslint-disable-next-line @next/next/no-img-element
+                    <img src={el.previewUrl} alt="" className="h-full w-full object-cover" />
+                  ) : el.previewKind === "audio" ? (
+                    <span className="flex h-full w-full items-center justify-center text-white/40">
+                      <Music2 className="h-3.5 w-3.5" aria-hidden />
+                    </span>
+                  ) : el.previewKind === "video" ? (
+                    <span className="flex h-full w-full items-center justify-center text-white/40">
+                      <VideoIcon className="h-3.5 w-3.5" aria-hidden />
+                    </span>
+                  ) : (
+                    <span className="flex h-full w-full items-center justify-center text-white/40">
+                      <AtSign className="h-3.5 w-3.5" aria-hidden />
+                    </span>
+                  )}
+                </span>
+                <span className="min-w-0 flex-1">
+                  <span className="block truncate text-xs font-semibold text-white/88">
+                    {el.chipLabel?.trim() ?? `@${el.name.trim()}`}
+                  </span>
+                  {el.chipLabel?.trim() ? (
+                    <span className="block truncate font-mono text-[10px] text-white/40">
+                      @{el.name.trim()}
+                    </span>
+                  ) : el.description?.trim() ? (
+                    <span className="block truncate text-[10px] text-white/40">{el.description.trim()}</span>
+                  ) : null}
+                </span>
+              </button>
+            </li>
+          ))}
+        </ul>
+      );
+    }
+    if (mentionTabs) {
+      return (
+        <div className="px-3 py-3 text-xs text-white/50">
+          No matches in this tab. Switch category or adjust your filter.
+        </div>
+      );
+    }
+    return null;
+  }
 
   return (
     <div
@@ -393,10 +498,11 @@ export default function ElementMentionTextarea({
           rows={rows}
           data-slot="textarea"
           className={cn(
-            "relative z-10 block min-h-16 min-w-0 w-full resize-none overflow-y-auto bg-transparent p-0 shadow-none outline-none ring-0 studio-params-scroll box-border",
+            "relative z-10 block min-h-16 min-w-0 w-full resize-none overflow-y-auto bg-transparent p-0 shadow-none outline-none ring-0 box-border",
+            minimalScrollbar ? "studio-minimal-scrollbar" : "studio-params-scroll",
             "border-0 placeholder:text-muted-foreground focus-visible:border-transparent focus-visible:ring-ring/50 aria-invalid:ring-destructive/20 dark:aria-invalid:ring-destructive/40 aria-invalid:border-transparent dark:bg-transparent",
             "focus-visible:ring-[3px] disabled:cursor-not-allowed disabled:opacity-50",
-            /** Hidden scrollbar: thin thumb looked like a second caret; wheel/trackpad still scrolls. */
+            /** Ghost overlay: hide native text; scrollbar hidden globally unless `minimalScrollbar`. */
             value
               ? "text-transparent [-webkit-text-fill-color:transparent] caret-white selection:bg-white/25"
               : "",
@@ -426,69 +532,38 @@ export default function ElementMentionTextarea({
           /** Prevents blur before the click actually fires. */
           onMouseDown={(e) => e.preventDefault()}
         >
-          {filtered.length > 0 ? (
-            <ul className="max-h-[14rem] overflow-y-auto py-1">
-              {filtered.map((el, i) => (
-                <li key={el.id}>
+          {mentionTabs && filtered.length > 0 ? (
+            <div
+              role="tablist"
+              aria-label="Reference groups"
+              className="flex flex-wrap gap-1 border-b border-white/10 px-2 pb-2 pt-1"
+            >
+              {mentionTabs.tabs.map((t) => {
+                const count = filtered.filter((e) => mentionTabs.getTabId(e) === t.id).length;
+                const active = t.id === effectiveMentionTabId;
+                return (
                   <button
+                    key={t.id}
                     type="button"
-                    role="option"
-                    aria-selected={i === menuHighlightIdx}
+                    role="tab"
+                    aria-selected={active}
+                    onClick={() => setMentionTabId(t.id)}
                     className={cn(
-                      "flex w-full items-center gap-2.5 px-2.5 py-1.5 text-left transition",
-                      i === menuHighlightIdx ? "bg-violet-500/20" : "hover:bg-white/[0.05]",
+                      "rounded-md border px-2 py-1 text-[10px] font-semibold uppercase tracking-wide transition sm:text-[11px]",
+                      active
+                        ? "border-violet-400/45 bg-violet-500/25 text-violet-100"
+                        : "border-white/10 bg-white/[0.04] text-white/55 hover:border-white/18 hover:bg-white/[0.07] hover:text-white/80",
                     )}
-                    onMouseEnter={() => setActiveIdx(i)}
-                    onClick={() => handleSelect(el)}
                   >
-                    <span className="relative h-9 w-9 shrink-0 overflow-hidden rounded-md border border-white/10 bg-black/50">
-                      {el.previewUrl && el.previewKind === "video" ? (
-                        <video
-                          src={el.previewUrl}
-                          className="h-full w-full object-cover"
-                          muted
-                          playsInline
-                          preload="metadata"
-                        />
-                      ) : el.previewUrl ? (
-                        // eslint-disable-next-line @next/next/no-img-element
-                        <img
-                          src={el.previewUrl}
-                          alt=""
-                          className="h-full w-full object-cover"
-                        />
-                      ) : el.previewKind === "audio" ? (
-                        <span className="flex h-full w-full items-center justify-center text-white/40">
-                          <Music2 className="h-3.5 w-3.5" aria-hidden />
-                        </span>
-                      ) : el.previewKind === "video" ? (
-                        <span className="flex h-full w-full items-center justify-center text-white/40">
-                          <VideoIcon className="h-3.5 w-3.5" aria-hidden />
-                        </span>
-                      ) : (
-                        <span className="flex h-full w-full items-center justify-center text-white/40">
-                          <AtSign className="h-3.5 w-3.5" aria-hidden />
-                        </span>
-                      )}
-                    </span>
-                    <span className="min-w-0 flex-1">
-                      <span className="block truncate text-xs font-semibold text-white/88">
-                        {el.chipLabel?.trim() ?? `@${el.name.trim()}`}
-                      </span>
-                      {el.chipLabel?.trim() ? (
-                        <span className="block truncate font-mono text-[10px] text-white/40">
-                          @{el.name.trim()}
-                        </span>
-                      ) : el.description?.trim() ? (
-                        <span className="block truncate text-[10px] text-white/40">
-                          {el.description.trim()}
-                        </span>
-                      ) : null}
-                    </span>
+                    {t.label}
+                    <span className="ml-1 tabular-nums text-white/45">({count})</span>
                   </button>
-                </li>
-              ))}
-            </ul>
+                );
+              })}
+            </div>
+          ) : null}
+          {filtered.length > 0 ? (
+            renderFilteredMentionList()
           ) : (
             <div className="flex items-center justify-between gap-3 px-3 py-2.5">
               <span className="text-xs text-white/55">

@@ -20,6 +20,11 @@ type Props = {
   disabled?: boolean;
 };
 
+function parseResponseBalance(json: { balance?: unknown } | null): number | null {
+  const n = Number(json?.balance);
+  return Number.isFinite(n) && n >= 0 ? n : null;
+}
+
 export function PromptEnhanceCornerButton({ value, onApply, surface, className, disabled }: Props) {
   const [busy, setBusy] = useState(false);
   const creditsCtx = useCreditsPlanOptional();
@@ -45,12 +50,13 @@ export function PromptEnhanceCornerButton({ value, onApply, surface, className, 
       const json = (await res.json().catch(() => null)) as {
         enhanced?: string;
         error?: string;
-        balance?: number;
+        balance?: unknown;
       } | null;
 
       if (!res.ok) {
-        if (typeof json?.balance === "number") {
-          dispatchAuthoritativeCreditBalance(json.balance);
+        const balErr = parseResponseBalance(json);
+        if (balErr !== null) {
+          dispatchAuthoritativeCreditBalance(balErr);
         }
         toast.error("Enhance failed", {
           description: json?.error ?? (res.status === 402 ? "Not enough credits." : "Please try again."),
@@ -63,8 +69,9 @@ export function PromptEnhanceCornerButton({ value, onApply, surface, className, 
         toast.error("Enhance failed", { description: "Empty response." });
         return;
       }
-      if (typeof json?.balance === "number") {
-        dispatchAuthoritativeCreditBalance(json.balance);
+      const balOk = parseResponseBalance(json);
+      if (balOk !== null) {
+        dispatchAuthoritativeCreditBalance(balOk);
       }
       onApply(enhanced);
       toast.success("Prompt enhanced");
@@ -96,7 +103,7 @@ export function PromptEnhanceCornerButton({ value, onApply, surface, className, 
         }}
         title={
           showCreditCost
-            ? `Enhance with Claude Opus 4.7 (${PROMPT_ENHANCE_CREDITS} credit)`
+            ? `Enhance with Claude Opus 4.7 (${PROMPT_ENHANCE_CREDITS} ${PROMPT_ENHANCE_CREDITS === 1 ? "credit" : "credits"})`
             : "Enhance with Claude Opus 4.7"
         }
         className="pointer-events-auto inline-flex items-center gap-1 rounded-lg border border-violet-400/35 bg-[#121218]/95 px-2 py-1 text-[10px] font-semibold text-violet-100 shadow-sm backdrop-blur-sm transition hover:border-violet-400/55 hover:bg-violet-500/15 disabled:cursor-not-allowed disabled:opacity-45"
@@ -108,7 +115,9 @@ export function PromptEnhanceCornerButton({ value, onApply, surface, className, 
         )}
         <span>Enhance</span>
         {showCreditCost ? (
-          <span className="tabular-nums text-white/50">{PROMPT_ENHANCE_CREDITS} cr</span>
+          <span className="tabular-nums text-white/50">
+            {PROMPT_ENHANCE_CREDITS === 1 ? "1 credit" : `${PROMPT_ENHANCE_CREDITS} credits`}
+          </span>
         ) : null}
       </button>
     </div>

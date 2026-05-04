@@ -14,10 +14,12 @@ import {
   piapiCreateSeedanceTask,
   SEEDANCE_COMPACT_PREVIEW_MAX_IMAGE_URLS,
   SEEDANCE_PREVIEW_MAX_IMAGE_URLS,
+  SEEDANCE_PREVIEW_PROMPT_MAX_CHARS,
   SEEDANCE_PRO_MAX_AUDIO_URLS,
   SEEDANCE_PRO_MAX_IMAGE_URLS,
   SEEDANCE_PRO_MAX_VIDEO_URLS,
   SEEDANCE_PRO_OMNI_MAX_MEDIA_ITEMS,
+  SEEDANCE_PRO_PROMPT_MAX_CHARS,
   type PiapiSeedanceAspectRatio,
   type PiapiSeedanceTaskType,
 } from "@/lib/piapiSeedance";
@@ -648,6 +650,16 @@ export async function POST(req: Request) {
         return NextResponse.json({ error: "Missing `prompt`." }, { status: 400 });
       }
 
+      const seedancePromptCharCap = preview
+        ? body.linkToAd === true
+          ? SEEDANCE_LINK_TO_AD_PREVIEW_PROMPT_MAX_CHARS
+          : SEEDANCE_PREVIEW_PROMPT_MAX_CHARS
+        : SEEDANCE_PRO_PROMPT_MAX_CHARS;
+      const seedancePromptForPiapi =
+        normalizedSeedancePrompt.length > seedancePromptCharCap
+          ? normalizedSeedancePrompt.slice(0, seedancePromptCharCap).trim()
+          : normalizedSeedancePrompt;
+
       const seedanceAspectRatio: PiapiSeedanceAspectRatio =
         body.aspectRatio === "1:1" ? "4:3" : ((body.aspectRatio ?? "9:16") as PiapiSeedanceAspectRatio);
 
@@ -780,7 +792,7 @@ export async function POST(req: Request) {
         }
         const rawTaskId = await piapiCreateSeedanceTask({
           taskType,
-          prompt,
+          prompt: seedancePromptForPiapi,
           imageUrls: mirroredImg.length ? mirroredImg : undefined,
           videoUrls: mirroredVid.length ? mirroredVid : undefined,
           audioUrls: mirroredAud.length ? mirroredAud : undefined,
@@ -887,7 +899,7 @@ export async function POST(req: Request) {
 
       const rawTaskId = await piapiCreateSeedanceTask({
         taskType,
-        prompt: normalizedSeedancePrompt,
+        prompt: seedancePromptForPiapi,
         imageUrls: mirroredImg.length ? mirroredImg : undefined,
         videoUrls: mirroredVid.length ? mirroredVid : undefined,
         audioUrls: mirroredAud.length ? mirroredAud : undefined,
@@ -943,18 +955,30 @@ export async function POST(req: Request) {
       const seedanceFacePolicyHint = looksFacePolicy
         ? "AI face references might sometimes be rejected due to face-policy tightening. Try with a different AI-generated reference image (or a different pose/angle), then retry. If it still fails, switch to another model."
         : "";
+      const seedancePromptCap =
+        isPreviewModel && body.linkToAd === true
+          ? SEEDANCE_LINK_TO_AD_PREVIEW_PROMPT_MAX_CHARS
+          : isPreviewModel
+            ? SEEDANCE_PREVIEW_PROMPT_MAX_CHARS
+            : SEEDANCE_PRO_PROMPT_MAX_CHARS;
       const seedanceDebug =
         `Seedance debug: model=${rawModel}, promptChars=${promptTrimmed.length}, ` +
         `mentions(image/video/audio)=${imageMentionMax}/${videoMentionMax}/${audioMentionMax}, ` +
         `startImage=${hasKieReferenceImage ? "yes" : "no"}, endImage=${hasKieEndImage ? "yes" : "no"}, ` +
         `compactRefs=${compactNorm.urls.length}, omniRefs=${omniNorm.items.length}, ` +
         `elements=${elementsNorm.ok ? elementsNorm.elements.length : 0}.`;
-      return NextResponse.json(
-        {
-          error: `${seedanceFacePolicyHint ? `${seedanceFacePolicyHint} ` : ""}${userFacing} ${seedanceDebug}`.trim(),
-        },
-        { status: 502 },
-      );
+      logGenerationFailure("kling/generate/seedance-invalid-params", new Error(seedanceDebug), {
+        model: rawModel,
+        userFacing,
+      });
+      const promptLikelyTooLong = promptTrimmed.length > seedancePromptCap;
+      const lengthHint = promptLikelyTooLong
+        ? isPreviewModel
+          ? `Your prompt is about ${promptTrimmed.length} characters; this Seedance model allows roughly ${seedancePromptCap.toLocaleString("en-US")} characters. Shorten the text and try again.`
+          : `Your prompt is about ${promptTrimmed.length} characters; Seedance 2 allows roughly ${seedancePromptCap.toLocaleString("en-US")} characters including the instructions we add. Shorten your description and try again.`
+        : "If it keeps failing, try fewer @image references, different reference images, or a different duration.";
+      const errorText = [seedanceFacePolicyHint.trim(), userFacing, lengthHint].filter(Boolean).join(" ");
+      return NextResponse.json({ error: errorText }, { status: 502 });
     }
     return NextResponse.json({ error: userFacing }, { status: 502 });
   }

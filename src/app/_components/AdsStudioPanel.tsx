@@ -1,11 +1,12 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { LayoutList, Loader2, Pencil, Plus, Smartphone, Package2, Sparkles, X, Zap } from "lucide-react";
+import { LayoutList, Loader2, Pencil, Plus, Smartphone, Package2, Sparkles, Trash2, X, Zap } from "lucide-react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import ElementMentionTextarea, {
   type MentionElementOption,
+  type MentionElementTabConfig,
 } from "@/app/_components/ElementMentionTextarea";
 import { PromptEnhanceCornerButton } from "@/app/_components/PromptEnhanceCornerButton";
 import {
@@ -16,7 +17,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { studioSelectContentClass, studioSelectItemClass } from "@/app/_components/StudioModelPicker";
-import type { PiapiSeedanceAspectRatio } from "@/lib/piapiSeedance";
+import { SEEDANCE_PRO_PROMPT_MAX_CHARS, type PiapiSeedanceAspectRatio } from "@/lib/piapiSeedance";
 import { useCreditsPlan, getPersonalApiKey, getPersonalPiapiApiKey } from "@/app/_components/CreditsPlanContext";
 import { uploadFileToCdn } from "@/lib/uploadBlobUrlToCdn";
 import { STUDIO_IMAGE_FILE_ACCEPT } from "@/lib/studioUploadValidation";
@@ -457,6 +458,8 @@ export default function AdsStudioPanel() {
   const avatarInputRef = useRef<HTMLInputElement>(null);
   /** Same-tab: polling already running for this job id (prevents duplicate pollers after taskId is written). */
   const adsStudioPollingStartedRef = useRef(new Set<string>());
+  /** User removed a job from the list — ignore late poll/generation completion for that id. */
+  const adsStudioDismissedJobIdsRef = useRef(new Set<string>());
   const [activeJobsStorageReady, setActiveJobsStorageReady] = useState(false);
 
   useEffect(() => {
@@ -587,6 +590,17 @@ export default function AdsStudioPanel() {
 
     return out;
   }, [appRefUrl, avatarUrl, assetType, avatarLibraryUrls]);
+
+  const adsMentionTabs = useMemo((): MentionElementTabConfig => {
+    return {
+      tabs: [
+        { id: "attached", label: "Attached" },
+        { id: "library", label: "Avatar library" },
+      ],
+      getTabId: (el: MentionElementOption) =>
+        el.id.startsWith("avatar-lib") ? "library" : "attached",
+    };
+  }, []);
 
   const mentionElementOptions = useMemo((): MentionElementOption[] => {
     return mentionEntries.map((e) => {
@@ -751,6 +765,14 @@ export default function AdsStudioPanel() {
           videoPrompt += `\n\nSeedance reference: @image1 = avatar reference (start frame).`;
         }
 
+        if (videoPrompt.length > SEEDANCE_PRO_PROMPT_MAX_CHARS) {
+          const prevLen = videoPrompt.length;
+          videoPrompt = videoPrompt.slice(0, SEEDANCE_PRO_PROMPT_MAX_CHARS).trim();
+          toast.message("Prompt trimmed for Seedance", {
+            description: `This model accepts up to ${SEEDANCE_PRO_PROMPT_MAX_CHARS.toLocaleString("en-US")} characters (${prevLen.toLocaleString("en-US")} before trim). The end of the text was removed so the request can succeed.`,
+          });
+        }
+
         const videoPayload: Record<string, unknown> = {
           accountPlan: snapPlan,
           marketModel: ADS_STUDIO_SEEDANCE_MODEL,
@@ -783,6 +805,11 @@ export default function AdsStudioPanel() {
         const videoJson = (await videoRes.json()) as { taskId?: string; error?: string };
         if (!videoRes.ok || !videoJson.taskId) throw new Error(videoJson.error || "Video generation failed");
 
+        if (adsStudioDismissedJobIdsRef.current.has(jobId)) {
+          adsStudioDismissedJobIdsRef.current.delete(jobId);
+          return;
+        }
+
         adsStudioPollingStartedRef.current.add(jobId);
 
         setActiveJobs((prev) =>
@@ -792,6 +819,10 @@ export default function AdsStudioPanel() {
         );
 
         const vUrl = await pollVideo(videoJson.taskId, personalApiKey ?? undefined, piapiApiKey ?? undefined);
+        if (adsStudioDismissedJobIdsRef.current.has(jobId)) {
+          adsStudioDismissedJobIdsRef.current.delete(jobId);
+          return;
+        }
         const previewStillUrl = productUrl || avUrl || undefined;
         const historyId = crypto.randomUUID();
         const item: AdsStudioHistoryItem = {
@@ -810,6 +841,10 @@ export default function AdsStudioPanel() {
 
         toast.success("Ads Studio generation complete");
       } catch (err) {
+        if (adsStudioDismissedJobIdsRef.current.has(jobId)) {
+          adsStudioDismissedJobIdsRef.current.delete(jobId);
+          return;
+        }
         const msg = err instanceof Error ? err.message : "Unknown error";
         setActiveJobs((prev) =>
           prev.map((j) => (j.id === jobId ? { ...j, phase: "failed" as const, error: msg } : j)),
@@ -835,6 +870,10 @@ export default function AdsStudioPanel() {
         const piapiApiKey = getPersonalPiapiApiKey();
         try {
           const vUrl = await pollVideo(taskId, personalApiKey ?? undefined, piapiApiKey ?? undefined);
+          if (adsStudioDismissedJobIdsRef.current.has(jobId)) {
+            adsStudioDismissedJobIdsRef.current.delete(jobId);
+            return;
+          }
           const p = (job.promptFull ?? job.promptSnippet).trim() || " ";
           const snapAssetType = job.jobAssetType ?? "product";
           const previewStillUrl = job.previewStillUrl ?? job.thumbUrl;
@@ -855,6 +894,10 @@ export default function AdsStudioPanel() {
 
           toast.success("Ads Studio generation complete");
         } catch (err) {
+          if (adsStudioDismissedJobIdsRef.current.has(jobId)) {
+            adsStudioDismissedJobIdsRef.current.delete(jobId);
+            return;
+          }
           const msg = err instanceof Error ? err.message : "Unknown error";
           setActiveJobs((prev) =>
             prev.map((j) => (j.id === jobId ? { ...j, phase: "failed" as const, error: msg } : j)),
@@ -865,12 +908,41 @@ export default function AdsStudioPanel() {
     }
   }, [activeJobs, activeJobsStorageReady]);
 
+  function removeActiveJob(jobId: string) {
+    adsStudioDismissedJobIdsRef.current.add(jobId);
+    adsStudioPollingStartedRef.current.delete(jobId);
+    setActiveJobs((prev) => prev.filter((j) => j.id !== jobId));
+    setSelectedSidebarKey((k) => (k === `job:${jobId}` ? null : k));
+    toast.message("Project removed");
+  }
+
+  function removeHistoryItem(historyId: string) {
+    setHistory((prev) => prev.filter((h) => h.id !== historyId));
+    setSelectedSidebarKey((k) => (k === `history:${historyId}` ? null : k));
+    toast.message("Project removed");
+  }
+
   function scrollComposerIntoView() {
+    if (typeof window === "undefined") return;
+
+    /** Room for sticky studio chrome (mobile header ~56px + padding). */
+    const STICKY_TOP_RESERVE = 96;
+
+    const align = (behavior: ScrollBehavior) => {
+      const node = composerPanelRef.current;
+      if (!node) return;
+      const rect = node.getBoundingClientRect();
+      const y = window.scrollY + rect.top - STICKY_TOP_RESERVE;
+      window.scrollTo({ top: Math.max(0, y), behavior });
+    };
+
     requestAnimationFrame(() => {
-      requestAnimationFrame(() => {
-        composerPanelRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
-      });
+      requestAnimationFrame(() => align("smooth"));
     });
+    // Re-align after React commits and after reference thumbnails finish loading layout.
+    window.setTimeout(() => align("auto"), 180);
+    window.setTimeout(() => align("auto"), 420);
+    window.setTimeout(() => align("auto"), 900);
   }
 
   async function recreateFromTemplate(label: string, tpl?: TemplateVideoItem) {
@@ -880,27 +952,25 @@ export default function AdsStudioPanel() {
     const nextPrompt = promptForTemplateLabel(label);
     // Always replace current prompt (never append), even when input already contains text.
     setPrompt(nextPrompt);
+    scrollComposerIntoView();
     if (isTutorial2) {
       const avatarResolved = resolveAdsStudioPublicImage(ADS_STUDIO_TUTORIAL_2_AVATAR_PATH);
       const productResolved = resolveAdsStudioPublicImage(ADS_STUDIO_TUTORIAL_2_PRODUCT_PATH);
       setAssetType("product");
       setAppRefUrl(productResolved);
       setAvatarUrl(avatarResolved);
-      scrollComposerIntoView();
       return;
     }
     if (isVirtualTryOn2BundledRecreateLabel(n)) {
       setAssetType("product");
       setAppRefUrl(resolveAdsStudioPublicImage(ADS_STUDIO_VIRTUAL_TRY_ON_2_PRODUCT_PATH));
       setAvatarUrl(resolveAdsStudioPublicImage(ADS_STUDIO_VIRTUAL_TRY_ON_2_AVATAR_PATH));
-      scrollComposerIntoView();
       return;
     }
     if (isBundledFroggyUnboxingTemplateLabel(n)) {
       setAssetType("product");
       setAppRefUrl(resolveAdsStudioPublicImage(ADS_STUDIO_UNBOXING_PRODUCT_PATH));
       setAvatarUrl(resolveAdsStudioPublicImage(ADS_STUDIO_UNBOXING_AVATAR_PATH));
-      scrollComposerIntoView();
       return;
     }
 
@@ -924,9 +994,8 @@ export default function AdsStudioPanel() {
         setUploadingRefSlot(false);
         setUploadingAvatar(false);
       }
+      scrollComposerIntoView();
     }
-
-    scrollComposerIntoView();
   }
 
   return (
@@ -957,68 +1026,102 @@ export default function AdsStudioPanel() {
             {activeJobs.map((job) => {
               const selected = selectedSidebarKey === `job:${job.id}`;
               return (
-                <button
+                <div
                   key={job.id}
-                  type="button"
-                  onClick={() => setSelectedSidebarKey(`job:${job.id}`)}
                   className={cn(
-                    "flex w-full gap-2 rounded-xl border px-2 py-2 text-left transition",
+                    "group flex w-full items-stretch gap-0.5 rounded-xl border px-1 py-1 transition",
                     selected ? "border-violet-400/45 bg-white/[0.07]" : "border-transparent bg-white/[0.03] hover:bg-white/[0.06]",
                   )}
                 >
-                  <div className="relative size-11 shrink-0 overflow-hidden rounded-lg bg-black/40">
-                    {job.thumbUrl ? (
-                      // eslint-disable-next-line @next/next/no-img-element -- remote CDN thumbs
-                      <img src={job.thumbUrl} alt="" className="h-full w-full object-cover" />
-                    ) : (
-                      <div className="flex h-full w-full items-center justify-center text-[10px] text-white/35">—</div>
-                    )}
-                    {(job.phase === "submitting" || job.phase === "rendering") ? (
-                      <div className="absolute inset-0 flex items-center justify-center bg-black/55">
-                        <Loader2 className="size-5 animate-spin text-white" aria-hidden />
-                      </div>
-                    ) : null}
-                  </div>
-                  <div className="min-w-0 flex-1">
-                    <p className="line-clamp-2 text-[11px] font-medium leading-snug text-white/90">{job.promptSnippet}</p>
-                    <p className="mt-0.5 text-[10px] font-semibold uppercase tracking-wide text-white/45">
-                      {job.phase === "failed"
-                        ? "Failed"
-                        : job.phase === "submitting"
-                          ? "Submitting…"
-                          : "Rendering…"}
-                    </p>
-                  </div>
-                </button>
+                  <button
+                    type="button"
+                    onClick={() => setSelectedSidebarKey(`job:${job.id}`)}
+                    className="flex min-w-0 flex-1 gap-2 rounded-lg px-1 py-1 text-left outline-none focus-visible:ring-2 focus-visible:ring-violet-400/40"
+                  >
+                    <div className="relative size-11 shrink-0 overflow-hidden rounded-lg bg-black/40">
+                      {job.thumbUrl ? (
+                        // eslint-disable-next-line @next/next/no-img-element -- remote CDN thumbs
+                        <img src={job.thumbUrl} alt="" className="h-full w-full object-cover" />
+                      ) : (
+                        <div className="flex h-full w-full items-center justify-center text-[10px] text-white/35">—</div>
+                      )}
+                      {(job.phase === "submitting" || job.phase === "rendering") ? (
+                        <div className="absolute inset-0 flex items-center justify-center bg-black/55">
+                          <Loader2 className="size-5 animate-spin text-white" aria-hidden />
+                        </div>
+                      ) : null}
+                    </div>
+                    <div className="min-w-0 flex-1 py-0.5">
+                      <p className="line-clamp-2 text-[11px] font-medium leading-snug text-white/90">{job.promptSnippet}</p>
+                      <p className="mt-0.5 text-[10px] font-semibold uppercase tracking-wide text-white/45">
+                        {job.phase === "failed"
+                          ? "Failed"
+                          : job.phase === "submitting"
+                            ? "Submitting…"
+                            : "Rendering…"}
+                      </p>
+                    </div>
+                  </button>
+                  <button
+                    type="button"
+                    aria-label="Delete project"
+                    title="Remove from list"
+                    onClick={(e) => {
+                      e.preventDefault();
+                      e.stopPropagation();
+                      removeActiveJob(job.id);
+                    }}
+                    className="flex shrink-0 items-center justify-center rounded-lg border border-transparent px-1 text-white/35 transition hover:border-white/15 hover:bg-white/[0.08] hover:text-rose-300/95"
+                  >
+                    <Trash2 className="size-4" aria-hidden />
+                  </button>
+                </div>
               );
             })}
             {history.map((h) => {
               const selected = selectedSidebarKey === `history:${h.id}`;
               return (
-                <button
+                <div
                   key={h.id}
-                  type="button"
-                  onClick={() => setSelectedSidebarKey(`history:${h.id}`)}
                   className={cn(
-                    "flex w-full gap-2 rounded-xl border px-2 py-2 text-left transition",
+                    "group flex w-full items-stretch gap-0.5 rounded-xl border px-1 py-1 transition",
                     selected ? "border-violet-400/45 bg-white/[0.07]" : "border-transparent bg-white/[0.03] hover:bg-white/[0.06]",
                   )}
                 >
-                  <div className="relative size-11 shrink-0 overflow-hidden rounded-lg bg-black/40">
-                    {h.imageUrl ? (
-                      // eslint-disable-next-line @next/next/no-img-element -- remote CDN thumbs
-                      <img src={h.imageUrl} alt="" className="h-full w-full object-cover" />
-                    ) : (
-                      <div className="flex h-full w-full items-center justify-center text-[9px] text-white/40">Clip</div>
-                    )}
-                  </div>
-                  <div className="min-w-0 flex-1">
-                    <p className="line-clamp-2 text-[11px] font-medium leading-snug text-white/90">
-                      {h.prompt.length > 90 ? `${h.prompt.slice(0, 87)}…` : h.prompt}
-                    </p>
-                    <p className="mt-0.5 text-[10px] font-semibold uppercase tracking-wide text-emerald-400/90">Ready</p>
-                  </div>
-                </button>
+                  <button
+                    type="button"
+                    onClick={() => setSelectedSidebarKey(`history:${h.id}`)}
+                    className="flex min-w-0 flex-1 gap-2 rounded-lg px-1 py-1 text-left outline-none focus-visible:ring-2 focus-visible:ring-violet-400/40"
+                  >
+                    <div className="relative size-11 shrink-0 overflow-hidden rounded-lg bg-black/40">
+                      {h.imageUrl ? (
+                        // eslint-disable-next-line @next/next/no-img-element -- remote CDN thumbs
+                        <img src={h.imageUrl} alt="" className="h-full w-full object-cover" />
+                      ) : (
+                        <div className="flex h-full w-full items-center justify-center text-[9px] text-white/40">Clip</div>
+                      )}
+                    </div>
+                    <div className="min-w-0 flex-1 py-0.5">
+                      <p className="line-clamp-2 text-[11px] font-medium leading-snug text-white/90">
+                        {h.prompt.length > 90 ? `${h.prompt.slice(0, 87)}…` : h.prompt}
+                      </p>
+                      <p className="mt-0.5 text-[10px] font-semibold uppercase tracking-wide text-emerald-400/90">Ready</p>
+                    </div>
+                  </button>
+                  <button
+                    type="button"
+                    aria-label="Delete project"
+                    title="Remove from list"
+                    onClick={(e) => {
+                      e.preventDefault();
+                      e.stopPropagation();
+                      removeHistoryItem(h.id);
+                    }}
+                    className="flex shrink-0 items-center justify-center rounded-lg border border-transparent px-1 text-white/35 transition hover:border-white/15 hover:bg-white/[0.08] hover:text-rose-300/95"
+                  >
+                    <Trash2 className="size-4" aria-hidden />
+                  </button>
+                </div>
               );
             })}
           </div>
@@ -1033,7 +1136,10 @@ export default function AdsStudioPanel() {
             "lg:pl-[calc(var(--ads-projects-w)+2.5rem)] lg:pr-10",
           )}
         >
-          <div className="mx-auto flex w-full max-w-[1080px] min-w-0 flex-col items-center gap-6 md:gap-8">
+          <div
+            ref={composerPanelRef}
+            className="mx-auto flex w-full max-w-[1080px] min-w-0 flex-col items-center gap-4 scroll-mt-20 pt-8 sm:pt-10 md:scroll-mt-28 md:gap-5 md:pt-14 lg:pt-16"
+          >
           <h2 className="relative max-w-[44rem] px-3 text-center text-[1.625rem] font-semibold leading-[1.18] tracking-tight sm:text-3xl sm:leading-[1.15] md:text-[2.125rem] md:leading-[1.12]">
             <span
               aria-hidden
@@ -1044,10 +1150,7 @@ export default function AdsStudioPanel() {
             </span>
           </h2>
           <div className="flex min-h-[min(58vh,540px)] w-full min-w-0 justify-center">
-        <div
-          ref={composerPanelRef}
-          className="relative w-full min-w-0 max-w-[1080px] scroll-mt-6 rounded-[20px] md:scroll-mt-8"
-        >
+        <div className="relative w-full min-w-0 max-w-[1080px] rounded-[20px]">
           <div className="relative rounded-[20px] bg-[linear-gradient(0deg,rgba(21,21,21,0.88)_0%,rgba(21,21,21,0.88)_100%),linear-gradient(41deg,rgba(101,189,235,0.24)_25.53%,rgba(101,189,235,0.00)_63.06%)] p-4 shadow-[0_12px_8px_0_rgba(0,0,0,0.20),inset_0_0_0_1px_rgba(255,255,255,0.07)] backdrop-blur-[20px]">
           <div className="flex w-full min-w-0 flex-col gap-3 rounded-[20px] sm:flex-row sm:items-start">
             <div
@@ -1078,43 +1181,43 @@ export default function AdsStudioPanel() {
               </button>
             </div>
           <div className="grid min-w-0 flex-1 grid-cols-[minmax(0,1fr)_auto] items-stretch gap-3">
-            <div className="grid w-full min-w-0 grid-rows-[auto_auto] gap-2">
-              <div className="flex items-start gap-2 overflow-visible">
-                <button
-                  type="button"
-                  className="mt-1 flex size-7 shrink-0 items-center justify-center rounded-lg bg-white/[0.04] text-white/85 shadow-[0_2px_1.5px_-0.5px_rgba(0,0,0,0.1)]"
-                >
-                  <Plus className="size-3.5" />
-                </button>
-                <div className="relative z-20 flex min-w-0 flex-1 flex-col">
-                  <ElementMentionTextarea
-                    value={prompt}
-                    onChange={setPrompt}
-                    placeholder="Describe the ad. Type @ to insert Product, Avatar, or library avatars (@image1 / @image2 match uploaded references)."
-                    rows={5}
-                    elements={mentionElementOptions}
-                    onPickElement={handlePickMentionElement}
-                    emptyElementsHint={
-                      avatarLibLoading
-                        ? "Loading avatar library…"
-                        : "Upload Product or App and Avatar references above, then type @ to insert @image1 / @image2."
-                    }
-                    showCreateElementButton={false}
-                    className={cn(
-                      "max-h-[min(288px,46vh)] min-h-36 w-full overflow-hidden rounded-xl border border-white/10 bg-white/[0.03] shadow-none",
-                      "[&_textarea]:max-h-[min(248px,40vh)] [&_textarea]:min-h-36 [&_textarea]:pb-10 [&_textarea]:text-sm [&_textarea]:leading-relaxed [&_textarea]:caret-violet-300 [&_textarea]:placeholder:text-white/35",
-                      "focus-within:ring-0",
-                    )}
-                  />
-                  <PromptEnhanceCornerButton value={prompt} onApply={setPrompt} surface="ads" />
-                </div>
+            <div className="grid w-full min-w-0 grid-cols-[1.75rem_minmax(0,1fr)] content-start gap-x-2 gap-y-2">
+              <button
+                type="button"
+                className="col-start-1 row-start-1 mt-1 flex size-7 shrink-0 items-center justify-center self-start rounded-lg bg-white/[0.04] text-white/85 shadow-[0_2px_1.5px_-0.5px_rgba(0,0,0,0.1)]"
+              >
+                <Plus className="size-3.5" />
+              </button>
+              <div className="relative z-20 col-start-2 row-start-1 min-w-0">
+                <ElementMentionTextarea
+                  value={prompt}
+                  onChange={setPrompt}
+                  placeholder="Describe the ad. Type @ to insert Product, Avatar, or library avatars (@image1 / @image2 match uploaded references)."
+                  rows={5}
+                  elements={mentionElementOptions}
+                  mentionTabs={adsMentionTabs}
+                  minimalScrollbar
+                  onPickElement={handlePickMentionElement}
+                  emptyElementsHint={
+                    avatarLibLoading
+                      ? "Loading avatar library…"
+                      : "Upload Product or App and Avatar references above, then type @ to insert @image1 / @image2."
+                  }
+                  showCreateElementButton={false}
+                  className={cn(
+                    "max-h-[min(288px,46vh)] min-h-36 w-full overflow-hidden rounded-xl border border-white/10 bg-white/[0.03] shadow-none",
+                    "[&_textarea]:max-h-[min(248px,40vh)] [&_textarea]:min-h-36 [&_textarea]:pb-10 [&_textarea]:pr-0.5 [&_textarea]:text-sm [&_textarea]:leading-relaxed [&_textarea]:caret-violet-300 [&_textarea]:placeholder:text-white/35",
+                    "focus-within:ring-0",
+                  )}
+                />
+                <PromptEnhanceCornerButton value={prompt} onApply={setPrompt} surface="ads" />
               </div>
 
-              <div className="flex min-w-0 flex-wrap items-center gap-1.5">
+              <div className="col-start-2 row-start-2 flex min-w-0 flex-wrap items-center gap-1.5">
                 <Select value={outputAspect} onValueChange={(v) => setOutputAspect(v as AdsStudioOutputAspect)}>
                   <SelectTrigger
                     size="sm"
-                    className="h-7 w-[min(100%,8.25rem)] rounded-md border-white/12 bg-white/[0.04] px-2 text-[11px] text-white shadow-none hover:bg-white/[0.07]"
+                    className="h-7 w-auto min-w-[2.5rem] max-w-[4rem] shrink-0 justify-center gap-0.5 rounded-md border-white/12 bg-white/[0.04] px-1.5 text-[11px] tabular-nums text-white shadow-none hover:bg-white/[0.07]"
                   >
                     <SelectValue />
                   </SelectTrigger>

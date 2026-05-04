@@ -120,7 +120,7 @@ export function userFacingProviderError(raw: string | null | undefined): string 
     return "This file is too large or the format is not supported. Common video types: MP4, MOV, or WebM. Size limits in this app: Studio uploads (Create, references, elements) up to 100 MB per file; Translate (import by URL) up to 300 MB; Motion control reference videos up to 100 MB. Use a shorter clip, 720p–1080p, or a lower bitrate, then try again.";
   }
   if (/invalid|bad request|\b400\b|malformed|parameter error|validation failed/.test(lower)) {
-    return "Invalid parameters or inputs. Adjust settings and retry.";
+    return "The provider rejected this request (invalid parameters). Check prompt length, reference media, aspect ratio, and duration, then try again.";
   }
   if (/fetch failed|failed to fetch|networkerror|load failed|econnreset|socket/i.test(lower)) {
     return "Network error while contacting the service. Wait a few seconds and try again.";
