@@ -14,7 +14,9 @@ import {
   Zap,
 } from "lucide-react";
 import { toast } from "sonner";
+import { Dialog } from "radix-ui";
 import { Button } from "@/components/ui/button";
+import { Textarea } from "@/components/ui/textarea";
 import ElementMentionTextarea, {
   type MentionElementOption,
   type MentionElementTabConfig,
@@ -209,6 +211,9 @@ type AdsStudioActiveJob = {
   productRefUrl?: string;
   avatarRefUrl?: string;
 };
+
+/** Sidebar project popup: history row or in-flight job (id only — resolve from `history` / `activeJobs`). */
+type AdsStudioProjectDetail = { kind: "history"; id: string } | { kind: "job"; id: string };
 
 const LS_ADS_STUDIO_HISTORY = "ugc_ads_studio_history_v1";
 const LS_ADS_STUDIO_ACTIVE_JOBS = "ugc_ads_studio_active_jobs_v1";
@@ -1011,6 +1016,200 @@ async function pollVideo(taskId: string, personalApiKey?: string, piapiApiKey?: 
   );
 }
 
+function adsStudioProductSlotUrl(h: AdsStudioHistoryItem): string | undefined {
+  const p = h.productRefUrl?.trim();
+  if (p) return p;
+  const a = h.avatarRefUrl?.trim();
+  if (!a && h.imageUrl?.trim()) return h.imageUrl.trim();
+  return undefined;
+}
+
+function adsStudioAvatarSlotUrl(h: AdsStudioHistoryItem): string | undefined {
+  return h.avatarRefUrl?.trim() || undefined;
+}
+
+function adsStudioProductSlotUrlFromJob(j: AdsStudioActiveJob): string | undefined {
+  const p = j.productRefUrl?.trim();
+  if (p) return p;
+  const a = j.avatarRefUrl?.trim();
+  if (!a) {
+    const t = (j.previewStillUrl ?? j.thumbUrl ?? "").trim();
+    return t || undefined;
+  }
+  return undefined;
+}
+
+function adsStudioAvatarSlotUrlFromJob(j: AdsStudioActiveJob): string | undefined {
+  return j.avatarRefUrl?.trim() || undefined;
+}
+
+function AdsStudioProjectDetailBody(
+  props:
+    | { kind: "history"; item: AdsStudioHistoryItem; onLoadIntoComposer: () => void }
+    | { kind: "job"; job: AdsStudioActiveJob; onLoadIntoComposer: () => void },
+) {
+  const onLoad = props.onLoadIntoComposer;
+  if (props.kind === "history") {
+    const h = props.item;
+    const productUrl = adsStudioProductSlotUrl(h);
+    const avatarUrlResolved = adsStudioAvatarSlotUrl(h);
+    const assetLabel = h.assetType === "app" ? "App" : "Product";
+    return (
+      <div className="flex min-h-0 flex-1 flex-col gap-4 overflow-y-auto p-4">
+        <div className="overflow-hidden rounded-xl border border-white/10 bg-black/50">
+          {h.videoUrl ? (
+            <video
+              src={h.videoUrl}
+              controls
+              playsInline
+              className="max-h-[min(52vh,400px)] w-full object-contain"
+              preload="metadata"
+            />
+          ) : (
+            <div className="flex min-h-[180px] items-center justify-center px-4 py-10 text-center text-sm text-white/45">
+              No video URL stored for this clip.
+            </div>
+          )}
+        </div>
+        <div>
+          <p className="mb-1.5 text-[11px] font-semibold uppercase tracking-wide text-white/50">Prompt</p>
+          <Textarea
+            readOnly
+            value={h.prompt || "—"}
+            rows={8}
+            className="min-h-[7.5rem] resize-y border-white/[0.08] bg-black/30 text-[13px] leading-relaxed text-white/85"
+          />
+        </div>
+        <div>
+          <p className="mb-2 text-[11px] font-semibold uppercase tracking-wide text-white/50">Reference inputs</p>
+          <div className="flex flex-wrap gap-3">
+            <div className="flex min-w-[120px] flex-1 flex-col gap-1.5">
+              <span className="text-[10px] font-semibold uppercase tracking-wide text-violet-300/85">
+                {assetLabel} (@image1)
+              </span>
+              <div className="aspect-square w-full max-w-[160px] overflow-hidden rounded-lg border border-white/10 bg-black/40">
+                {productUrl ? (
+                  // eslint-disable-next-line @next/next/no-img-element -- remote CDN
+                  <img src={productUrl} alt="" className="h-full w-full object-cover" />
+                ) : (
+                  <div className="flex h-full min-h-[100px] items-center justify-center text-[10px] text-white/35">None</div>
+                )}
+              </div>
+            </div>
+            <div className="flex min-w-[120px] flex-1 flex-col gap-1.5">
+              <span className="text-[10px] font-semibold uppercase tracking-wide text-violet-300/85">Avatar (@image2)</span>
+              <div className="aspect-square w-full max-w-[160px] overflow-hidden rounded-lg border border-white/10 bg-black/40">
+                {avatarUrlResolved ? (
+                  // eslint-disable-next-line @next/next/no-img-element
+                  <img src={avatarUrlResolved} alt="" className="h-full w-full object-cover" />
+                ) : (
+                  <div className="flex h-full min-h-[100px] items-center justify-center text-[10px] text-white/35">None</div>
+                )}
+              </div>
+            </div>
+          </div>
+        </div>
+        <div className="mt-auto flex flex-wrap justify-end gap-2 border-t border-white/10 pt-3">
+          <Dialog.Close asChild>
+            <Button type="button" variant="outline" className="border-white/15 bg-transparent text-white/85 hover:bg-white/10">
+              Close
+            </Button>
+          </Dialog.Close>
+          <Button type="button" onClick={onLoad} className="bg-violet-600 text-white hover:bg-violet-500">
+            Load into composer
+          </Button>
+        </div>
+      </div>
+    );
+  }
+
+  const j = props.job;
+  const productUrl = adsStudioProductSlotUrlFromJob(j);
+  const avatarUrlResolved = adsStudioAvatarSlotUrlFromJob(j);
+  const assetLabel = j.jobAssetType === "app" ? "App" : "Product";
+  const promptText = (j.promptFull ?? j.promptSnippet).trim() || "—";
+
+  return (
+    <div className="flex min-h-0 flex-1 flex-col gap-4 overflow-y-auto p-4">
+      <div className="overflow-hidden rounded-xl border border-white/10 bg-black/50">
+        {j.phase === "failed" ? (
+          <div className="flex min-h-[160px] flex-col items-center justify-center gap-2 px-4 py-8 text-center">
+            <p className="text-[11px] font-semibold uppercase tracking-wide text-rose-300/90">Failed</p>
+            <p className="max-w-prose text-sm leading-snug text-rose-100/90">{j.error?.trim() || "Generation failed."}</p>
+          </div>
+        ) : j.thumbUrl || j.previewStillUrl ? (
+          <div className="relative mx-auto max-h-[min(52vh,400px)] w-full max-w-sm">
+            {/* eslint-disable-next-line @next/next/no-img-element */}
+            <img
+              src={(j.previewStillUrl ?? j.thumbUrl) as string}
+              alt=""
+              className="h-full w-full max-h-[min(52vh,400px)] object-contain"
+            />
+            {j.phase === "submitting" || j.phase === "rendering" ? (
+              <div className="absolute inset-0 flex flex-col items-center justify-center gap-2 bg-black/60">
+                <Loader2 className="size-10 animate-spin text-white" aria-hidden />
+                <p className="text-xs font-medium text-white/90">
+                  {j.phase === "submitting" ? "Submitting…" : "Rendering…"}
+                </p>
+              </div>
+            ) : null}
+          </div>
+        ) : (
+          <div className="flex min-h-[160px] items-center justify-center text-sm text-white/45">No preview yet.</div>
+        )}
+      </div>
+      <div>
+        <p className="mb-1.5 text-[11px] font-semibold uppercase tracking-wide text-white/50">Prompt</p>
+        <Textarea
+          readOnly
+          value={promptText}
+          rows={8}
+          className="min-h-[7.5rem] resize-y border-white/[0.08] bg-black/30 text-[13px] leading-relaxed text-white/85"
+        />
+      </div>
+      <div>
+        <p className="mb-2 text-[11px] font-semibold uppercase tracking-wide text-white/50">Reference inputs</p>
+        <div className="flex flex-wrap gap-3">
+          <div className="flex min-w-[120px] flex-1 flex-col gap-1.5">
+            <span className="text-[10px] font-semibold uppercase tracking-wide text-violet-300/85">
+              {assetLabel} (@image1)
+            </span>
+            <div className="aspect-square w-full max-w-[160px] overflow-hidden rounded-lg border border-white/10 bg-black/40">
+              {productUrl ? (
+                // eslint-disable-next-line @next/next/no-img-element
+                <img src={productUrl} alt="" className="h-full w-full object-cover" />
+              ) : (
+                <div className="flex h-full min-h-[100px] items-center justify-center text-[10px] text-white/35">None</div>
+              )}
+            </div>
+          </div>
+          <div className="flex min-w-[120px] flex-1 flex-col gap-1.5">
+            <span className="text-[10px] font-semibold uppercase tracking-wide text-violet-300/85">Avatar (@image2)</span>
+            <div className="aspect-square w-full max-w-[160px] overflow-hidden rounded-lg border border-white/10 bg-black/40">
+              {avatarUrlResolved ? (
+                // eslint-disable-next-line @next/next/no-img-element
+                <img src={avatarUrlResolved} alt="" className="h-full w-full object-cover" />
+              ) : (
+                <div className="flex h-full min-h-[100px] items-center justify-center text-[10px] text-white/35">None</div>
+              )}
+            </div>
+          </div>
+        </div>
+      </div>
+      <div className="mt-auto flex flex-wrap justify-end gap-2 border-t border-white/10 pt-3">
+        <Dialog.Close asChild>
+          <Button type="button" variant="outline" className="border-white/15 bg-transparent text-white/85 hover:bg-white/10">
+            Close
+          </Button>
+        </Dialog.Close>
+        <Button type="button" onClick={onLoad} className="bg-violet-600 text-white hover:bg-violet-500">
+          Load into composer
+        </Button>
+      </div>
+    </div>
+  );
+}
+
 export default function AdsStudioPanel() {
   const { planId } = useCreditsPlan();
   const [assetType, setAssetType] = useState<"product" | "app">("product");
@@ -1022,6 +1221,7 @@ export default function AdsStudioPanel() {
   const [avatarUrl, setAvatarUrl] = useState("");
   const [activeJobs, setActiveJobs] = useState<AdsStudioActiveJob[]>([]);
   const [selectedSidebarKey, setSelectedSidebarKey] = useState<string | null>(null);
+  const [projectDetail, setProjectDetail] = useState<AdsStudioProjectDetail | null>(null);
   const [history, setHistory] = useState<AdsStudioHistoryItem[]>([]);
   const [templateVideos, setTemplateVideos] = useState<TemplateVideoItem[]>([]);
   const [adsTemplateGalleryKind, setAdsTemplateGalleryKind] = useState<AdsStudioTemplateGalleryKind>("product");
@@ -1354,6 +1554,8 @@ export default function AdsStudioPanel() {
         const videoPayload: Record<string, unknown> = {
           accountPlan: snapPlan,
           marketModel: ADS_STUDIO_SEEDANCE_MODEL,
+          /** Kie Market Seedance 2.0 (`createTask`), not PiAPI. @see https://docs.kie.ai/market/bytedance/seedance-2 */
+          seedanceBackend: "kie",
           prompt: videoPrompt,
           duration: snapDur,
           aspectRatio: snapAspect,
@@ -1497,12 +1699,14 @@ export default function AdsStudioPanel() {
     adsStudioPollingStartedRef.current.delete(jobId);
     setActiveJobs((prev) => prev.filter((j) => j.id !== jobId));
     setSelectedSidebarKey((k) => (k === `job:${jobId}` ? null : k));
+    setProjectDetail((d) => (d?.kind === "job" && d.id === jobId ? null : d));
     toast.message("Project removed");
   }
 
   function removeHistoryItem(historyId: string) {
     setHistory((prev) => prev.filter((h) => h.id !== historyId));
     setSelectedSidebarKey((k) => (k === `history:${historyId}` ? null : k));
+    setProjectDetail((d) => (d?.kind === "history" && d.id === historyId ? null : d));
     toast.message("Project removed");
   }
 
@@ -1717,12 +1921,24 @@ export default function AdsStudioPanel() {
     }
   }
 
+  const projectDetailResolved = useMemo(() => {
+    if (!projectDetail) return null;
+    if (projectDetail.kind === "history") {
+      const item = history.find((h) => h.id === projectDetail.id);
+      return item ? ({ kind: "history" as const, item } as const) : null;
+    }
+    const job = activeJobs.find((j) => j.id === projectDetail.id);
+    return job ? ({ kind: "job" as const, job } as const) : null;
+  }, [projectDetail, history, activeJobs]);
+
   useEffect(() => {
-    if (!selectedSidebarKey) return;
-    if (selectedSidebarKey.startsWith("history:")) {
-      const id = selectedSidebarKey.slice(8);
-      const h = history.find((x) => x.id === id);
-      if (!h) return;
+    if (projectDetail && !projectDetailResolved) setProjectDetail(null);
+  }, [projectDetail, projectDetailResolved]);
+
+  const loadProjectDetailIntoComposer = useCallback(() => {
+    if (!projectDetailResolved) return;
+    if (projectDetailResolved.kind === "history") {
+      const h = projectDetailResolved.item;
       setPrompt(h.prompt);
       setAssetType(h.assetType);
       const p = h.productRefUrl?.trim();
@@ -1734,12 +1950,8 @@ export default function AdsStudioPanel() {
         setAppRefUrl(h.imageUrl?.trim() ?? "");
         setAvatarUrl("");
       }
-      return;
-    }
-    if (selectedSidebarKey.startsWith("job:")) {
-      const id = selectedSidebarKey.slice(4);
-      const j = activeJobs.find((x) => x.id === id);
-      if (!j) return;
+    } else {
+      const j = projectDetailResolved.job;
       setPrompt((j.promptFull ?? j.promptSnippet).trim());
       setAssetType(j.jobAssetType ?? "product");
       const p = j.productRefUrl?.trim();
@@ -1752,7 +1964,9 @@ export default function AdsStudioPanel() {
         setAvatarUrl("");
       }
     }
-  }, [selectedSidebarKey, history, activeJobs]);
+    setProjectDetail(null);
+    scrollComposerIntoView();
+  }, [projectDetailResolved]);
 
   const renderAdsGradientComposerCard = () => (
     <div className="relative w-full min-w-0 max-w-[1080px] rounded-[20px]">
@@ -2037,7 +2251,9 @@ export default function AdsStudioPanel() {
               </p>
             ) : null}
             {activeJobs.map((job) => {
-              const selected = selectedSidebarKey === `job:${job.id}`;
+              const selected =
+                selectedSidebarKey === `job:${job.id}` ||
+                (projectDetail?.kind === "job" && projectDetail.id === job.id);
               return (
                 <div
                   key={job.id}
@@ -2048,7 +2264,10 @@ export default function AdsStudioPanel() {
                 >
                   <button
                     type="button"
-                    onClick={() => setSelectedSidebarKey(`job:${job.id}`)}
+                    onClick={() => {
+                      setSelectedSidebarKey(`job:${job.id}`);
+                      setProjectDetail({ kind: "job", id: job.id });
+                    }}
                     className="flex min-w-0 flex-1 gap-2 rounded-lg px-1 py-1 text-left outline-none focus-visible:ring-2 focus-visible:ring-violet-400/40"
                   >
                     <div className="relative size-11 shrink-0 overflow-hidden rounded-lg bg-black/40">
@@ -2092,7 +2311,9 @@ export default function AdsStudioPanel() {
               );
             })}
             {history.map((h) => {
-              const selected = selectedSidebarKey === `history:${h.id}`;
+              const selected =
+                selectedSidebarKey === `history:${h.id}` ||
+                (projectDetail?.kind === "history" && projectDetail.id === h.id);
               return (
                 <div
                   key={h.id}
@@ -2103,7 +2324,10 @@ export default function AdsStudioPanel() {
                 >
                   <button
                     type="button"
-                    onClick={() => setSelectedSidebarKey(`history:${h.id}`)}
+                    onClick={() => {
+                      setSelectedSidebarKey(`history:${h.id}`);
+                      setProjectDetail({ kind: "history", id: h.id });
+                    }}
                     className="flex min-w-0 flex-1 gap-2 rounded-lg px-1 py-1 text-left outline-none focus-visible:ring-2 focus-visible:ring-violet-400/40"
                   >
                     <div className="relative size-11 shrink-0 overflow-hidden rounded-lg bg-black/40">
@@ -2325,6 +2549,54 @@ export default function AdsStudioPanel() {
           ) : null}
         </div>
       </section>
+
+      <Dialog.Root
+        open={projectDetailResolved !== null}
+        onOpenChange={(nextOpen) => {
+          if (!nextOpen) setProjectDetail(null);
+        }}
+      >
+        <Dialog.Portal>
+          <Dialog.Overlay className="fixed inset-0 z-[530] bg-black/75 backdrop-blur-[2px] data-[state=open]:animate-in data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=open]:fade-in-0" />
+          <Dialog.Content className="fixed left-1/2 top-1/2 z-[531] flex max-h-[min(92vh,720px)] w-[min(96vw,520px)] -translate-x-1/2 -translate-y-1/2 flex-col overflow-hidden rounded-2xl border border-white/12 bg-[#101014] shadow-[0_24px_80px_rgba(0,0,0,0.75)] outline-none data-[state=open]:animate-in data-[state=closed]:animate-out">
+            <div className="flex items-center justify-between gap-2 border-b border-white/10 px-4 py-3">
+              <Dialog.Title className="text-base font-semibold text-white">
+                {projectDetailResolved?.kind === "history"
+                  ? "Saved clip"
+                  : projectDetailResolved?.job.phase === "failed"
+                    ? "Generation failed"
+                    : "Generation in progress"}
+              </Dialog.Title>
+              <Dialog.Close asChild>
+                <button
+                  type="button"
+                  className="inline-flex h-8 w-8 items-center justify-center rounded-full border border-white/15 bg-white/5 text-white/80 transition hover:bg-white/10"
+                  aria-label="Close"
+                >
+                  <X className="h-4 w-4" />
+                </button>
+              </Dialog.Close>
+            </div>
+            <Dialog.Description className="sr-only">
+              View the video output, prompt, and reference images for this Ads Studio project.
+            </Dialog.Description>
+
+            {projectDetailResolved?.kind === "history" ? (
+              <AdsStudioProjectDetailBody
+                kind="history"
+                item={projectDetailResolved.item}
+                onLoadIntoComposer={loadProjectDetailIntoComposer}
+              />
+            ) : projectDetailResolved?.kind === "job" ? (
+              <AdsStudioProjectDetailBody
+                kind="job"
+                job={projectDetailResolved.job}
+                onLoadIntoComposer={loadProjectDetailIntoComposer}
+              />
+            ) : null}
+          </Dialog.Content>
+        </Dialog.Portal>
+      </Dialog.Root>
         </div>
     </div>
   );

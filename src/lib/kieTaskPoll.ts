@@ -22,7 +22,15 @@ export function kieImageTaskPollOutcome(data: KieMarketRecordInfo): KiePollOutco
 
   if (kieRecordStateIsSuccess(st)) {
     if (urls.length === 0) {
-      return { kind: "processing" };
+      /**
+       * Provider marked success but no URL was parsed (unexpected payload shape).
+       * Returning `processing` would leave Studio / admin stuck forever; fail loudly so polling stops.
+       */
+      return {
+        kind: "fail",
+        message:
+          "Upscale finished on the provider but no output URL was returned. If this persists, contact support with the task id.",
+      };
     }
     return { kind: "success", urls };
   }

@@ -194,7 +194,8 @@ export function normalizeKieMarketRecordData(raw: Record<string, unknown>): KieM
   }
 
   if (!resultJson?.trim()) {
-    const nested = raw.result ?? raw.output ?? raw.outputs ?? raw.response ?? raw.data;
+    /** Some Market jobs (e.g. Topaz) nest output under `info` or only expose sibling fields. */
+    const nested = raw.result ?? raw.output ?? raw.outputs ?? raw.response ?? raw.data ?? raw.info;
     if (typeof nested === "string" && nested.trim()) {
       resultJson = nested.trim();
     } else if (nested !== null && typeof nested === "object") {
@@ -452,6 +453,7 @@ function extractUrlsFromParsedJsonValue(parsed: unknown): string[] {
     const mixed = urlsFromMixedArray(urls as unknown[]);
     if (mixed.length > 0) return mixed;
   }
+  const info = (parsedRecord.info as Record<string, unknown> | undefined) ?? undefined;
   const single = [
     parsedRecord.resultImageUrl,
     parsedRecord.resultUrl,
@@ -462,6 +464,10 @@ function extractUrlsFromParsedJsonValue(parsed: unknown): string[] {
     parsedRecord.output_image_url,
     parsedRecord.upscaledUrl,
     parsedRecord.upscaled_url,
+    parsedRecord.upscaledVideoUrl,
+    parsedRecord.upscaled_video_url,
+    parsedRecord.outputVideoUrl,
+    parsedRecord.output_video_url,
     parsedRecord.videoUrl,
     parsedRecord.video_url,
     data?.resultUrl,
@@ -470,6 +476,11 @@ function extractUrlsFromParsedJsonValue(parsed: unknown): string[] {
     resultObj?.url,
     resultObj?.videoUrl,
     resultObj?.video_url,
+    info?.videoUrl,
+    info?.video_url,
+    info?.url,
+    info?.resultUrl,
+    info?.result_url,
     parsedRecord.image_url,
     parsedRecord.imageUrl,
     parsedRecord.url,
@@ -481,9 +492,16 @@ function extractUrlsFromParsedJsonValue(parsed: unknown): string[] {
 export function parseResultUrls(resultJson: string | undefined): string[] {
   if (!resultJson?.trim()) return [];
   let s = resultJson.trim();
+  /** Kie `resultJson` is usually JSON, but some models return a bare media URL string. */
+  if (/^https?:\/\//i.test(s)) return [s];
+  if (s.startsWith("//")) return [`https:${s}`];
   for (let depth = 0; depth < 5; depth++) {
     const v = tryParseJsonString(s);
-    if (v == null) return [];
+    if (v == null) {
+      if (/^https?:\/\//i.test(s)) return [s];
+      if (s.startsWith("//")) return [`https:${s}`];
+      return [];
+    }
     if (typeof v === "string") {
       const t = v.trim();
       if (!t) return [];

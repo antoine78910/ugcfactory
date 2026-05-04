@@ -89,6 +89,11 @@ type Body = {
   piapiApiKey?: string;
   /** PiAPI Seedance output tier (480p / 720p / 1080p). Omit → server uses 720p (workflow default). */
   videoResolution?: "480p" | "720p" | "1080p";
+  /**
+   * For `bytedance/seedance-2` only: use Kie Market `createTask` instead of PiAPI.
+   * @see https://docs.kie.ai/market/bytedance/seedance-2
+   */
+  seedanceBackend?: "piapi" | "kie";
 };
 
 /** Per-shot length, Kling 3.0 Market API: integer 1–12 seconds each. @see https://docs.kie.ai/market/kling/kling-3-0 */
@@ -211,6 +216,28 @@ function buildSeedanceOrderedReferenceUrls(
   if (end) pushUniqueMediaUrl(out, end, max);
   return out;
 }
+
+/** Kie Seedance 2.0 `input.aspect_ratio` (includes `adaptive` for “auto”). */
+function mapAspectRatioForKieSeedance2(raw: string | undefined): string {
+  const a = String(raw ?? "16:9").trim();
+  if (a === "auto") return "adaptive";
+  switch (a) {
+    case "1:1":
+    case "4:3":
+    case "3:4":
+    case "16:9":
+    case "9:16":
+    case "21:9":
+      return a;
+    default:
+      return "16:9";
+  }
+}
+
+/** Kie Market Seedance 2.0 reference caps (@see docs.kie.ai/market/bytedance/seedance-2). */
+const KIE_SEEDANCE2_MAX_REF_IMAGES = 9;
+const KIE_SEEDANCE2_MAX_REF_VIDEOS = 3;
+const KIE_SEEDANCE2_MAX_REF_AUDIOS = 3;
 
 function partitionSeedanceReferenceUrls(ordered: string[]): {
   imgs: string[];
@@ -667,6 +694,129 @@ export async function POST(req: Request) {
         body.videoResolution === "480p" || body.videoResolution === "720p" || body.videoResolution === "1080p"
           ? body.videoResolution
           : "720p";
+
+      const seedanceBackend: "piapi" | "kie" = body.seedanceBackend === "kie" ? "kie" : "piapi";
+      if (seedanceBackend === "kie" && rawModel !== "bytedance/seedance-2") {
+        return NextResponse.json(
+          {
+            error:
+              "`seedanceBackend: kie` is only supported for `bytedance/seedance-2`. Use PiAPI for Seedance Fast or Preview.",
+          },
+          { status: 400 },
+        );
+      }
+
+      if (rawModel === "bytedance/seedance-2" && seedanceBackend === "kie") {
+        const kieDuration = Math.round(duration);
+        if (!Number.isFinite(kieDuration) || kieDuration < 4 || kieDuration > 15) {
+          return NextResponse.json(
+            { error: "Kie Seedance 2.0 requires a clip duration between 4 and 15 seconds." },
+            { status: 400 },
+          );
+        }
+        if (useSeedanceProOmniRefs && elementsNorm.elements.length > 0) {
+          return NextResponse.json(
+            {
+              error:
+                "For Kie Seedance 2.0, do not combine `seedanceOmniMedia` with `klingElements`. Use one reference mode only.",
+            },
+            { status: 400 },
+          );
+        }
+
+        const kieInput: Record<string, unknown> = {
+          prompt: seedancePromptForPiapi,
+          aspect_ratio: mapAspectRatioForKieSeedance2(body.aspectRatio),
+          resolution: seedanceResolutionTier,
+          duration: kieDuration,
+          generate_audio: body.sound !== false,
+        };
+
+        if (useSeedanceProOmniRefs) {
+          const refImgs: string[] = [];
+          const refVids: string[] = [];
+          const refAuds: string[] = [];
+          for (const it of omniNorm.items) {
+            if (it.type === "image") refImgs.push(it.url);
+            else if (it.type === "video") refVids.push(it.url);
+            else refAuds.push(it.url);
+          }
+          if (refImgs.length > KIE_SEEDANCE2_MAX_REF_IMAGES) {
+            return NextResponse.json(
+              {
+                error: `Kie Seedance 2.0 allows at most ${KIE_SEEDANCE2_MAX_REF_IMAGES} reference images (you sent ${refImgs.length}).`,
+              },
+              { status: 400 },
+            );
+          }
+          if (refVids.length > KIE_SEEDANCE2_MAX_REF_VIDEOS) {
+            return NextResponse.json(
+              {
+                error: `Kie Seedance 2.0 allows at most ${KIE_SEEDANCE2_MAX_REF_VIDEOS} reference videos (you sent ${refVids.length}).`,
+              },
+              { status: 400 },
+            );
+          }
+          if (refAuds.length > KIE_SEEDANCE2_MAX_REF_AUDIOS) {
+            return NextResponse.json(
+              {
+                error: `Kie Seedance 2.0 allows at most ${KIE_SEEDANCE2_MAX_REF_AUDIOS} reference audio files (you sent ${refAuds.length}).`,
+              },
+              { status: 400 },
+            );
+          }
+          if (refImgs.length) kieInput.reference_image_urls = refImgs;
+          if (refVids.length) kieInput.reference_video_urls = refVids;
+          if (refAuds.length) kieInput.reference_audio_urls = refAuds;
+        } else if (elementsNorm.elements.length > 0) {
+          const ordered = buildSeedanceOrderedReferenceUrls(
+            imageUrlRaw,
+            hasKieEndImage ? endImageUrlRaw : undefined,
+            elementsNorm.elements,
+            SEEDANCE_PRO_MAX_IMAGE_URLS,
+          );
+          if (ordered.length > SEEDANCE_PRO_MAX_IMAGE_URLS) {
+            return NextResponse.json(
+              {
+                error: `Too many Kie Seedance references (${ordered.length}). Maximum is ${SEEDANCE_PRO_MAX_IMAGE_URLS} for this path.`,
+              },
+              { status: 400 },
+            );
+          }
+          const { imgs, vids, auds } = partitionSeedanceReferenceUrls(ordered);
+          if (imgs.length > KIE_SEEDANCE2_MAX_REF_IMAGES) {
+            return NextResponse.json(
+              {
+                error: `Kie Seedance 2.0 allows at most ${KIE_SEEDANCE2_MAX_REF_IMAGES} reference images (flattened list has ${imgs.length}).`,
+              },
+              { status: 400 },
+            );
+          }
+          if (vids.length > KIE_SEEDANCE2_MAX_REF_VIDEOS || auds.length > KIE_SEEDANCE2_MAX_REF_AUDIOS) {
+            return NextResponse.json(
+              {
+                error: `Kie Seedance 2.0 allows at most ${KIE_SEEDANCE2_MAX_REF_VIDEOS} reference videos and ${KIE_SEEDANCE2_MAX_REF_AUDIOS} audio files when using element references.`,
+              },
+              { status: 400 },
+            );
+          }
+          if (imgs.length) kieInput.reference_image_urls = imgs;
+          if (vids.length) kieInput.reference_video_urls = vids;
+          if (auds.length) kieInput.reference_audio_urls = auds;
+        } else if (hasKieReferenceImage && hasKieEndImage) {
+          kieInput.first_frame_url = imageUrlRaw;
+          kieInput.last_frame_url = endImageUrlRaw;
+        } else if (hasKieReferenceImage) {
+          kieInput.first_frame_url = imageUrlRaw;
+        }
+
+        const taskId = await kieMarketCreateTask({ model: "bytedance/seedance-2", input: kieInput }, personalKey);
+        return NextResponse.json({
+          taskId,
+          provider: "kie-market",
+          model,
+        });
+      }
 
       if (useSeedanceProOmniRefs) {
         const items = omniNorm.items;
