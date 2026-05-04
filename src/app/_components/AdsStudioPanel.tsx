@@ -228,6 +228,67 @@ function isHttpsOrHttpUrl(s: string): boolean {
   return /^https?:\/\//i.test(t);
 }
 
+/** Allow same-origin `/uploads/...` paths saved from older upload fallbacks. */
+function isAdsStudioStoredMediaUrl(s: string): boolean {
+  const t = s.trim();
+  if (!t) return false;
+  if (/^https?:\/\//i.test(t)) return true;
+  return t.startsWith("/") && !t.startsWith("//");
+}
+
+function pickOptionalTrimmedString(...candidates: unknown[]): string | undefined {
+  for (const c of candidates) {
+    if (typeof c !== "string") continue;
+    const t = c.trim();
+    if (t) return t;
+  }
+  return undefined;
+}
+
+function sanitizeAdsStudioHistoryRows(raw: unknown): AdsStudioHistoryItem[] {
+  if (!Array.isArray(raw)) return [];
+  const out: AdsStudioHistoryItem[] = [];
+  for (const row of raw) {
+    if (!row || typeof row !== "object") continue;
+    const x = row as Record<string, unknown>;
+    if (typeof x.id !== "string" || !x.id.trim()) continue;
+    const createdAt =
+      typeof x.createdAt === "number" && Number.isFinite(x.createdAt) ? x.createdAt : Date.now();
+    const videoRaw = pickOptionalTrimmedString(x.videoUrl, x.clipUrl, x.outputUrl, x.resultUrl);
+    const videoUrl = videoRaw && isAdsStudioStoredMediaUrl(videoRaw) ? videoRaw : undefined;
+    const imageRaw = pickOptionalTrimmedString(x.imageUrl, x.thumbUrl, x.previewUrl);
+    const imageUrl = imageRaw && isAdsStudioStoredMediaUrl(imageRaw) ? imageRaw : undefined;
+    const pr = pickOptionalTrimmedString(x.productRefUrl);
+    const productRefUrl = pr && isAdsStudioStoredMediaUrl(pr) ? pr : undefined;
+    const ar = pickOptionalTrimmedString(x.avatarRefUrl);
+    const avatarRefUrl = ar && isAdsStudioStoredMediaUrl(ar) ? ar : undefined;
+    out.push({
+      id: x.id.trim(),
+      createdAt,
+      assetType: x.assetType === "app" ? "app" : "product",
+      prompt: typeof x.prompt === "string" ? x.prompt : "",
+      imageUrl,
+      videoUrl,
+      productRefUrl,
+      avatarRefUrl,
+    });
+  }
+  return out.slice(0, 24);
+}
+
+function resolveAdsStudioPlaybackUrl(raw: string | undefined): string | null {
+  const t = (raw ?? "").trim();
+  if (!t) return null;
+  if (t.startsWith("/") && typeof window !== "undefined") {
+    try {
+      return new URL(t, window.location.origin).href;
+    } catch {
+      return t;
+    }
+  }
+  return t;
+}
+
 function safeAdsStudioComposerDuration(raw: unknown): number {
   const n = typeof raw === "number" ? raw : typeof raw === "string" ? Number(raw) : NaN;
   if (!Number.isFinite(n)) return 15;
@@ -1075,75 +1136,120 @@ function AdsStudioProjectDetailBody(
     | { kind: "job"; job: AdsStudioActiveJob; onLoadIntoComposer: () => void },
 ) {
   const onLoad = props.onLoadIntoComposer;
+  const [videoBroken, setVideoBroken] = useState(false);
+
+  const mediaResetKey =
+    props.kind === "history"
+      ? `${props.item.id}:${props.item.videoUrl ?? ""}`
+      : `${props.job.id}:${props.job.phase}:${props.job.thumbUrl ?? ""}:${props.job.previewStillUrl ?? ""}`;
+
+  useEffect(() => {
+    setVideoBroken(false);
+  }, [mediaResetKey]);
+
   if (props.kind === "history") {
     const h = props.item;
     const productUrl = adsStudioProductSlotUrl(h);
     const avatarUrlResolved = adsStudioAvatarSlotUrl(h);
     const assetLabel = h.assetType === "app" ? "App" : "Product";
+    const playback = resolveAdsStudioPlaybackUrl(h.videoUrl);
+    const productSrc = resolveAdsStudioPlaybackUrl(productUrl) ?? productUrl;
+    const avatarSrc = resolveAdsStudioPlaybackUrl(avatarUrlResolved) ?? avatarUrlResolved;
+
+    const videoBlock =
+      playback && !videoBroken ? (
+        <video
+          key={playback}
+          src={playback}
+          controls
+          playsInline
+          preload="metadata"
+          className="max-h-[min(40vh,300px)] w-full bg-black object-contain"
+          onError={() => setVideoBroken(true)}
+        />
+      ) : playback && videoBroken ? (
+        <div className="flex min-h-[200px] flex-col items-center justify-center gap-3 px-4 text-center">
+          <p className="text-sm text-white/70">Could not load the video preview in this dialog.</p>
+          <a
+            href={playback}
+            target="_blank"
+            rel="noreferrer"
+            className="inline-flex h-9 items-center justify-center rounded-md border border-white/20 bg-white/10 px-4 text-sm font-medium text-white transition hover:bg-white/15"
+          >
+            Open video in new tab
+          </a>
+        </div>
+      ) : (
+        <div className="flex min-h-[200px] items-center justify-center px-4 text-center text-sm text-white/50">
+          No stored playback URL for this clip. Older saves may be missing the link — generate again to keep playback.
+        </div>
+      );
+
     return (
-      <div className="flex min-h-0 flex-1 flex-col gap-4 overflow-y-auto p-4">
-        <div className="overflow-hidden rounded-xl border border-white/10 bg-black/50">
-          {h.videoUrl ? (
-            <video
-              src={h.videoUrl}
-              controls
-              playsInline
-              className="max-h-[min(52vh,400px)] w-full object-contain"
-              preload="metadata"
+      <div className="flex min-h-0 flex-1 flex-col">
+        <div className="shrink-0 border-b border-white/10 bg-[#0f0f13] px-4 pb-3 pt-2">
+          <p className="mb-2 text-[11px] font-semibold uppercase tracking-wide text-white/50">Video output</p>
+          <div className="overflow-hidden rounded-xl border border-white/10 bg-black/55">{videoBlock}</div>
+        </div>
+        <div className="min-h-0 flex-1 overflow-y-auto p-4">
+          <div>
+            <p className="mb-1.5 text-[11px] font-semibold uppercase tracking-wide text-white/50">Prompt</p>
+            <Textarea
+              readOnly
+              value={h.prompt || "—"}
+              rows={8}
+              className="max-h-[min(40vh,320px)] min-h-[7.5rem] resize-y overflow-y-auto border-white/[0.08] bg-black/30 text-[13px] leading-relaxed text-white/85"
             />
-          ) : (
-            <div className="flex min-h-[180px] items-center justify-center px-4 py-10 text-center text-sm text-white/45">
-              No video URL stored for this clip.
-            </div>
-          )}
-        </div>
-        <div>
-          <p className="mb-1.5 text-[11px] font-semibold uppercase tracking-wide text-white/50">Prompt</p>
-          <Textarea
-            readOnly
-            value={h.prompt || "—"}
-            rows={8}
-            className="min-h-[7.5rem] resize-y border-white/[0.08] bg-black/30 text-[13px] leading-relaxed text-white/85"
-          />
-        </div>
-        <div>
-          <p className="mb-2 text-[11px] font-semibold uppercase tracking-wide text-white/50">Reference inputs</p>
-          <div className="flex flex-wrap gap-3">
-            <div className="flex min-w-[120px] flex-1 flex-col gap-1.5">
-              <span className="text-[10px] font-semibold uppercase tracking-wide text-violet-300/85">
-                {assetLabel} (@image1)
-              </span>
-              <div className="aspect-square w-full max-w-[160px] overflow-hidden rounded-lg border border-white/10 bg-black/40">
-                {productUrl ? (
-                  // eslint-disable-next-line @next/next/no-img-element -- remote CDN
-                  <img src={productUrl} alt="" className="h-full w-full object-cover" />
-                ) : (
-                  <div className="flex h-full min-h-[100px] items-center justify-center text-[10px] text-white/35">None</div>
-                )}
+          </div>
+          <div className="mt-4">
+            <p className="mb-2 text-[11px] font-semibold uppercase tracking-wide text-white/50">Reference inputs</p>
+            <div className="flex flex-wrap gap-3">
+              <div className="flex min-w-[120px] flex-1 flex-col gap-1.5">
+                <span className="text-[10px] font-semibold uppercase tracking-wide text-violet-300/85">
+                  {assetLabel} (@image1)
+                </span>
+                <div className="aspect-square w-full max-w-[160px] overflow-hidden rounded-lg border border-white/10 bg-black/40">
+                  {productSrc ? (
+                    // eslint-disable-next-line @next/next/no-img-element -- remote CDN
+                    <img src={productSrc} alt="" className="h-full w-full object-cover" />
+                  ) : (
+                    <div className="flex h-full min-h-[100px] items-center justify-center text-[10px] text-white/35">
+                      None
+                    </div>
+                  )}
+                </div>
               </div>
-            </div>
-            <div className="flex min-w-[120px] flex-1 flex-col gap-1.5">
-              <span className="text-[10px] font-semibold uppercase tracking-wide text-violet-300/85">Avatar (@image2)</span>
-              <div className="aspect-square w-full max-w-[160px] overflow-hidden rounded-lg border border-white/10 bg-black/40">
-                {avatarUrlResolved ? (
-                  // eslint-disable-next-line @next/next/no-img-element
-                  <img src={avatarUrlResolved} alt="" className="h-full w-full object-cover" />
-                ) : (
-                  <div className="flex h-full min-h-[100px] items-center justify-center text-[10px] text-white/35">None</div>
-                )}
+              <div className="flex min-w-[120px] flex-1 flex-col gap-1.5">
+                <span className="text-[10px] font-semibold uppercase tracking-wide text-violet-300/85">
+                  Avatar (@image2)
+                </span>
+                <div className="aspect-square w-full max-w-[160px] overflow-hidden rounded-lg border border-white/10 bg-black/40">
+                  {avatarSrc ? (
+                    // eslint-disable-next-line @next/next/no-img-element
+                    <img src={avatarSrc} alt="" className="h-full w-full object-cover" />
+                  ) : (
+                    <div className="flex h-full min-h-[100px] items-center justify-center text-[10px] text-white/35">
+                      None
+                    </div>
+                  )}
+                </div>
               </div>
             </div>
           </div>
-        </div>
-        <div className="mt-auto flex flex-wrap justify-end gap-2 border-t border-white/10 pt-3">
-          <Dialog.Close asChild>
-            <Button type="button" variant="outline" className="border-white/15 bg-transparent text-white/85 hover:bg-white/10">
-              Close
+          <div className="mt-6 flex flex-wrap justify-end gap-2 border-t border-white/10 pt-3">
+            <Dialog.Close asChild>
+              <Button
+                type="button"
+                variant="outline"
+                className="border-white/15 bg-transparent text-white/85 hover:bg-white/10"
+              >
+                Close
+              </Button>
+            </Dialog.Close>
+            <Button type="button" onClick={onLoad} className="bg-violet-600 text-white hover:bg-violet-500">
+              Load into composer
             </Button>
-          </Dialog.Close>
-          <Button type="button" onClick={onLoad} className="bg-violet-600 text-white hover:bg-violet-500">
-            Load into composer
-          </Button>
+          </div>
         </div>
       </div>
     );
@@ -1154,83 +1260,89 @@ function AdsStudioProjectDetailBody(
   const avatarUrlResolved = adsStudioAvatarSlotUrlFromJob(j);
   const assetLabel = j.jobAssetType === "app" ? "App" : "Product";
   const promptText = (j.promptFull ?? j.promptSnippet).trim() || "—";
+  const productSrc = resolveAdsStudioPlaybackUrl(productUrl) ?? productUrl;
+  const avatarSrc = resolveAdsStudioPlaybackUrl(avatarUrlResolved) ?? avatarUrlResolved;
+  const thumbRaw = (j.previewStillUrl ?? j.thumbUrl ?? "").trim();
+  const thumbSrc = thumbRaw ? resolveAdsStudioPlaybackUrl(thumbRaw) ?? thumbRaw : null;
+
+  const statusBlock =
+    j.phase === "failed" ? (
+      <div className="flex min-h-[200px] flex-col items-center justify-center gap-2 px-4 py-8 text-center">
+        <p className="text-[11px] font-semibold uppercase tracking-wide text-rose-300/90">Failed</p>
+        <p className="max-w-prose text-sm leading-snug text-rose-100/90">{j.error?.trim() || "Generation failed."}</p>
+      </div>
+    ) : thumbSrc ? (
+      <div className="relative mx-auto max-h-[min(40vh,300px)] w-full max-w-sm">
+        {/* eslint-disable-next-line @next/next/no-img-element */}
+        <img src={thumbSrc} alt="" className="h-full w-full object-contain" />
+        {j.phase === "submitting" || j.phase === "rendering" ? (
+          <div className="absolute inset-0 flex flex-col items-center justify-center gap-2 bg-black/60">
+            <Loader2 className="size-10 animate-spin text-white" aria-hidden />
+            <p className="text-xs font-medium text-white/90">
+              {j.phase === "submitting" ? "Submitting…" : "Rendering…"}
+            </p>
+          </div>
+        ) : null}
+      </div>
+    ) : (
+      <div className="flex min-h-[200px] items-center justify-center text-sm text-white/45">No preview yet.</div>
+    );
 
   return (
-    <div className="flex min-h-0 flex-1 flex-col gap-4 overflow-y-auto p-4">
-      <div className="overflow-hidden rounded-xl border border-white/10 bg-black/50">
-        {j.phase === "failed" ? (
-          <div className="flex min-h-[160px] flex-col items-center justify-center gap-2 px-4 py-8 text-center">
-            <p className="text-[11px] font-semibold uppercase tracking-wide text-rose-300/90">Failed</p>
-            <p className="max-w-prose text-sm leading-snug text-rose-100/90">{j.error?.trim() || "Generation failed."}</p>
-          </div>
-        ) : j.thumbUrl || j.previewStillUrl ? (
-          <div className="relative mx-auto max-h-[min(52vh,400px)] w-full max-w-sm">
-            {/* eslint-disable-next-line @next/next/no-img-element */}
-            <img
-              src={(j.previewStillUrl ?? j.thumbUrl) as string}
-              alt=""
-              className="h-full w-full max-h-[min(52vh,400px)] object-contain"
-            />
-            {j.phase === "submitting" || j.phase === "rendering" ? (
-              <div className="absolute inset-0 flex flex-col items-center justify-center gap-2 bg-black/60">
-                <Loader2 className="size-10 animate-spin text-white" aria-hidden />
-                <p className="text-xs font-medium text-white/90">
-                  {j.phase === "submitting" ? "Submitting…" : "Rendering…"}
-                </p>
+    <div className="flex min-h-0 flex-1 flex-col">
+      <div className="shrink-0 border-b border-white/10 bg-[#0f0f13] px-4 pb-3 pt-2">
+        <p className="mb-2 text-[11px] font-semibold uppercase tracking-wide text-white/50">Preview</p>
+        <div className="overflow-hidden rounded-xl border border-white/10 bg-black/55">{statusBlock}</div>
+      </div>
+      <div className="min-h-0 flex-1 overflow-y-auto p-4">
+        <div>
+          <p className="mb-1.5 text-[11px] font-semibold uppercase tracking-wide text-white/50">Prompt</p>
+          <Textarea
+            readOnly
+            value={promptText}
+            rows={8}
+            className="max-h-[min(40vh,320px)] min-h-[7.5rem] resize-y overflow-y-auto border-white/[0.08] bg-black/30 text-[13px] leading-relaxed text-white/85"
+          />
+        </div>
+        <div className="mt-4">
+          <p className="mb-2 text-[11px] font-semibold uppercase tracking-wide text-white/50">Reference inputs</p>
+          <div className="flex flex-wrap gap-3">
+            <div className="flex min-w-[120px] flex-1 flex-col gap-1.5">
+              <span className="text-[10px] font-semibold uppercase tracking-wide text-violet-300/85">
+                {assetLabel} (@image1)
+              </span>
+              <div className="aspect-square w-full max-w-[160px] overflow-hidden rounded-lg border border-white/10 bg-black/40">
+                {productSrc ? (
+                  // eslint-disable-next-line @next/next/no-img-element
+                  <img src={productSrc} alt="" className="h-full w-full object-cover" />
+                ) : (
+                  <div className="flex h-full min-h-[100px] items-center justify-center text-[10px] text-white/35">None</div>
+                )}
               </div>
-            ) : null}
-          </div>
-        ) : (
-          <div className="flex min-h-[160px] items-center justify-center text-sm text-white/45">No preview yet.</div>
-        )}
-      </div>
-      <div>
-        <p className="mb-1.5 text-[11px] font-semibold uppercase tracking-wide text-white/50">Prompt</p>
-        <Textarea
-          readOnly
-          value={promptText}
-          rows={8}
-          className="min-h-[7.5rem] resize-y border-white/[0.08] bg-black/30 text-[13px] leading-relaxed text-white/85"
-        />
-      </div>
-      <div>
-        <p className="mb-2 text-[11px] font-semibold uppercase tracking-wide text-white/50">Reference inputs</p>
-        <div className="flex flex-wrap gap-3">
-          <div className="flex min-w-[120px] flex-1 flex-col gap-1.5">
-            <span className="text-[10px] font-semibold uppercase tracking-wide text-violet-300/85">
-              {assetLabel} (@image1)
-            </span>
-            <div className="aspect-square w-full max-w-[160px] overflow-hidden rounded-lg border border-white/10 bg-black/40">
-              {productUrl ? (
-                // eslint-disable-next-line @next/next/no-img-element
-                <img src={productUrl} alt="" className="h-full w-full object-cover" />
-              ) : (
-                <div className="flex h-full min-h-[100px] items-center justify-center text-[10px] text-white/35">None</div>
-              )}
             </div>
-          </div>
-          <div className="flex min-w-[120px] flex-1 flex-col gap-1.5">
-            <span className="text-[10px] font-semibold uppercase tracking-wide text-violet-300/85">Avatar (@image2)</span>
-            <div className="aspect-square w-full max-w-[160px] overflow-hidden rounded-lg border border-white/10 bg-black/40">
-              {avatarUrlResolved ? (
-                // eslint-disable-next-line @next/next/no-img-element
-                <img src={avatarUrlResolved} alt="" className="h-full w-full object-cover" />
-              ) : (
-                <div className="flex h-full min-h-[100px] items-center justify-center text-[10px] text-white/35">None</div>
-              )}
+            <div className="flex min-w-[120px] flex-1 flex-col gap-1.5">
+              <span className="text-[10px] font-semibold uppercase tracking-wide text-violet-300/85">Avatar (@image2)</span>
+              <div className="aspect-square w-full max-w-[160px] overflow-hidden rounded-lg border border-white/10 bg-black/40">
+                {avatarSrc ? (
+                  // eslint-disable-next-line @next/next/no-img-element
+                  <img src={avatarSrc} alt="" className="h-full w-full object-cover" />
+                ) : (
+                  <div className="flex h-full min-h-[100px] items-center justify-center text-[10px] text-white/35">None</div>
+                )}
+              </div>
             </div>
           </div>
         </div>
-      </div>
-      <div className="mt-auto flex flex-wrap justify-end gap-2 border-t border-white/10 pt-3">
-        <Dialog.Close asChild>
-          <Button type="button" variant="outline" className="border-white/15 bg-transparent text-white/85 hover:bg-white/10">
-            Close
+        <div className="mt-6 flex flex-wrap justify-end gap-2 border-t border-white/10 pt-3">
+          <Dialog.Close asChild>
+            <Button type="button" variant="outline" className="border-white/15 bg-transparent text-white/85 hover:bg-white/10">
+              Close
+            </Button>
+          </Dialog.Close>
+          <Button type="button" onClick={onLoad} className="bg-violet-600 text-white hover:bg-violet-500">
+            Load into composer
           </Button>
-        </Dialog.Close>
-        <Button type="button" onClick={onLoad} className="bg-violet-600 text-white hover:bg-violet-500">
-          Load into composer
-        </Button>
+        </div>
       </div>
     </div>
   );
@@ -1327,9 +1439,8 @@ export default function AdsStudioPanel() {
     try {
       const raw = localStorage.getItem(LS_ADS_STUDIO_HISTORY);
       if (!raw) return;
-      const parsed = JSON.parse(raw) as AdsStudioHistoryItem[];
-      if (!Array.isArray(parsed)) return;
-      setHistory(parsed.filter((x) => x && typeof x.id === "string").slice(0, 24));
+      const parsed = JSON.parse(raw) as unknown;
+      setHistory(sanitizeAdsStudioHistoryRows(parsed));
     } catch {
       /* ignore */
     }
@@ -2648,7 +2759,7 @@ export default function AdsStudioPanel() {
       >
         <Dialog.Portal>
           <Dialog.Overlay className="fixed inset-0 z-[530] bg-black/75 backdrop-blur-[2px] data-[state=open]:animate-in data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=open]:fade-in-0" />
-          <Dialog.Content className="fixed left-1/2 top-1/2 z-[531] flex max-h-[min(92vh,720px)] w-[min(96vw,520px)] -translate-x-1/2 -translate-y-1/2 flex-col overflow-hidden rounded-2xl border border-white/12 bg-[#101014] shadow-[0_24px_80px_rgba(0,0,0,0.75)] outline-none data-[state=open]:animate-in data-[state=closed]:animate-out">
+          <Dialog.Content className="fixed left-1/2 top-1/2 z-[531] flex max-h-[min(92vh,720px)] min-h-0 w-[min(96vw,520px)] -translate-x-1/2 -translate-y-1/2 flex-col overflow-hidden rounded-2xl border border-white/12 bg-[#101014] shadow-[0_24px_80px_rgba(0,0,0,0.75)] outline-none data-[state=open]:animate-in data-[state=closed]:animate-out">
             <div className="flex items-center justify-between gap-2 border-b border-white/10 px-4 py-3">
               <Dialog.Title className="text-base font-semibold text-white">
                 {projectDetailResolved?.kind === "history"
