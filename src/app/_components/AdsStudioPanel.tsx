@@ -1,7 +1,18 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { LayoutList, Loader2, Pencil, Plus, Smartphone, Package2, Sparkles, Trash2, X, Zap } from "lucide-react";
+import {
+  LayoutList,
+  Loader2,
+  Pencil,
+  Plus,
+  Smartphone,
+  Package2,
+  Sparkles,
+  Trash2,
+  X,
+  Zap,
+} from "lucide-react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import ElementMentionTextarea, {
@@ -38,6 +49,17 @@ const ADS_STUDIO_TUTORIAL_2_PRODUCT_PATH = "/studio/ads-studio/tutorial-2-produc
 const ADS_STUDIO_UNBOXING_PRODUCT_PATH = "/studio/ads-studio/unboxing-recreate-product.png";
 const ADS_STUDIO_UNBOXING_AVATAR_PATH = "/studio/ads-studio/unboxing-recreate-avatar.png";
 
+/** Unboxing (2) “Recreate”: @image1 product, @image2 avatar (public/studio/ads-studio/). */
+const ADS_STUDIO_UNBOXING_2_PRODUCT_PATH = "/studio/ads-studio/unboxing-2-product.png";
+const ADS_STUDIO_UNBOXING_2_AVATAR_PATH = "/studio/ads-studio/unboxing-2-avatar.png";
+
+/** Unboxing (3) “Recreate”: product still only (no bundled avatar; public/studio/ads-studio/). */
+const ADS_STUDIO_UNBOXING_3_PRODUCT_PATH = "/studio/ads-studio/unboxing-3-product.png";
+
+/** Unboxing (4) “Recreate”: @image1 product, @image2 avatar (public/studio/ads-studio/). */
+const ADS_STUDIO_UNBOXING_4_PRODUCT_PATH = "/studio/ads-studio/unboxing-4-product.png";
+const ADS_STUDIO_UNBOXING_4_AVATAR_PATH = "/studio/ads-studio/unboxing-4-avatar.png";
+
 /** UGC Virtual Try On 2 “Recreate”: @image1 product, @image2 avatar (public/studio/ads-studio/). */
 const ADS_STUDIO_VIRTUAL_TRY_ON_2_PRODUCT_PATH = "/studio/ads-studio/virtual-try-on-2-product.png";
 const ADS_STUDIO_VIRTUAL_TRY_ON_2_AVATAR_PATH = "/studio/ads-studio/virtual-try-on-2-avatar.png";
@@ -45,6 +67,18 @@ const ADS_STUDIO_VIRTUAL_TRY_ON_2_AVATAR_PATH = "/studio/ads-studio/virtual-try-
 /** UGC Try On 3 “Recreate”: @image1 product, @image2 avatar (public/studio/ads-studio/). */
 const ADS_STUDIO_TRY_ON_3_PRODUCT_PATH = "/studio/ads-studio/ugc-try-on-3-product.png";
 const ADS_STUDIO_TRY_ON_3_AVATAR_PATH = "/studio/ads-studio/ugc-try-on-3-avatar.png";
+
+/** UGC Try On 4 “Recreate”: @image1 product, @image2 avatar (public/studio/ads-studio/). */
+const ADS_STUDIO_TRY_ON_4_PRODUCT_PATH = "/studio/ads-studio/ugc-try-on-4-product.png";
+const ADS_STUDIO_TRY_ON_4_AVATAR_PATH = "/studio/ads-studio/ugc-try-on-4-avatar.png";
+
+/** UGC Try On 5 “Recreate”: @image1 product, @image2 avatar (public/studio/ads-studio/). */
+const ADS_STUDIO_TRY_ON_5_PRODUCT_PATH = "/studio/ads-studio/ugc-try-on-5-product.png";
+const ADS_STUDIO_TRY_ON_5_AVATAR_PATH = "/studio/ads-studio/ugc-try-on-5-avatar.png";
+
+/** Generic UGC Try On (street prompt) — @image1 product, @image2 avatar (public/studio/ads-studio/). */
+const ADS_STUDIO_UGC_TRY_ON_STREET_PRODUCT_PATH = "/studio/ads-studio/ugc-try-on-product.png";
+const ADS_STUDIO_UGC_TRY_ON_STREET_AVATAR_PATH = "/studio/ads-studio/ugc-try-on-avatar.png";
 
 /** Default Tutorial (blender) — not Tutorial (2). Bundled stills instead of template preview frames. */
 const ADS_STUDIO_TUTORIAL_STANDARD_AVATAR_PATH = "/studio/ads-studio/tutorial-standard-avatar.png";
@@ -73,6 +107,10 @@ const ADS_STUDIO_UGC_5_AVATAR_PATH = "/studio/ads-studio/ugc-5-avatar.png";
 /** UGC 6 “Recreate”: @image1 product, @image2 avatar (public/studio/ads-studio/). */
 const ADS_STUDIO_UGC_6_PRODUCT_PATH = "/studio/ads-studio/ugc-6-product.png";
 const ADS_STUDIO_UGC_6_AVATAR_PATH = "/studio/ads-studio/ugc-6-avatar.png";
+
+/** UGC Woman (`ugc` template label) — @image1 product, @image2 avatar (public/studio/ads-studio/). */
+const ADS_STUDIO_UGC_WOMAN_PRODUCT_PATH = "/studio/ads-studio/ugc-woman-product.png";
+const ADS_STUDIO_UGC_WOMAN_AVATAR_PATH = "/studio/ads-studio/ugc-woman-avatar.png";
 
 function resolveAdsStudioPublicImage(path: string): string {
   if (typeof window === "undefined") return path;
@@ -112,8 +150,12 @@ type AdsStudioHistoryItem = {
   createdAt: number;
   assetType: "product" | "app";
   prompt: string;
+  /** Sidebar / list thumbnail (often product or single ref). */
   imageUrl?: string;
   videoUrl?: string;
+  /** When both refs were used at generation time (older rows may omit these). */
+  productRefUrl?: string;
+  avatarRefUrl?: string;
 };
 
 type AdsStudioJobPhase = "submitting" | "rendering" | "failed";
@@ -131,6 +173,8 @@ type AdsStudioActiveJob = {
   promptFull?: string;
   jobAssetType?: "product" | "app";
   previewStillUrl?: string;
+  productRefUrl?: string;
+  avatarRefUrl?: string;
 };
 
 const LS_ADS_STUDIO_HISTORY = "ugc_ads_studio_history_v1";
@@ -231,6 +275,20 @@ const TEMPLATE_PROMPT_UNBOXING_3 = `A 15-second vertical (9:16) ASMR-style jewel
 13–15s: Final flatlay — the open red box sits at the top of frame, its diorama interior visible like a tiny stage. The silver key necklace lies on the white silk below in an elegant curve. The white ribbon trails diagonally across the frame. Her hand gently adjusts the pendant one last time, then slowly pulls away. The silk catches a gentle highlight. Hold. End.
 Style: Aesthetic jewelry unboxing / visual ASMR. Overhead POV, only hands visible. The star of the video is the packaging — a theatrical, interactive box that opens like a storybook to reveal a miniature paper-cut diorama scene, making the unboxing feel like unlocking a tiny magical world. One single jewelry piece inside — the reveal is slow and dramatic. Color palette: matte red box, navy blue interior, gold foil accents, pink paper clouds, silver jewelry, pure white silk background. The contrast between the white silk and red box is bold and eye-catching. Intimate, luxurious, deeply satisfying, gift-worthy. No brand names visible anywhere.`;
 
+const TEMPLATE_PROMPT_UGC_TRY_ON_4 = `A 15-second vertical (9:16) UGC try-on video filmed on a smartphone. A young East Asian woman with long dark wavy hair stands in a bright modern apartment — light wood kitchen, full-length arched mirror, indoor plants, natural daylight. Handheld selfie energy, warm authentic tones.
+0–4s: She faces the mirror in a simple base layer (tank top and shorts). She holds up the folded ribbed loungewear set — pale pink with tiny floral print — showing the pieces to camera, excited, checking the fabric in the light.
+4–8s: Jump cuts as she changes into the matching long-sleeve henley-style top with small white buttons and lettuce-edge hem, then the matching shorts with the same ruffle trim and floral pattern. She smooths the outfit, adjusts her hair clip, turns side to side in the mirror.
+8–12s: Full outfit on — head-to-toe mirror selfie. She steps back, does a slow confident spin, runs a hand along the ribbed texture of the sleeve, shows the relaxed silhouette and how the set moves.
+12–15s: Final pose facing camera with a soft smile, hands in pockets or at her sides, holding the look. End on a clean mirror beat.
+Style: Real UGC, natural texture, no logos, no text overlays.`;
+
+const TEMPLATE_PROMPT_UGC_TRY_ON_5 = `A 15-second vertical (9:16) UGC try-on video filmed on a smartphone. A young woman with voluminous curly dark hair films herself in a bright minimalist bathroom — white walls, glass shower with warm brass fixtures, light wood floor, natural daylight. Handheld selfie energy, confident editorial vibe.
+0–3s: She faces the mirror in a simple base outfit. She lifts the structured burgundy top-handle bag into frame — glossy wine-red leather, silver clasp — showing it to camera, turning it slowly so the light catches the grain and hardware.
+3–7s: Jump cuts: she sets the bag on the vanity, then reveals a bold red ruched mini dress with a wide black studded belt and layered silver jewelry (chunky chain necklace, hoops, stacked bracelets, rings). She holds the dress up against herself, then transitions into wearing it, adjusting the belt and smoothing the ruching.
+7–11s: Full look on — she picks up the burgundy bag, hooks it on her arm, checks angles in the mirror, does a slow turn to show silhouette, bag, and accessories together. Close beats on jewelry catching the light.
+11–15s: Final hero pose: bag on shoulder, hands relaxed, confident neutral expression, slight hip shift. Hold, then a small smile. End clean.
+Style: Authentic UGC, no brand text on screen, no logos in frame.`;
+
 const TEMPLATE_PROMPT_UGC_TRY_ON_3 = `A 15-second vertical (9:16) UGC try-on video filmed on a smartphone. A young East Asian woman with a short black bob haircut stands in front of a full-length mirror in a minimalist bedroom — neutral beige walls, natural daylight from a window. Handheld selfie-style camera, authentic influencer energy, slightly warm tones.
 0–3s: She faces the mirror camera wearing a simple white bathrobe or basic white tee and shorts. She holds up the outfit pieces on hangers — a black fitted top and a black-and-white striped mini skirt — showing them to camera with a "watch this" expression, raises an eyebrow playfully.
 3–5s: Quick jump cut — she's now wearing the fitted black short-sleeve top with a mock neckline, slightly structured and tailored at the waist. She adjusts the hem, smoothing it down, turns side to side checking the fit in the mirror. The top has a clean minimal look — matte black fabric, cap sleeves, a subtle peplum-like shape at the waist.
@@ -304,13 +362,58 @@ function normalizeTemplateLabel(label: string): string {
     .trim();
 }
 
+/** Unboxing 2 (gym bike) — bundled stills; not generic Froggy unboxing. */
+function isUnboxing2BundledRecreateLabel(normalizedLabel: string): boolean {
+  const n = normalizedLabel;
+  if (n.includes("tutorial")) return false;
+  return (
+    n.includes("unboxing (2)") ||
+    n.includes("unboxing 2") ||
+    n.includes("unboxing2") ||
+    n.includes("unoboxing (2)") ||
+    n.includes("unoboxing 2") ||
+    n.includes("unoboxing2")
+  );
+}
+
+/** Unboxing (3) jewelry flat-lay — bundled product still only (no avatar). */
+function isUnboxing3BundledProductOnlyRecreateLabel(normalizedLabel: string): boolean {
+  const n = normalizedLabel;
+  if (n.includes("tutorial")) return false;
+  return (
+    n.includes("unboxing (3)") ||
+    n.includes("unboxing 3") ||
+    n.includes("unboxing3") ||
+    n.includes("unoboxing (3)") ||
+    n.includes("unoboxing 3") ||
+    n.includes("unoboxing3")
+  );
+}
+
+/** Unboxing (4) influencer + luxury product — bundled product + avatar stills. */
+function isUnboxing4BundledRecreateLabel(normalizedLabel: string): boolean {
+  const n = normalizedLabel;
+  if (n.includes("tutorial")) return false;
+  return (
+    n.includes("unboxing (4)") ||
+    n.includes("unboxing 4") ||
+    n.includes("unboxing4") ||
+    n.includes("unoboxing (4)") ||
+    n.includes("unoboxing 4") ||
+    n.includes("unoboxing4")
+  );
+}
+
 /**
  * Froggy Prince ASMR packshots only — generic “Unboxing” cards.
- * Numbered variants (Unboxing 2/3/4…) use different creatives; refs come from template video frames instead.
+ * Numbered Unboxing (2)–(4) use bundled stills instead.
  */
 function isBundledFroggyUnboxingTemplateLabel(normalizedLabel: string): boolean {
   const n = normalizedLabel;
   if (n.includes("tutorial")) return false;
+  if (isUnboxing2BundledRecreateLabel(n)) return false;
+  if (isUnboxing3BundledProductOnlyRecreateLabel(n)) return false;
+  if (isUnboxing4BundledRecreateLabel(n)) return false;
   if (!n.includes("unboxing") && !n.includes("unoboxing")) return false;
   if (/\bunboxing\s*[234]\b/u.test(n) || /\bunboxing[234]\b/u.test(n)) return false;
   if (/\bunoboxing\s*[234]\b/u.test(n)) return false;
@@ -405,6 +508,44 @@ function isTryOn3BundledRecreateLabel(normalizedLabel: string): boolean {
   );
 }
 
+/** UGC Try On 4 (bundled stills); excludes Tutorial. */
+function isTryOn4BundledRecreateLabel(normalizedLabel: string): boolean {
+  const n = normalizedLabel;
+  if (n.includes("tutorial")) return false;
+  return (
+    n.includes("try on 4") ||
+    n.includes("try-on 4") ||
+    n.includes("tryon 4") ||
+    n.includes("tryon4")
+  );
+}
+
+/** UGC Try On 5 (bundled stills); excludes Tutorial. */
+function isTryOn5BundledRecreateLabel(normalizedLabel: string): boolean {
+  const n = normalizedLabel;
+  if (n.includes("tutorial")) return false;
+  return (
+    n.includes("try on 5") ||
+    n.includes("try-on 5") ||
+    n.includes("tryon 5") ||
+    n.includes("tryon5")
+  );
+}
+
+/** UGC Try On 6: Recreate sets prompt only — no Product/Avatar auto-upload (same as Hyper Motion). */
+function isTryOn6NoRefsBundledRecreateLabel(normalizedLabel: string): boolean {
+  const n = normalizedLabel;
+  if (n.includes("tutorial")) return false;
+  return (
+    n.includes("try on 6") ||
+    n.includes("try-on 6") ||
+    n.includes("tryon 6") ||
+    n.includes("tryon6") ||
+    n.includes("tr on 6") ||
+    n.includes("tron 6")
+  );
+}
+
 function isHyperMotionTemplateLabel(normalizedLabel: string): boolean {
   const n = normalizedLabel;
   return n.includes("hyper") && n.includes("motion");
@@ -423,6 +564,28 @@ function isProTryOnTemplateLabel(normalizedLabel: string): boolean {
   if (n.includes("virtual")) return false;
   if (/\btry\s*on\s*[23456789]\b/u.test(n) || /\btryon\s*[23456789]\b/u.test(n)) return false;
   return n.includes("pro") && (n.includes("try on") || n.includes("try-on") || n.includes("tryon"));
+}
+
+/** Generic “try on” (UGC Try On street prompt) — not Pro Try On, not Virtual Try On 2, not try-on 3–6. */
+function isGenericUgcTryOnBundledRecreateLabel(normalizedLabel: string): boolean {
+  const n = normalizedLabel;
+  if (n.includes("tutorial")) return false;
+  if (isProTryOnTemplateLabel(n)) return false;
+  if (isVirtualTryOn2BundledRecreateLabel(n)) return false;
+  if (isTryOn3BundledRecreateLabel(n)) return false;
+  if (isTryOn4BundledRecreateLabel(n)) return false;
+  if (isTryOn5BundledRecreateLabel(n)) return false;
+  if (isTryOn6NoRefsBundledRecreateLabel(n)) return false;
+  return n.includes("try on") || n.includes("try-on") || n.includes("tryon");
+}
+
+/** “UGC Woman” only — not numbered UGC or try-on templates. */
+function isUgcWomanBundledRecreateLabel(normalizedLabel: string): boolean {
+  const n = normalizedLabel;
+  if (!n.includes("ugc")) return false;
+  if (n.includes("try on") || n.includes("try-on") || n.includes("tryon")) return false;
+  if (/\bugc\s*[23456789]\b/u.test(n) || /\bugc[23456789]\b/u.test(n)) return false;
+  return /\bugc\s*woman\b/u.test(n);
 }
 
 /** UGC 2 only — not UGC 3/4/5/6 or UGC 12/20/22, etc.; not try-on templates that mention UGC + “(2)”. */
@@ -505,9 +668,34 @@ function promptForTemplateLabel(label: string): string {
     return TEMPLATE_PROMPT_TUTORIAL_2;
   }
   if (n.includes("tutorial")) return TEMPLATE_PROMPT_TUTORIAL;
-  if (n.includes("unboxing 4") || n.includes("unboxing4")) return TEMPLATE_PROMPT_UNBOXING_4;
-  if (n.includes("unboxing 3") || n.includes("unboxing3")) return TEMPLATE_PROMPT_UNBOXING_3;
-  if (n.includes("unboxing 2") || n.includes("unboxing2") || n.includes("unoboxing 2") || n.includes("unoboxing2")) {
+  if (
+    n.includes("unboxing (4)") ||
+    n.includes("unboxing 4") ||
+    n.includes("unboxing4") ||
+    n.includes("unoboxing (4)") ||
+    n.includes("unoboxing 4") ||
+    n.includes("unoboxing4")
+  ) {
+    return TEMPLATE_PROMPT_UNBOXING_4;
+  }
+  if (
+    n.includes("unboxing (3)") ||
+    n.includes("unboxing 3") ||
+    n.includes("unboxing3") ||
+    n.includes("unoboxing (3)") ||
+    n.includes("unoboxing 3") ||
+    n.includes("unoboxing3")
+  ) {
+    return TEMPLATE_PROMPT_UNBOXING_3;
+  }
+  if (
+    n.includes("unboxing (2)") ||
+    n.includes("unboxing 2") ||
+    n.includes("unboxing2") ||
+    n.includes("unoboxing (2)") ||
+    n.includes("unoboxing 2") ||
+    n.includes("unoboxing2")
+  ) {
     return TEMPLATE_PROMPT_UNBOXING_2;
   }
   if (
@@ -522,6 +710,12 @@ function promptForTemplateLabel(label: string): string {
   }
   if (n.includes("try on 3") || n.includes("try-on 3") || n.includes("tryon 3") || n.includes("tryon3")) {
     return TEMPLATE_PROMPT_UGC_TRY_ON_3;
+  }
+  if (n.includes("try on 4") || n.includes("try-on 4") || n.includes("tryon 4") || n.includes("tryon4")) {
+    return TEMPLATE_PROMPT_UGC_TRY_ON_4;
+  }
+  if (n.includes("try on 5") || n.includes("try-on 5") || n.includes("tryon 5") || n.includes("tryon5")) {
+    return TEMPLATE_PROMPT_UGC_TRY_ON_5;
   }
   if (n.includes("try on 2") || n.includes("try-on 2") || n.includes("tryon 2") || n.includes("tryon2")) {
     return TEMPLATE_PROMPT_UGC_TRY_ON_2;
@@ -556,18 +750,44 @@ async function pollVideo(taskId: string, personalApiKey?: string, piapiApiKey?: 
       data?: { status?: string; response?: string[]; error_message?: string | null };
       error?: string;
     };
-    if (!res.ok || !json.data) throw new Error(json.error || "Video poll failed");
-    const st = json.data.status ?? "IN_PROGRESS";
-    if (st === "IN_PROGRESS") {
+    if (!res.ok) {
+      if (res.status === 429 || res.status === 502 || res.status === 503 || res.status === 504) {
+        await new Promise((r) => setTimeout(r, 1500));
+        continue;
+      }
+      throw new Error(json.error || `Video poll failed (HTTP ${res.status}).`);
+    }
+    if (!json.data) throw new Error(json.error || "Video poll failed");
+    const st = String(json.data.status ?? "IN_PROGRESS").toUpperCase();
+    const inFlight = new Set([
+      "",
+      "IN_PROGRESS",
+      "PENDING",
+      "PROCESSING",
+      "QUEUED",
+      "WAITING",
+      "RUNNING",
+      "COMPLETED",
+      "COMPLETE",
+      "SUCCEEDED",
+      "DONE",
+    ]);
+    if (inFlight.has(st)) {
       await new Promise((r) => setTimeout(r, 1500));
       continue;
     }
     if (st === "SUCCESS") {
       const u = json.data.response?.[0];
-      if (!u || typeof u !== "string") throw new Error("Video ready but no output URL.");
+      if (!u || typeof u !== "string") {
+        await new Promise((r) => setTimeout(r, 1500));
+        continue;
+      }
       return u;
     }
-    throw new Error(json.data.error_message || "Video generation failed.");
+    if (st === "FAILED") {
+      throw new Error(json.data.error_message?.trim() || "Video generation failed.");
+    }
+    await new Promise((r) => setTimeout(r, 1500));
   }
   throw new Error("Timeout waiting for video.");
 }
@@ -870,6 +1090,8 @@ export default function AdsStudioPanel() {
           promptFull: p,
           jobAssetType: snapAssetType,
           previewStillUrl: snapAppRef || snapAvatar || undefined,
+          productRefUrl: snapAppRef || undefined,
+          avatarRefUrl: snapAvatar || undefined,
         },
         ...prev,
       ];
@@ -970,6 +1192,8 @@ export default function AdsStudioPanel() {
           prompt: p,
           imageUrl: previewStillUrl,
           videoUrl: vUrl,
+          productRefUrl: productUrl || undefined,
+          avatarRefUrl: avUrl || undefined,
         };
         setHistory((prev) => [item, ...prev].slice(0, 24));
 
@@ -1023,6 +1247,8 @@ export default function AdsStudioPanel() {
             prompt: p,
             imageUrl: previewStillUrl,
             videoUrl: vUrl,
+            productRefUrl: job.productRefUrl ?? undefined,
+            avatarRefUrl: job.avatarRefUrl ?? undefined,
           };
           setHistory((prev) => [item, ...prev].slice(0, 24));
 
@@ -1129,6 +1355,36 @@ export default function AdsStudioPanel() {
       setAvatarUrl(resolveAdsStudioPublicImage(ADS_STUDIO_TRY_ON_3_AVATAR_PATH));
       return;
     }
+    if (isTryOn4BundledRecreateLabel(n)) {
+      setAssetType("product");
+      setAppRefUrl(resolveAdsStudioPublicImage(ADS_STUDIO_TRY_ON_4_PRODUCT_PATH));
+      setAvatarUrl(resolveAdsStudioPublicImage(ADS_STUDIO_TRY_ON_4_AVATAR_PATH));
+      return;
+    }
+    if (isTryOn5BundledRecreateLabel(n)) {
+      setAssetType("product");
+      setAppRefUrl(resolveAdsStudioPublicImage(ADS_STUDIO_TRY_ON_5_PRODUCT_PATH));
+      setAvatarUrl(resolveAdsStudioPublicImage(ADS_STUDIO_TRY_ON_5_AVATAR_PATH));
+      return;
+    }
+    if (isTryOn6NoRefsBundledRecreateLabel(n)) {
+      setAssetType("product");
+      setAppRefUrl("");
+      setAvatarUrl("");
+      return;
+    }
+    if (isGenericUgcTryOnBundledRecreateLabel(n)) {
+      setAssetType("product");
+      setAppRefUrl(resolveAdsStudioPublicImage(ADS_STUDIO_UGC_TRY_ON_STREET_PRODUCT_PATH));
+      setAvatarUrl(resolveAdsStudioPublicImage(ADS_STUDIO_UGC_TRY_ON_STREET_AVATAR_PATH));
+      return;
+    }
+    if (isUgcWomanBundledRecreateLabel(n)) {
+      setAssetType("product");
+      setAppRefUrl(resolveAdsStudioPublicImage(ADS_STUDIO_UGC_WOMAN_PRODUCT_PATH));
+      setAvatarUrl(resolveAdsStudioPublicImage(ADS_STUDIO_UGC_WOMAN_AVATAR_PATH));
+      return;
+    }
     if (isUgc2BundledRecreateLabel(n)) {
       setAssetType("product");
       setAppRefUrl(resolveAdsStudioPublicImage(ADS_STUDIO_UGC_2_PRODUCT_PATH));
@@ -1157,6 +1413,24 @@ export default function AdsStudioPanel() {
       setAssetType("product");
       setAppRefUrl(resolveAdsStudioPublicImage(ADS_STUDIO_UGC_6_PRODUCT_PATH));
       setAvatarUrl(resolveAdsStudioPublicImage(ADS_STUDIO_UGC_6_AVATAR_PATH));
+      return;
+    }
+    if (isUnboxing2BundledRecreateLabel(n)) {
+      setAssetType("product");
+      setAppRefUrl(resolveAdsStudioPublicImage(ADS_STUDIO_UNBOXING_2_PRODUCT_PATH));
+      setAvatarUrl(resolveAdsStudioPublicImage(ADS_STUDIO_UNBOXING_2_AVATAR_PATH));
+      return;
+    }
+    if (isUnboxing3BundledProductOnlyRecreateLabel(n)) {
+      setAssetType("product");
+      setAppRefUrl(resolveAdsStudioPublicImage(ADS_STUDIO_UNBOXING_3_PRODUCT_PATH));
+      setAvatarUrl("");
+      return;
+    }
+    if (isUnboxing4BundledRecreateLabel(n)) {
+      setAssetType("product");
+      setAppRefUrl(resolveAdsStudioPublicImage(ADS_STUDIO_UNBOXING_4_PRODUCT_PATH));
+      setAvatarUrl(resolveAdsStudioPublicImage(ADS_STUDIO_UNBOXING_4_AVATAR_PATH));
       return;
     }
     if (isBundledFroggyUnboxingTemplateLabel(n)) {
@@ -1190,188 +1464,103 @@ export default function AdsStudioPanel() {
     }
   }
 
-  return (
-    <div className="relative min-w-0 pb-8 [--ads-projects-w:220px]">
-      <aside
-        aria-label="Projects"
-        className={cn(
-          "z-[22] flex min-h-0 w-full flex-col overflow-hidden rounded-2xl border border-white/10 bg-[#09090b]/95 shadow-[inset_0_1px_0_0_rgba(255,255,255,0.06)] backdrop-blur-md",
-          "mb-3 sm:mb-4",
-          "md:fixed md:mb-0 md:left-[var(--studio-nav-w,248px)] md:top-0 md:h-dvh md:max-h-none md:w-[var(--ads-projects-w)] md:max-w-[var(--ads-projects-w)] md:rounded-none md:border-b-0 md:border-l-0 md:border-t-0 md:border-r md:border-white/10 md:shadow-none",
-        )}
-      >
-          <div className="flex shrink-0 items-center gap-2 border-b border-white/[0.08] px-3 py-2.5">
-            <LayoutList className="size-4 shrink-0 text-violet-300/90" aria-hidden />
-            <span className="text-xs font-semibold uppercase tracking-wide text-white/65">Projects</span>
-            {runningJobCount > 0 ? (
-              <span className="ml-auto rounded-full bg-violet-500/25 px-2 py-0.5 text-[10px] font-semibold tabular-nums text-violet-100 ring-1 ring-violet-400/25">
-                {runningJobCount} active
-              </span>
-            ) : null}
-          </div>
-          <div className="flex min-h-0 flex-1 flex-col gap-2 overflow-y-auto overscroll-contain px-3 py-2 md:py-3 max-h-[min(280px,42vh)] md:max-h-none">
-            {activeJobs.length === 0 && history.length === 0 ? (
-              <p className="px-1 py-6 text-center text-[11px] leading-snug text-white/40">
-                Generations show up here. Start another anytime — jobs run in the background.
-              </p>
-            ) : null}
-            {activeJobs.map((job) => {
-              const selected = selectedSidebarKey === `job:${job.id}`;
-              return (
-                <div
-                  key={job.id}
-                  className={cn(
-                    "group flex w-full items-stretch gap-0.5 rounded-xl border px-1 py-1 transition",
-                    selected ? "border-violet-400/45 bg-white/[0.07]" : "border-transparent bg-white/[0.03] hover:bg-white/[0.06]",
-                  )}
-                >
-                  <button
-                    type="button"
-                    onClick={() => setSelectedSidebarKey(`job:${job.id}`)}
-                    className="flex min-w-0 flex-1 gap-2 rounded-lg px-1 py-1 text-left outline-none focus-visible:ring-2 focus-visible:ring-violet-400/40"
-                  >
-                    <div className="relative size-11 shrink-0 overflow-hidden rounded-lg bg-black/40">
-                      {job.thumbUrl ? (
-                        // eslint-disable-next-line @next/next/no-img-element -- remote CDN thumbs
-                        <img src={job.thumbUrl} alt="" className="h-full w-full object-cover" />
-                      ) : (
-                        <div className="flex h-full w-full items-center justify-center text-[10px] text-white/35">—</div>
-                      )}
-                      {(job.phase === "submitting" || job.phase === "rendering") ? (
-                        <div className="absolute inset-0 flex items-center justify-center bg-black/55">
-                          <Loader2 className="size-5 animate-spin text-white" aria-hidden />
-                        </div>
-                      ) : null}
-                    </div>
-                    <div className="min-w-0 flex-1 py-0.5">
-                      <p className="line-clamp-2 text-[11px] font-medium leading-snug text-white/90">{job.promptSnippet}</p>
-                      <p className="mt-0.5 text-[10px] font-semibold uppercase tracking-wide text-white/45">
-                        {job.phase === "failed"
-                          ? "Failed"
-                          : job.phase === "submitting"
-                            ? "Submitting…"
-                            : "Rendering…"}
-                      </p>
-                    </div>
-                  </button>
-                  <button
-                    type="button"
-                    aria-label="Delete project"
-                    title="Remove from list"
-                    onClick={(e) => {
-                      e.preventDefault();
-                      e.stopPropagation();
-                      removeActiveJob(job.id);
-                    }}
-                    className="flex shrink-0 items-center justify-center rounded-lg border border-transparent px-1 text-white/35 transition hover:border-white/15 hover:bg-white/[0.08] hover:text-rose-300/95"
-                  >
-                    <Trash2 className="size-4" aria-hidden />
-                  </button>
-                </div>
-              );
-            })}
-            {history.map((h) => {
-              const selected = selectedSidebarKey === `history:${h.id}`;
-              return (
-                <div
-                  key={h.id}
-                  className={cn(
-                    "group flex w-full items-stretch gap-0.5 rounded-xl border px-1 py-1 transition",
-                    selected ? "border-violet-400/45 bg-white/[0.07]" : "border-transparent bg-white/[0.03] hover:bg-white/[0.06]",
-                  )}
-                >
-                  <button
-                    type="button"
-                    onClick={() => setSelectedSidebarKey(`history:${h.id}`)}
-                    className="flex min-w-0 flex-1 gap-2 rounded-lg px-1 py-1 text-left outline-none focus-visible:ring-2 focus-visible:ring-violet-400/40"
-                  >
-                    <div className="relative size-11 shrink-0 overflow-hidden rounded-lg bg-black/40">
-                      {h.imageUrl ? (
-                        // eslint-disable-next-line @next/next/no-img-element -- remote CDN thumbs
-                        <img src={h.imageUrl} alt="" className="h-full w-full object-cover" />
-                      ) : (
-                        <div className="flex h-full w-full items-center justify-center text-[9px] text-white/40">Clip</div>
-                      )}
-                    </div>
-                    <div className="min-w-0 flex-1 py-0.5">
-                      <p className="line-clamp-2 text-[11px] font-medium leading-snug text-white/90">
-                        {h.prompt.length > 90 ? `${h.prompt.slice(0, 87)}…` : h.prompt}
-                      </p>
-                      <p className="mt-0.5 text-[10px] font-semibold uppercase tracking-wide text-emerald-400/90">Ready</p>
-                    </div>
-                  </button>
-                  <button
-                    type="button"
-                    aria-label="Delete project"
-                    title="Remove from list"
-                    onClick={(e) => {
-                      e.preventDefault();
-                      e.stopPropagation();
-                      removeHistoryItem(h.id);
-                    }}
-                    className="flex shrink-0 items-center justify-center rounded-lg border border-transparent px-1 text-white/35 transition hover:border-white/15 hover:bg-white/[0.08] hover:text-rose-300/95"
-                  >
-                    <Trash2 className="size-4" aria-hidden />
-                  </button>
-                </div>
-              );
-            })}
-          </div>
-      </aside>
+  const projectFocusOpen = selectedHistoryOrJob !== null;
 
-        <div
-          className={cn(
-            "box-border flex w-full min-w-0 flex-col items-center gap-10 pb-2 md:gap-12",
-            /* Padding (not margin) reserves the fixed Projects rail without breaking `w-full` centering. */
-            "px-3 sm:px-5",
-            "md:pl-[calc(var(--ads-projects-w)+1.5rem)] md:pr-6",
-            "lg:pl-[calc(var(--ads-projects-w)+2.5rem)] lg:pr-10",
-          )}
-        >
+  const projectFocusVideoUrl = useMemo(() => {
+    if (!selectedHistoryOrJob) return null;
+    if (selectedHistoryOrJob.kind === "history") {
+      const u = selectedHistoryOrJob.item.videoUrl?.trim();
+      return u || null;
+    }
+    return null;
+  }, [selectedHistoryOrJob]);
+
+  useEffect(() => {
+    if (!selectedSidebarKey) return;
+    if (selectedSidebarKey.startsWith("history:")) {
+      const id = selectedSidebarKey.slice(8);
+      const h = history.find((x) => x.id === id);
+      if (!h) return;
+      setPrompt(h.prompt);
+      setAssetType(h.assetType);
+      const p = h.productRefUrl?.trim();
+      const a = h.avatarRefUrl?.trim();
+      if (p || a) {
+        setAppRefUrl(p ?? "");
+        setAvatarUrl(a ?? "");
+      } else {
+        setAppRefUrl(h.imageUrl?.trim() ?? "");
+        setAvatarUrl("");
+      }
+      return;
+    }
+    if (selectedSidebarKey.startsWith("job:")) {
+      const id = selectedSidebarKey.slice(4);
+      const j = activeJobs.find((x) => x.id === id);
+      if (!j) return;
+      setPrompt((j.promptFull ?? j.promptSnippet).trim());
+      setAssetType(j.jobAssetType ?? "product");
+      const p = j.productRefUrl?.trim();
+      const a = j.avatarRefUrl?.trim();
+      if (p || a) {
+        setAppRefUrl(p ?? "");
+        setAvatarUrl(a ?? "");
+      } else {
+        setAppRefUrl((j.previewStillUrl ?? j.thumbUrl ?? "").trim());
+        setAvatarUrl("");
+      }
+    }
+  }, [selectedSidebarKey, history, activeJobs]);
+
+  useEffect(() => {
+    if (!projectFocusOpen || typeof document === "undefined") return;
+    const prev = document.body.style.overflow;
+    document.body.style.overflow = "hidden";
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === "Escape") setSelectedSidebarKey(null);
+    };
+    window.addEventListener("keydown", onKey);
+    return () => {
+      document.body.style.overflow = prev;
+      window.removeEventListener("keydown", onKey);
+    };
+  }, [projectFocusOpen]);
+
+  function closeProjectFocus() {
+    setSelectedSidebarKey(null);
+  }
+
+  const renderAdsGradientComposerCard = () => (
+    <div className="relative w-full min-w-0 max-w-[1080px] rounded-[20px]">
+      <div className="relative rounded-[20px] bg-[linear-gradient(0deg,rgba(21,21,21,0.88)_0%,rgba(21,21,21,0.88)_100%),linear-gradient(41deg,rgba(101,189,235,0.24)_25.53%,rgba(101,189,235,0.00)_63.06%)] p-4 shadow-[0_12px_8px_0_rgba(0,0,0,0.20),inset_0_0_0_1px_rgba(255,255,255,0.07)] backdrop-blur-[20px]">
+        <div className="flex w-full min-w-0 flex-col gap-3 rounded-[20px] sm:flex-row sm:items-start">
           <div
-            ref={composerPanelRef}
-            className="mx-auto flex w-full max-w-[1080px] min-w-0 flex-col items-center gap-4 scroll-mt-20 pt-8 sm:pt-10 md:scroll-mt-28 md:gap-5 md:pt-14 lg:pt-16"
+            className="relative z-20 order-first flex w-full min-h-[52px] shrink-0 gap-1 rounded-[20px] bg-[rgba(0,0,0,0.05)] p-1 shadow-[0_12px_8px_0_rgba(0,0,0,0.20),inset_0_0_0_1px_rgba(255,255,255,0.08)] backdrop-blur-[20px] sm:order-none sm:h-[120px] sm:min-h-0 sm:w-[70px] sm:flex-col sm:justify-center"
+            aria-label="Product or App ad mode"
           >
-          <h2 className="relative max-w-[44rem] px-3 text-center text-[1.625rem] font-semibold leading-[1.18] tracking-tight sm:text-3xl sm:leading-[1.15] md:text-[2.125rem] md:leading-[1.12]">
-            <span
-              aria-hidden
-              className="pointer-events-none absolute inset-x-4 top-1/2 -z-10 h-[62%] -translate-y-1/2 rounded-full bg-violet-500/14 blur-[46px] md:inset-x-8"
-            />
-            <span className="bg-gradient-to-br from-white via-zinc-100 to-violet-300/85 bg-clip-text text-transparent">
-              Turn any product into a video ad
-            </span>
-          </h2>
-          <div className="flex min-h-[min(58vh,540px)] w-full min-w-0 justify-center">
-        <div className="relative w-full min-w-0 max-w-[1080px] rounded-[20px]">
-          <div className="relative rounded-[20px] bg-[linear-gradient(0deg,rgba(21,21,21,0.88)_0%,rgba(21,21,21,0.88)_100%),linear-gradient(41deg,rgba(101,189,235,0.24)_25.53%,rgba(101,189,235,0.00)_63.06%)] p-4 shadow-[0_12px_8px_0_rgba(0,0,0,0.20),inset_0_0_0_1px_rgba(255,255,255,0.07)] backdrop-blur-[20px]">
-          <div className="flex w-full min-w-0 flex-col gap-3 rounded-[20px] sm:flex-row sm:items-start">
-            <div
-              className="relative z-20 order-first flex w-full min-h-[52px] shrink-0 gap-1 rounded-[20px] bg-[rgba(0,0,0,0.05)] p-1 shadow-[0_12px_8px_0_rgba(0,0,0,0.20),inset_0_0_0_1px_rgba(255,255,255,0.08)] backdrop-blur-[20px] sm:order-none sm:h-[120px] sm:min-h-0 sm:w-[70px] sm:flex-col sm:justify-center"
-              aria-label="Product or App ad mode"
+            <button
+              type="button"
+              onClick={() => setAssetType("product")}
+              className={cn(
+                "relative z-0 flex min-h-0 min-w-0 flex-1 basis-0 flex-row items-center justify-center gap-2 rounded-[16px] px-2 py-2 text-[10px] font-semibold leading-[14px] transition-colors sm:flex-col sm:gap-1 sm:py-1.5",
+                assetType === "product" ? "bg-white/[0.06] text-white" : "text-white/50 hover:text-white/70",
+              )}
             >
-              <button
-                type="button"
-                onClick={() => setAssetType("product")}
-                className={cn(
-                  "relative z-0 flex min-h-0 min-w-0 flex-1 basis-0 flex-row items-center justify-center gap-2 rounded-[16px] px-2 py-2 text-[10px] font-semibold leading-[14px] transition-colors sm:flex-col sm:gap-1 sm:py-1.5",
-                  assetType === "product" ? "bg-white/[0.06] text-white" : "text-white/50 hover:text-white/70",
-                )}
-              >
-                <Package2 className="size-4 shrink-0" />
-                <span>Product</span>
-              </button>
-              <button
-                type="button"
-                onClick={() => setAssetType("app")}
-                className={cn(
-                  "relative z-0 flex min-h-0 min-w-0 flex-1 basis-0 flex-row items-center justify-center gap-2 rounded-[16px] px-2 py-2 text-[10px] font-semibold leading-[14px] transition-colors sm:flex-col sm:gap-1 sm:py-1.5",
-                  assetType === "app" ? "bg-white/[0.06] text-white" : "text-white/50 hover:text-white/70",
-                )}
-              >
-                <Smartphone className="size-4 shrink-0" />
-                <span>App</span>
-              </button>
-            </div>
+              <Package2 className="size-4 shrink-0" />
+              <span>Product</span>
+            </button>
+            <button
+              type="button"
+              onClick={() => setAssetType("app")}
+              className={cn(
+                "relative z-0 flex min-h-0 min-w-0 flex-1 basis-0 flex-row items-center justify-center gap-2 rounded-[16px] px-2 py-2 text-[10px] font-semibold leading-[14px] transition-colors sm:flex-col sm:gap-1 sm:py-1.5",
+                assetType === "app" ? "bg-white/[0.06] text-white" : "text-white/50 hover:text-white/70",
+              )}
+            >
+              <Smartphone className="size-4 shrink-0" />
+              <span>App</span>
+            </button>
+          </div>
           <div className="grid min-w-0 flex-1 grid-cols-[minmax(0,1fr)_auto] items-stretch gap-3">
             <div className="grid w-full min-w-0 grid-cols-[1.75rem_minmax(0,1fr)] content-start gap-x-2 gap-y-2">
               <button
@@ -1593,8 +1782,167 @@ export default function AdsStudioPanel() {
               </Button>
             </div>
           </div>
+        </div>
+      </div>
+    </div>
+  );
+
+  return (
+    <div className="relative min-w-0 pb-8 [--ads-projects-w:220px]">
+      <aside
+        aria-label="Projects"
+        className={cn(
+          "z-[22] flex min-h-0 w-full flex-col overflow-hidden rounded-2xl border border-white/10 bg-[#09090b]/95 shadow-[inset_0_1px_0_0_rgba(255,255,255,0.06)] backdrop-blur-md",
+          "mb-3 sm:mb-4",
+          "md:fixed md:mb-0 md:left-[var(--studio-nav-w,248px)] md:top-0 md:h-dvh md:max-h-none md:w-[var(--ads-projects-w)] md:max-w-[var(--ads-projects-w)] md:rounded-none md:border-b-0 md:border-l-0 md:border-t-0 md:border-r md:border-white/10 md:shadow-none",
+        )}
+      >
+          <div className="flex shrink-0 items-center gap-2 border-b border-white/[0.08] px-3 py-2.5">
+            <LayoutList className="size-4 shrink-0 text-violet-300/90" aria-hidden />
+            <span className="text-xs font-semibold uppercase tracking-wide text-white/65">Projects</span>
+            {runningJobCount > 0 ? (
+              <span className="ml-auto rounded-full bg-violet-500/25 px-2 py-0.5 text-[10px] font-semibold tabular-nums text-violet-100 ring-1 ring-violet-400/25">
+                {runningJobCount} active
+              </span>
+            ) : null}
           </div>
+          <div className="flex min-h-0 flex-1 flex-col gap-2 overflow-y-auto overscroll-contain px-3 py-2 md:py-3 max-h-[min(280px,42vh)] md:max-h-none">
+            {activeJobs.length === 0 && history.length === 0 ? (
+              <p className="px-1 py-6 text-center text-[11px] leading-snug text-white/40">
+                Generations show up here. Start another anytime — jobs run in the background.
+              </p>
+            ) : null}
+            {activeJobs.map((job) => {
+              const selected = selectedSidebarKey === `job:${job.id}`;
+              return (
+                <div
+                  key={job.id}
+                  className={cn(
+                    "group flex w-full items-stretch gap-0.5 rounded-xl border px-1 py-1 transition",
+                    selected ? "border-violet-400/45 bg-white/[0.07]" : "border-transparent bg-white/[0.03] hover:bg-white/[0.06]",
+                  )}
+                >
+                  <button
+                    type="button"
+                    onClick={() => setSelectedSidebarKey(`job:${job.id}`)}
+                    className="flex min-w-0 flex-1 gap-2 rounded-lg px-1 py-1 text-left outline-none focus-visible:ring-2 focus-visible:ring-violet-400/40"
+                  >
+                    <div className="relative size-11 shrink-0 overflow-hidden rounded-lg bg-black/40">
+                      {job.thumbUrl ? (
+                        // eslint-disable-next-line @next/next/no-img-element -- remote CDN thumbs
+                        <img src={job.thumbUrl} alt="" className="h-full w-full object-cover" />
+                      ) : (
+                        <div className="flex h-full w-full items-center justify-center text-[10px] text-white/35">—</div>
+                      )}
+                      {(job.phase === "submitting" || job.phase === "rendering") ? (
+                        <div className="absolute inset-0 flex items-center justify-center bg-black/55">
+                          <Loader2 className="size-5 animate-spin text-white" aria-hidden />
+                        </div>
+                      ) : null}
+                    </div>
+                    <div className="min-w-0 flex-1 py-0.5">
+                      <p className="line-clamp-2 text-[11px] font-medium leading-snug text-white/90">{job.promptSnippet}</p>
+                      <p className="mt-0.5 text-[10px] font-semibold uppercase tracking-wide text-white/45">
+                        {job.phase === "failed"
+                          ? "Failed"
+                          : job.phase === "submitting"
+                            ? "Submitting…"
+                            : "Rendering…"}
+                      </p>
+                    </div>
+                  </button>
+                  <button
+                    type="button"
+                    aria-label="Delete project"
+                    title="Remove from list"
+                    onClick={(e) => {
+                      e.preventDefault();
+                      e.stopPropagation();
+                      removeActiveJob(job.id);
+                    }}
+                    className="flex shrink-0 items-center justify-center rounded-lg border border-transparent px-1 text-white/35 transition hover:border-white/15 hover:bg-white/[0.08] hover:text-rose-300/95"
+                  >
+                    <Trash2 className="size-4" aria-hidden />
+                  </button>
+                </div>
+              );
+            })}
+            {history.map((h) => {
+              const selected = selectedSidebarKey === `history:${h.id}`;
+              return (
+                <div
+                  key={h.id}
+                  className={cn(
+                    "group flex w-full items-stretch gap-0.5 rounded-xl border px-1 py-1 transition",
+                    selected ? "border-violet-400/45 bg-white/[0.07]" : "border-transparent bg-white/[0.03] hover:bg-white/[0.06]",
+                  )}
+                >
+                  <button
+                    type="button"
+                    onClick={() => setSelectedSidebarKey(`history:${h.id}`)}
+                    className="flex min-w-0 flex-1 gap-2 rounded-lg px-1 py-1 text-left outline-none focus-visible:ring-2 focus-visible:ring-violet-400/40"
+                  >
+                    <div className="relative size-11 shrink-0 overflow-hidden rounded-lg bg-black/40">
+                      {h.imageUrl ? (
+                        // eslint-disable-next-line @next/next/no-img-element -- remote CDN thumbs
+                        <img src={h.imageUrl} alt="" className="h-full w-full object-cover" />
+                      ) : (
+                        <div className="flex h-full w-full items-center justify-center text-[9px] text-white/40">Clip</div>
+                      )}
+                    </div>
+                    <div className="min-w-0 flex-1 py-0.5">
+                      <p className="line-clamp-2 text-[11px] font-medium leading-snug text-white/90">
+                        {h.prompt.length > 90 ? `${h.prompt.slice(0, 87)}…` : h.prompt}
+                      </p>
+                      <p className="mt-0.5 text-[10px] font-semibold uppercase tracking-wide text-emerald-400/90">Ready</p>
+                    </div>
+                  </button>
+                  <button
+                    type="button"
+                    aria-label="Delete project"
+                    title="Remove from list"
+                    onClick={(e) => {
+                      e.preventDefault();
+                      e.stopPropagation();
+                      removeHistoryItem(h.id);
+                    }}
+                    className="flex shrink-0 items-center justify-center rounded-lg border border-transparent px-1 text-white/35 transition hover:border-white/15 hover:bg-white/[0.08] hover:text-rose-300/95"
+                  >
+                    <Trash2 className="size-4" aria-hidden />
+                  </button>
+                </div>
+              );
+            })}
           </div>
+      </aside>
+
+        <div
+          className={cn(
+            "box-border flex w-full min-w-0 flex-col items-center gap-10 pb-2 md:gap-12",
+            /* Padding (not margin) reserves the fixed Projects rail without breaking `w-full` centering. */
+            "px-3 sm:px-5",
+            "md:pl-[calc(var(--ads-projects-w)+1.5rem)] md:pr-6",
+            "lg:pl-[calc(var(--ads-projects-w)+2.5rem)] lg:pr-10",
+          )}
+        >
+          <div
+            ref={composerPanelRef}
+            className="mx-auto flex w-full max-w-[1080px] min-w-0 flex-col items-center gap-4 scroll-mt-20 pt-8 sm:pt-10 md:scroll-mt-28 md:gap-5 md:pt-14 lg:pt-16"
+          >
+          {!projectFocusOpen ? (
+            <h2 className="relative max-w-[44rem] px-3 text-center text-[1.625rem] font-semibold leading-[1.18] tracking-tight sm:text-3xl sm:leading-[1.15] md:text-[2.125rem] md:leading-[1.12]">
+              <span
+                aria-hidden
+                className="pointer-events-none absolute inset-x-4 top-1/2 -z-10 h-[62%] -translate-y-1/2 rounded-full bg-violet-500/14 blur-[46px] md:inset-x-8"
+              />
+              <span className="bg-gradient-to-br from-white via-zinc-100 to-violet-300/85 bg-clip-text text-transparent">
+                Turn any product into a video ad
+              </span>
+            </h2>
+          ) : null}
+          {!projectFocusOpen ? (
+            <div className="flex min-h-[min(58vh,540px)] w-full min-w-0 justify-center">{renderAdsGradientComposerCard()}</div>
+          ) : null}
           <input
             ref={appInputRef}
             type="file"
@@ -1631,28 +1979,6 @@ export default function AdsStudioPanel() {
             }}
           />
         </div>
-        </div>
-
-          {selectedHistoryOrJob?.kind === "history" ? (
-            <div
-              className="mx-auto w-full max-w-[1080px] overflow-hidden rounded-2xl border border-white/10 bg-black/45 shadow-[inset_0_0_0_1px_rgba(255,255,255,0.06)]"
-              aria-label="Selected project video"
-            >
-              {selectedHistoryOrJob.item.videoUrl ? (
-                <video
-                  key={selectedHistoryOrJob.item.id}
-                  src={selectedHistoryOrJob.item.videoUrl}
-                  controls
-                  playsInline
-                  className="mx-auto max-h-[min(85vh,920px)] min-h-[280px] w-full bg-black object-contain"
-                />
-              ) : (
-                <div className="flex min-h-[160px] items-center justify-center px-4 py-12 text-sm text-white/45">
-                  No video URL for this project.
-                </div>
-              )}
-            </div>
-          ) : null}
 
       <section className="w-full min-w-0">
         <div className="mb-5 flex justify-center sm:mb-6">
@@ -1724,8 +2050,87 @@ export default function AdsStudioPanel() {
           ) : null}
         </div>
       </section>
+        </div>
+
+      {projectFocusOpen && selectedHistoryOrJob ? (
+        <div
+          className="fixed inset-0 z-[480] flex items-end justify-center p-3 pb-[max(0.75rem,env(safe-area-inset-bottom))] sm:items-center sm:p-6"
+          role="dialog"
+          aria-modal="true"
+          aria-labelledby="ads-project-focus-title"
+        >
+          <button
+            type="button"
+            aria-label="Close project view"
+            className="absolute inset-0 bg-black/50 backdrop-blur-xl transition hover:bg-black/55"
+            onClick={closeProjectFocus}
+          />
+          <div
+            className="relative z-10 flex max-h-[min(100dvh,920px)] w-full max-w-2xl flex-col gap-4 overflow-y-auto overscroll-contain rounded-2xl border border-white/12 bg-[#090910]/97 p-4 shadow-[0_24px_80px_rgba(0,0,0,0.65)] sm:max-w-3xl sm:p-5"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="flex items-center justify-between gap-3 border-b border-white/10 pb-3">
+              <h3 id="ads-project-focus-title" className="text-sm font-semibold text-white/90 sm:text-base">
+                {selectedHistoryOrJob.kind === "history"
+                  ? "Project"
+                  : selectedHistoryOrJob.job.phase === "failed"
+                    ? "Generation failed"
+                    : "Generation in progress"}
+              </h3>
+              <Button
+                type="button"
+                variant="ghost"
+                size="sm"
+                onClick={closeProjectFocus}
+                className="h-9 w-9 shrink-0 p-0 text-white/70 hover:bg-white/10 hover:text-white"
+              >
+                <X className="size-5" aria-hidden />
+              </Button>
+            </div>
+
+            <div className="relative w-full shrink-0 overflow-hidden rounded-xl border border-white/10 bg-black">
+              {projectFocusVideoUrl ? (
+                <video
+                  key={projectFocusVideoUrl}
+                  src={projectFocusVideoUrl}
+                  controls
+                  playsInline
+                  className="mx-auto max-h-[min(52vh,560px)] w-full bg-black object-contain"
+                />
+              ) : selectedHistoryOrJob.kind === "job" ? (
+                <div className="flex min-h-[200px] flex-col items-center justify-center gap-3 px-4 py-10">
+                  {selectedHistoryOrJob.job.phase === "failed" ? (
+                    <p className="max-w-md text-center text-sm text-rose-200/90">
+                      {selectedHistoryOrJob.job.error ?? "Something went wrong."}
+                    </p>
+                  ) : (
+                    <>
+                      <Loader2 className="size-10 shrink-0 animate-spin text-violet-300" aria-hidden />
+                      <p className="text-center text-sm text-white/55">
+                        {selectedHistoryOrJob.job.phase === "submitting" ? "Submitting…" : "Rendering video…"}
+                      </p>
+                      {(selectedHistoryOrJob.job.thumbUrl ?? selectedHistoryOrJob.job.previewStillUrl) ? (
+                        // eslint-disable-next-line @next/next/no-img-element
+                        <img
+                          src={(selectedHistoryOrJob.job.thumbUrl ?? selectedHistoryOrJob.job.previewStillUrl)!}
+                          alt=""
+                          className="mt-1 h-28 w-auto max-w-[120px] rounded-lg object-cover opacity-90"
+                        />
+                      ) : null}
+                    </>
+                  )}
+                </div>
+              ) : (
+                <div className="flex min-h-[120px] items-center justify-center px-4 py-8 text-sm text-white/50">
+                  No video for this project yet.
+                </div>
+              )}
+            </div>
+
+            {renderAdsGradientComposerCard()}
           </div>
         </div>
+      ) : null}
     </div>
   );
 }

@@ -391,22 +391,43 @@ export async function piapiGetTask(taskId: string, overrideApiKey?: string): Pro
   return json.data;
 }
 
+function piapiStatusNorm(statusRaw: unknown): string {
+  return String(statusRaw ?? "")
+    .toLowerCase()
+    .trim();
+}
+
+/** PiAPI terminal-ish success labels (vary by task_type / API version). */
+function piapiStatusIsSuccessish(statusRaw: unknown): boolean {
+  const s = piapiStatusNorm(statusRaw);
+  return s === "success" || s === "completed" || s === "complete" || s === "succeeded" || s === "done";
+}
+
+function piapiStatusIsFailedish(statusRaw: unknown): boolean {
+  const s = piapiStatusNorm(statusRaw);
+  return s === "failed" || s === "fail" || s === "error" || s === "cancelled" || s === "canceled";
+}
+
 export function piapiTaskStatusToLegacy(
   task: PiapiSeedanceTask,
 ): { status: "SUCCESS" | "FAILED" | "IN_PROGRESS"; response: string[]; error_message: string | null } {
-  const st = String(task.status ?? "").toLowerCase();
   let video = typeof task.output?.video === "string" ? task.output.video.trim() : "";
 
-  if ((st === "success" || st === "completed") && !video) {
+  if (piapiStatusIsSuccessish(task.status) && !video) {
     const walked = walkJsonForHttpsUrls({ output: task.output, logs: task.logs });
     const pick = firstVideoLikeUrl(walked);
     if (pick) video = pick;
   }
+  if (!video && piapiStatusIsFailedish(task.status)) {
+    const walked = walkJsonForHttpsUrls({ output: task.output });
+    const pick = firstVideoLikeUrl(walked);
+    if (pick) video = pick;
+  }
 
-  if ((st === "success" || st === "completed") && video) {
+  if (video) {
     return { status: "SUCCESS", response: [video], error_message: null };
   }
-  if (st === "failed" || st === "fail") {
+  if (piapiStatusIsFailedish(task.status)) {
     const message = task.error?.message?.trim() || task.error?.raw_message?.trim() || "Video generation failed.";
     return { status: "FAILED", response: [], error_message: message };
   }
@@ -440,24 +461,34 @@ function firstVideoLikeUrl(urls: string[]): string | null {
 export function piapiGenericTaskStatusToLegacy(
   task: PiapiGenericTask,
 ): { status: "SUCCESS" | "FAILED" | "IN_PROGRESS"; response: string[]; error_message: string | null } {
-  const st = String(task.status ?? "").toLowerCase();
   const output = task.output ?? {};
+  const o = output as Record<string, unknown>;
   let video =
-    firstUrlFromUnknown((output as Record<string, unknown>).video) ??
-    firstUrlFromUnknown((output as Record<string, unknown>).video_url) ??
-    firstUrlFromUnknown((output as Record<string, unknown>).video_urls) ??
+    firstUrlFromUnknown(o.video) ??
+    firstUrlFromUnknown(o.video_url) ??
+    firstUrlFromUnknown(o.video_urls) ??
+    firstUrlFromUnknown(o.url) ??
+    firstUrlFromUnknown(o.result) ??
+    firstUrlFromUnknown(o.data) ??
     firstUrlFromUnknown(output);
 
-  if ((st === "success" || st === "completed") && !video) {
+  if (piapiStatusIsSuccessish(task.status) && !video) {
     const walked = walkJsonForHttpsUrls({ output, logs: task.logs });
     const pick = firstVideoLikeUrl(walked);
     if (pick) video = pick;
   }
+  // Sometimes PiAPI lists retry / transport lines in `logs` while `status` is still failed-ish briefly;
+  // if a playable URL exists under `output`, treat as success (same as completed + output.video).
+  if (!video && piapiStatusIsFailedish(task.status)) {
+    const walked = walkJsonForHttpsUrls({ output });
+    const pick = firstVideoLikeUrl(walked);
+    if (pick) video = pick;
+  }
 
-  if ((st === "success" || st === "completed") && video) {
+  if (video) {
     return { status: "SUCCESS", response: [video], error_message: null };
   }
-  if (st === "failed" || st === "fail") {
+  if (piapiStatusIsFailedish(task.status)) {
     const message = task.error?.message?.trim() || task.error?.raw_message?.trim() || "Video generation failed.";
     return { status: "FAILED", response: [], error_message: message };
   }

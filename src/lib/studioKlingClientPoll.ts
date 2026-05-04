@@ -121,7 +121,20 @@ export async function pollKlingVideo(
     if (st === "FAILED") {
       throw new Error(json.data?.error_message?.trim() || "Video generation failed.");
     }
-    const inFlight = new Set(["", "IN_PROGRESS", "PENDING", "PROCESSING", "QUEUED", "WAITING", "RUNNING"]);
+    const inFlight = new Set([
+      "",
+      "IN_PROGRESS",
+      "PENDING",
+      "PROCESSING",
+      "QUEUED",
+      "WAITING",
+      "RUNNING",
+      /** Rare provider / proxy variants — keep polling instead of failing the Studio job. */
+      "COMPLETED",
+      "COMPLETE",
+      "SUCCEEDED",
+      "DONE",
+    ]);
     if (st && !inFlight.has(st)) {
       throw new Error(
         json.data?.error_message?.trim() || `Video task stopped with status: ${json.data?.status ?? st}`,
