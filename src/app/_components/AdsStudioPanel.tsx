@@ -2133,8 +2133,11 @@ export default function AdsStudioPanel() {
             <div className="col-span-full rounded-xl border border-white/10 bg-black/20 px-4 py-3 text-sm text-white/50">
               {adsTemplateGalleryKind === "app" ? (
                 <>
-                  No app template videos yet. Add <code className="text-white/65">.mp4</code> files under{" "}
-                  <code className="text-white/65">/public/studio/template-app</code>.
+                  No app template videos yet. Add <code className="text-white/65">.mp4</code> (or{" "}
+                  <code className="text-white/65">.webm</code> / <code className="text-white/65">.mov</code>) under{" "}
+                  <code className="text-white/65">/public/studio/template-app</code> or new previews under{" "}
+                  <code className="text-white/65">/public/studio/app-template-preview</code> — both folders are listed
+                  together (same idea as product templates in <code className="text-white/65">/template</code>).
                 </>
               ) : (
                 <>

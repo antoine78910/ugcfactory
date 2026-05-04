@@ -2,13 +2,18 @@ import { readdir } from "node:fs/promises";
 import path from "node:path";
 import type { StudioTemplateVideoItem } from "@/lib/studioTemplateVideosTypes";
 
-/** Product ads vs app-style templates — maps to `public/studio/template` and `public/studio/template-app`. */
+/**
+ * Product ads vs app-style templates.
+ * - Product: `public/studio/template`
+ * - App: `public/studio/template-app` plus optional `public/studio/app-template-preview` (new app previews)
+ */
 export type StudioTemplateVideoListKind = "product" | "app";
 
-const TEMPLATE_PUBLIC_SUBDIR: Record<StudioTemplateVideoListKind, string> = {
-  product: "template",
-  app: "template-app",
-};
+const PRODUCT_TEMPLATE_SUBDIR = "template";
+/** Primary app template videos. */
+const APP_TEMPLATE_SUBDIR = "template-app";
+/** Extra folder for new app template preview videos (same URL rules as product `template/`). */
+const APP_TEMPLATE_PREVIEW_SUBDIR = "app-template-preview";
 
 function toLabel(filename: string): string {
   const base = filename.replace(/\.[^.]+$/, "");
@@ -16,11 +21,7 @@ function toLabel(filename: string): string {
   return base;
 }
 
-/** Lists template videos under `public/studio/<subdir>/` (server-only). */
-export async function listStudioTemplateVideosFromDisk(
-  kind: StudioTemplateVideoListKind = "product",
-): Promise<StudioTemplateVideoItem[]> {
-  const subdir = TEMPLATE_PUBLIC_SUBDIR[kind] ?? TEMPLATE_PUBLIC_SUBDIR.product;
+async function listTemplateVideosInPublicStudioSubdir(subdir: string): Promise<StudioTemplateVideoItem[]> {
   try {
     const dir = path.join(process.cwd(), "public", "studio", subdir);
     const entries = await readdir(dir, { withFileTypes: true });
@@ -36,4 +37,28 @@ export async function listStudioTemplateVideosFromDisk(
   } catch {
     return [];
   }
+}
+
+function mergeTemplateItemsByFilename(layers: StudioTemplateVideoItem[][]): StudioTemplateVideoItem[] {
+  const byFilename = new Map<string, StudioTemplateVideoItem>();
+  for (const layer of layers) {
+    for (const item of layer) {
+      byFilename.set(item.filename, item);
+    }
+  }
+  return [...byFilename.values()].sort((a, b) =>
+    a.filename.localeCompare(b.filename, undefined, { numeric: true, sensitivity: "base" }),
+  );
+}
+
+/** Lists template preview videos for Ads Studio (server-only). */
+export async function listStudioTemplateVideosFromDisk(
+  kind: StudioTemplateVideoListKind = "product",
+): Promise<StudioTemplateVideoItem[]> {
+  if (kind === "product") {
+    return listTemplateVideosInPublicStudioSubdir(PRODUCT_TEMPLATE_SUBDIR);
+  }
+  const appMain = await listTemplateVideosInPublicStudioSubdir(APP_TEMPLATE_SUBDIR);
+  const appPreview = await listTemplateVideosInPublicStudioSubdir(APP_TEMPLATE_PREVIEW_SUBDIR);
+  return mergeTemplateItemsByFilename([appMain, appPreview]);
 }
