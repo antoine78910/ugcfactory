@@ -199,13 +199,12 @@ export default function ElementMentionTextarea({
   textareaClassName,
 }: Props) {
   const textareaRef = useRef<HTMLTextAreaElement | null>(null);
+  const mirrorContentRef = useRef<HTMLDivElement | null>(null);
   const [open, setOpen] = useState(false);
   const [activeIdx, setActiveIdx] = useState(0);
   const [mentionTabId, setMentionTabId] = useState("");
   const [token, setToken] = useState("");
   const [tokenStart, setTokenStart] = useState<number | null>(null);
-  const [overlayScrollTop, setOverlayScrollTop] = useState(0);
-  const [overlayScrollLeft, setOverlayScrollLeft] = useState(0);
   const [scrollbarReserveX, setScrollbarReserveX] = useState(0);
 
   const measureScrollbarReserve = useCallback(() => {
@@ -214,20 +213,35 @@ export default function ElementMentionTextarea({
     setScrollbarReserveX(verticalScrollbarReserveX(el));
   }, []);
 
+  /** Keep highlight mirror in lockstep with the textarea scroll (avoid React state lag on scroll). */
+  const syncMirrorScrollFromTextarea = useCallback((el: HTMLTextAreaElement) => {
+    const node = mirrorContentRef.current;
+    if (!node) return;
+    node.style.transform = `translate(${-el.scrollLeft}px, ${-el.scrollTop}px)`;
+  }, []);
+
   useLayoutEffect(() => {
+    const el = textareaRef.current;
+    if (el) syncMirrorScrollFromTextarea(el);
     measureScrollbarReserve();
     /** One extra frame: layout after long programmatic paste (e.g. Recreate) so mirror width matches textarea. */
-    const id = window.requestAnimationFrame(() => measureScrollbarReserve());
+    const id = window.requestAnimationFrame(() => {
+      measureScrollbarReserve();
+      if (textareaRef.current) syncMirrorScrollFromTextarea(textareaRef.current);
+    });
     return () => window.cancelAnimationFrame(id);
-  }, [measureScrollbarReserve, value]);
+  }, [measureScrollbarReserve, syncMirrorScrollFromTextarea, value]);
 
   useLayoutEffect(() => {
     const el = textareaRef.current;
     if (!el) return;
-    const ro = new ResizeObserver(() => measureScrollbarReserve());
+    const ro = new ResizeObserver(() => {
+      measureScrollbarReserve();
+      syncMirrorScrollFromTextarea(el);
+    });
     ro.observe(el);
     return () => ro.disconnect();
-  }, [measureScrollbarReserve]);
+  }, [measureScrollbarReserve, syncMirrorScrollFromTextarea]);
 
   const filtered = useMemo(() => {
     const items = elements.filter((e) => e.name.trim().length > 0);
@@ -491,9 +505,12 @@ export default function ElementMentionTextarea({
           spellCheck={false}
           onScroll={(e) => {
             const t = e.currentTarget;
-            setOverlayScrollTop(t.scrollTop);
-            setOverlayScrollLeft(t.scrollLeft);
+            syncMirrorScrollFromTextarea(t);
             measureScrollbarReserve();
+            window.requestAnimationFrame(() => {
+              measureScrollbarReserve();
+              syncMirrorScrollFromTextarea(textareaRef.current ?? t);
+            });
           }}
           onBlur={() => {
             /** Delay so a click inside the dropdown can land before we close. */
@@ -505,8 +522,7 @@ export default function ElementMentionTextarea({
             if (!canScroll) return;
             e.preventDefault();
             el.scrollTop += e.deltaY;
-            setOverlayScrollTop(el.scrollTop);
-            setOverlayScrollLeft(el.scrollLeft);
+            syncMirrorScrollFromTextarea(el);
             measureScrollbarReserve();
             e.stopPropagation();
           }}
@@ -517,7 +533,8 @@ export default function ElementMentionTextarea({
             TEXTAREA_COPY_LAYOUT,
             copySyncClassName,
             // Match the overlay wrapping rules exactly so clicks/caret map to the same visual line/column.
-            "relative z-10 box-border block min-h-16 min-w-0 w-full resize-none overflow-y-auto whitespace-pre-wrap break-words bg-transparent shadow-none outline-none ring-0",
+            // Stable scrollbar gutter avoids width jump when the vertical bar appears (keeps wrap + caret aligned).
+            "relative z-10 box-border block min-h-16 min-w-0 w-full resize-none overflow-y-auto whitespace-pre-wrap break-words bg-transparent shadow-none outline-none ring-0 [scrollbar-gutter:stable]",
             minimalScrollbar ? "studio-minimal-scrollbar" : "studio-params-scroll",
             "border-0 placeholder:text-muted-foreground focus-visible:border-transparent focus-visible:ring-0 aria-invalid:border-transparent aria-invalid:ring-destructive/20 dark:bg-transparent dark:aria-invalid:ring-destructive/40",
             "disabled:cursor-not-allowed disabled:opacity-50",
@@ -534,15 +551,13 @@ export default function ElementMentionTextarea({
             className="pointer-events-none absolute inset-0 z-0 overflow-hidden rounded-[inherit]"
           >
             <div
+              ref={mirrorContentRef}
               className={cn(
                 TEXTAREA_COPY_LAYOUT,
                 copySyncClassName,
                 "w-full whitespace-pre-wrap break-words text-white",
               )}
-              style={{
-                transform: `translate(${-overlayScrollLeft}px, ${-overlayScrollTop}px)`,
-                paddingRight: scrollbarReserveX,
-              }}
+              style={{ paddingRight: scrollbarReserveX }}
             >
               {renderedOverlay}
             </div>
