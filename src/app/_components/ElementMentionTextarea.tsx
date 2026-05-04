@@ -516,7 +516,8 @@ export default function ElementMentionTextarea({
           className={cn(
             TEXTAREA_COPY_LAYOUT,
             copySyncClassName,
-            "relative z-10 box-border block min-h-16 min-w-0 w-full resize-none overflow-y-auto bg-transparent shadow-none outline-none ring-0",
+            // Match the overlay wrapping rules exactly so clicks/caret map to the same visual line/column.
+            "relative z-10 box-border block min-h-16 min-w-0 w-full resize-none overflow-y-auto whitespace-pre-wrap break-words bg-transparent shadow-none outline-none ring-0",
             minimalScrollbar ? "studio-minimal-scrollbar" : "studio-params-scroll",
             "border-0 placeholder:text-muted-foreground focus-visible:border-transparent focus-visible:ring-0 aria-invalid:border-transparent aria-invalid:ring-destructive/20 dark:bg-transparent dark:aria-invalid:ring-destructive/40",
             "disabled:cursor-not-allowed disabled:opacity-50",
