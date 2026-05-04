@@ -484,10 +484,22 @@ async function uploadTemplateRefsFromPreviewVideo(videoUrl: string): Promise<{ p
   return { productUrl, avatarUrl };
 }
 
+/**
+ * Disk template titles like `UGC (Try On) (3).mp4` → label `UGC (Try On) (3)` → normalized
+ * `ugc (try on) (3)` — does not contain the substring `try on 3`, so matchers must read this suffix.
+ */
+function ugcTryOnDiskVariantNumber(normalizedLabel: string): number | null {
+  const m = normalizedLabel.match(/\((?:try\s*[-]?\s*on|tryon)\)\s*\((\d+)\)/);
+  if (!m) return null;
+  const num = Number.parseInt(m[1], 10);
+  return Number.isFinite(num) && num >= 1 && num <= 99 ? num : null;
+}
+
 /** Matches promptForTemplateLabel “try on 2” templates (e.g. UGC Virtual Try On 2). */
 function isVirtualTryOn2BundledRecreateLabel(normalizedLabel: string): boolean {
   const n = normalizedLabel;
   if (n.includes("tutorial")) return false;
+  if (ugcTryOnDiskVariantNumber(n) === 2) return true;
   return (
     n.includes("try on 2") ||
     n.includes("try-on 2") ||
@@ -500,6 +512,7 @@ function isVirtualTryOn2BundledRecreateLabel(normalizedLabel: string): boolean {
 function isTryOn3BundledRecreateLabel(normalizedLabel: string): boolean {
   const n = normalizedLabel;
   if (n.includes("tutorial")) return false;
+  if (ugcTryOnDiskVariantNumber(n) === 3) return true;
   return (
     n.includes("try on 3") ||
     n.includes("try-on 3") ||
@@ -512,6 +525,7 @@ function isTryOn3BundledRecreateLabel(normalizedLabel: string): boolean {
 function isTryOn4BundledRecreateLabel(normalizedLabel: string): boolean {
   const n = normalizedLabel;
   if (n.includes("tutorial")) return false;
+  if (ugcTryOnDiskVariantNumber(n) === 4) return true;
   return (
     n.includes("try on 4") ||
     n.includes("try-on 4") ||
@@ -524,6 +538,7 @@ function isTryOn4BundledRecreateLabel(normalizedLabel: string): boolean {
 function isTryOn5BundledRecreateLabel(normalizedLabel: string): boolean {
   const n = normalizedLabel;
   if (n.includes("tutorial")) return false;
+  if (ugcTryOnDiskVariantNumber(n) === 5) return true;
   return (
     n.includes("try on 5") ||
     n.includes("try-on 5") ||
@@ -536,6 +551,7 @@ function isTryOn5BundledRecreateLabel(normalizedLabel: string): boolean {
 function isTryOn6NoRefsBundledRecreateLabel(normalizedLabel: string): boolean {
   const n = normalizedLabel;
   if (n.includes("tutorial")) return false;
+  if (ugcTryOnDiskVariantNumber(n) === 6) return true;
   return (
     n.includes("try on 6") ||
     n.includes("try-on 6") ||
@@ -698,7 +714,9 @@ function promptForTemplateLabel(label: string): string {
   ) {
     return TEMPLATE_PROMPT_UNBOXING_2;
   }
+  const tryOnDiskN = ugcTryOnDiskVariantNumber(n);
   if (
+    tryOnDiskN === 6 ||
     n.includes("try on 6") ||
     n.includes("try-on 6") ||
     n.includes("tryon 6") ||
@@ -708,16 +726,40 @@ function promptForTemplateLabel(label: string): string {
   ) {
     return TEMPLATE_PROMPT_UGC_TRY_ON_6;
   }
-  if (n.includes("try on 3") || n.includes("try-on 3") || n.includes("tryon 3") || n.includes("tryon3")) {
+  if (
+    tryOnDiskN === 3 ||
+    n.includes("try on 3") ||
+    n.includes("try-on 3") ||
+    n.includes("tryon 3") ||
+    n.includes("tryon3")
+  ) {
     return TEMPLATE_PROMPT_UGC_TRY_ON_3;
   }
-  if (n.includes("try on 4") || n.includes("try-on 4") || n.includes("tryon 4") || n.includes("tryon4")) {
+  if (
+    tryOnDiskN === 4 ||
+    n.includes("try on 4") ||
+    n.includes("try-on 4") ||
+    n.includes("tryon 4") ||
+    n.includes("tryon4")
+  ) {
     return TEMPLATE_PROMPT_UGC_TRY_ON_4;
   }
-  if (n.includes("try on 5") || n.includes("try-on 5") || n.includes("tryon 5") || n.includes("tryon5")) {
+  if (
+    tryOnDiskN === 5 ||
+    n.includes("try on 5") ||
+    n.includes("try-on 5") ||
+    n.includes("tryon 5") ||
+    n.includes("tryon5")
+  ) {
     return TEMPLATE_PROMPT_UGC_TRY_ON_5;
   }
-  if (n.includes("try on 2") || n.includes("try-on 2") || n.includes("tryon 2") || n.includes("tryon2")) {
+  if (
+    tryOnDiskN === 2 ||
+    n.includes("try on 2") ||
+    n.includes("try-on 2") ||
+    n.includes("tryon 2") ||
+    n.includes("tryon2")
+  ) {
     return TEMPLATE_PROMPT_UGC_TRY_ON_2;
   }
   if (n.includes("ugc 6") || n.includes("ugc6")) return TEMPLATE_PROMPT_UGC_6;
