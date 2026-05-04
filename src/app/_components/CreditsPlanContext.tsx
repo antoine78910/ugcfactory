@@ -14,7 +14,7 @@ import {
   upToEstimateAiImagesFromCredits,
   upToEstimateAiVideosFromCredits,
 } from "@/lib/billing/creditUsageEstimates";
-import { CREDIT_PACKS, STRIPE_ONE_DOLLAR_TRIAL_CREDIT_GRANT, SUBSCRIPTIONS } from "@/lib/pricing";
+import { CREDIT_PACKS, SUBSCRIPTIONS } from "@/lib/pricing";
 import {
   CREDIT_PACK_KEYS,
   type CreditPackKey,
@@ -26,7 +26,6 @@ import {
 } from "@/lib/stripe/subscriptionPrices";
 import { useSupabaseBrowserClient } from "@/lib/supabase/BrowserSupabaseProvider";
 import { displayCreditsToLedgerTicks } from "@/lib/creditLedgerTicks";
-import { trackTrialPaid } from "@/lib/analytics/datafastGoals";
 
 // ---------------------------------------------------------------------------
 // localStorage keys, bare (no namespace).
@@ -36,7 +35,7 @@ const LS_CREDITS = "ugc_demo_credits";
 const LS_PLAN = "ugc_demo_plan";
 /** Bucket ceiling for the % bar when plan is Free (one-off packs). */
 const LS_CAP = "ugc_demo_credits_cap";
-/** Set while server reports `isTrial` so balance events keep trial ceiling (see STRIPE_ONE_DOLLAR_TRIAL_CREDIT_GRANT). */
+// $1 trial removed: keep the key only to clean up old localStorage values.
 const LS_TRIAL_ACTIVE = "ugc_trial_active";
 /** userId that owns the current credits/plan data. */
 const LS_OWNER = "ugc_demo_owner";
@@ -247,13 +246,9 @@ function readState(currentUserId?: string | null): CreditsState {
     return { planId, current, total };
   }
 
-  const trialActive = lsGet(LS_TRIAL_ACTIVE) === "1";
   const capRaw = Number(lsGet(LS_CAP));
   const cap = Number.isFinite(capRaw) && capRaw >= 0 ? capRaw : 0;
   let total = cap > 0 ? cap : current;
-  if (trialActive) {
-    total = STRIPE_ONE_DOLLAR_TRIAL_CREDIT_GRANT;
-  }
   return { planId: "free", current, total };
 }
 
@@ -274,10 +269,7 @@ type CreditsPlanContextValue = CreditsState & {
   percentRemaining: number;
   /** True when the server confirmed this account has unlimited access (no credit deduction). */
   isUnlimited: boolean;
-  /**
-   * True when the user is on the $1 trial (15 credits, Link to Ad access only).
-   * Other features are visible but their generate button is locked.
-   */
+  /** $1 trial removed (always false). */
   isTrial: boolean;
   /**
    * When false, studio tool routes redirect to onboarding paywall until the user has
@@ -476,7 +468,7 @@ export function CreditsPlanProvider({
         setStudioAccessAllowed(
           typeof data.studioAccessAllowed === "boolean" ? data.studioAccessAllowed : true,
         );
-        setIsTrial(data.isTrial === true);
+        setIsTrial(false);
 
         const confirmedUid = data.userId ?? null;
         const serverPlan = parseAccountPlan(data.planId);
@@ -501,11 +493,7 @@ export function CreditsPlanProvider({
           // not have fired yet, keep the plan written by consumeCheckoutQueryParams.
           if (isCheckoutGracePeriodActive()) return;
 
-          if (data.isTrial === true) {
-            lsSet(LS_TRIAL_ACTIVE, "1");
-          } else {
-            lsRemove(LS_TRIAL_ACTIVE);
-          }
+          lsRemove(LS_TRIAL_ACTIVE);
 
           // Server is authoritative: apply free plan with ledger balance.
           const localPlan = parseAccountPlan(lsGet(LS_PLAN));
@@ -513,14 +501,7 @@ export function CreditsPlanProvider({
             lsSet(LS_PLAN, "free");
             const bal = serverBalance ?? 0;
             lsSet(LS_CREDITS, String(bal));
-            lsSet(
-              LS_CAP,
-              data.isTrial === true
-                ? String(STRIPE_ONE_DOLLAR_TRIAL_CREDIT_GRANT)
-                : String(bal),
-            );
-          } else if (data.isTrial === true) {
-            lsSet(LS_CAP, String(STRIPE_ONE_DOLLAR_TRIAL_CREDIT_GRANT));
+            lsSet(LS_CAP, String(bal));
           }
           setState(readState(confirmedUid));
           return;
@@ -550,14 +531,7 @@ export function CreditsPlanProvider({
   useEffect(() => {
     if (typeof window !== "undefined" && activeUserId) {
       const sp = new URLSearchParams(window.location.search);
-      if (sp.get("checkout") === "trial_success") {
-        lsSet(LS_CHECKOUT_TS, String(Date.now()));
-        /** Fire DataFast funnel goal: 1$ vs 1€ paid (currency comes from the success_url). */
-        trackTrialPaid(sp.get("currency"));
-        const path = window.location.pathname;
-        const clean = path.includes("?") ? path.split("?")[0]! : path;
-        window.history.replaceState({}, "", clean || "/");
-      }
+      // $1 trial removed; keep `checkout_ts` in place for subscription grace period only.
     }
     fetchAndApplyServerSubscription();
   }, [activeUserId, fetchAndApplyServerSubscription]);
@@ -586,11 +560,7 @@ export function CreditsPlanProvider({
       const prev = readState(activeUserId);
       lsSet(LS_CREDITS, String(balance));
       if (prev.planId === "free") {
-        if (lsGet(LS_TRIAL_ACTIVE) === "1") {
-          lsSet(LS_CAP, String(STRIPE_ONE_DOLLAR_TRIAL_CREDIT_GRANT));
-        } else {
-          lsSet(LS_CAP, String(balance));
-        }
+        lsSet(LS_CAP, String(balance));
       }
       if (activeUserId) lsSet(LS_OWNER, activeUserId);
       setState(readState(activeUserId));

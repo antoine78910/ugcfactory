@@ -76,7 +76,6 @@ import {
   isPlatformCreditBypassActive,
 } from "@/app/_components/CreditsPlanContext";
 import { StudioBillingDialog } from "@/app/_components/StudioBillingDialog";
-import { LtaTrialVideoUpgradeDialog } from "@/app/_components/LtaTrialVideoUpgradeDialog";
 import { LinkToAdUniverseStepper } from "@/app/_components/LinkToAdUniverseStepper";
 import { LINK_TO_AD_APP_OPTION_AVAILABLE, LinkToAdAssetTypeSwitch } from "@/app/_components/LinkToAdAssetTypeSwitch";
 import { LinkToAdProductSetupDialog } from "@/app/_components/LinkToAdProductSetupDialog";
@@ -112,9 +111,6 @@ import {
   CREDITS_LINK_TO_AD_THREE_REF_IMAGES,
   LINK_TO_AD_DEFAULT_VIDEO_MODEL,
   LINK_TO_AD_DEFAULT_VIDEO_DURATION_SEC,
-  LINK_TO_AD_TRIAL_FINAL_VIDEO,
-  LINK_TO_AD_TRIAL_INITIAL_GENERATE,
-  LINK_TO_AD_TRIAL_THREE_IMAGES,
   linkToAdSeedanceMarketModel,
   type LinkToAdSeedanceSpeed,
 } from "@/lib/linkToAd/generationCredits";
@@ -1308,14 +1304,8 @@ export default function LinkToAdUniverse({
   onSwitchLinkToAdRun,
 }: LinkToAdUniverseProps) {
   const reduceMotion = useReducedMotion();
-  const { planId, current: creditsBalance, spendCredits, grantCredits, isTrial, isUnlimited } = useCreditsPlan();
-  /**
-   * $1 trial window only: discounted Link to Ad steps.
-   * Never apply trial pricing to normal Free/Paid plans.
-   */
-  const linkToAdTrialEconomy = Boolean(
-    isTrial && planId === "free" && !isUnlimited && !isPlatformCreditBypassActive(),
-  );
+  const { planId, current: creditsBalance, spendCredits, grantCredits, isUnlimited } = useCreditsPlan();
+  const linkToAdTrialEconomy = false;
   const supabaseClient = useSupabaseBrowserClient();
 
   const [_userEmail, _setUserEmail] = useState<string | null>(null);
@@ -1338,7 +1328,7 @@ export default function LinkToAdUniverse({
    * - Regenerate actions keep showing pills (trial + non-trial).
    * - Demo-only hidden toggle can still force-hide for recordings.
    */
-  const hideStepCredits = !isTrial || manualHideCredits;
+  const hideStepCredits = manualHideCredits;
   const hideInitialGenerateCredits = manualHideCredits;
   const hideRegenerateCredits = manualHideCredits;
   // Backward-compatible alias used by older render closures during HMR.
@@ -1366,15 +1356,14 @@ export default function LinkToAdUniverse({
   const [ltaCreditModal, setLtaCreditModal] = useState<{
     required: number;
     current: number;
-    /** Trial final video: show all subscription tiers in one sheet instead of {@link StudioBillingDialog}. */
-    presentation?: "studio_billing" | "trial_plans_sheet";
+    presentation?: "studio_billing";
   } | null>(null);
   /** Amount debited on "Generate" from URL (trial vs full pipeline); used for refunds on failure. */
   const lastLtaUrlGenerateChargeRef = useRef(0);
 
   /** Read-only balance gate (opens billing modal). Use immediately before any paid LTA step. */
   const hasLtaCreditsFor = useCallback(
-    (cost: number, opts?: { presentation?: "studio_billing" | "trial_plans_sheet" }): boolean => {
+    (cost: number, opts?: { presentation?: "studio_billing" }): boolean => {
       if (isPlatformCreditBypassActive()) return true;
       const k = Math.max(0, Math.floor(cost));
       if (k <= 0) return true;
@@ -1393,7 +1382,7 @@ export default function LinkToAdUniverse({
 
   /** Deduct from wallet once on URL Generate; keep ref/frozen in sync with that charge. */
   const spendLtaCreditsIfEnough = useCallback(
-    (cost: number, opts?: { presentation?: "studio_billing" | "trial_plans_sheet" }): boolean => {
+    (cost: number, opts?: { presentation?: "studio_billing" }): boolean => {
       if (!hasLtaCreditsFor(cost, opts)) return false;
       if (isPlatformCreditBypassActive()) return true;
       const k = Math.max(0, Math.floor(cost));
@@ -3719,11 +3708,9 @@ export default function LinkToAdUniverse({
       }
       hydrateFromRun(getJson.data, { silent: true, preserveVideoDuration: true, preserveScriptLanguage: true });
       setStage("ready");
-      if (isTrial) {
-        trackDatafastGoal(DATAFAST_GOALS.lta_angles_generated, {
-          source: "continue_scripts",
-        });
-      }
+      trackDatafastGoal(DATAFAST_GOALS.lta_angles_generated, {
+        source: "continue_scripts",
+      });
       toast.success("3 UGC scripts ready");
       onRunsChanged?.();
     } catch (err) {
@@ -3898,12 +3885,10 @@ export default function LinkToAdUniverse({
       toast.error("Missing URL");
       return;
     }
-    if (isTrial) {
-      trackDatafastGoal(DATAFAST_GOALS.lta_url_submitted, {
-        bypass_saved: opts?.bypassSavedProject ? "1" : "0",
-        generation_mode: generationMode,
-      });
-    }
+    trackDatafastGoal(DATAFAST_GOALS.lta_url_submitted, {
+      bypass_saved: opts?.bypassSavedProject ? "1" : "0",
+      generation_mode: generationMode,
+    });
     setShowUrlFlowProgressOverlay(false);
     const epochAtStart = linkToAdFlowEpochRef.current;
     const runningToken = `${Date.now()}-${Math.random().toString(36).slice(2, 10)}`;
@@ -4123,12 +4108,10 @@ export default function LinkToAdUniverse({
         });
       }
       if (pipeResult.scriptsStepOk) {
-        if (isTrial) {
-          trackDatafastGoal(DATAFAST_GOALS.lta_angles_generated, {
-            source: "initial_pipeline",
-            generation_mode: generationMode,
-          });
-        }
+        trackDatafastGoal(DATAFAST_GOALS.lta_angles_generated, {
+          source: "initial_pipeline",
+          generation_mode: generationMode,
+        });
         toast.success("3 UGC scripts ready");
       } else if (pipeResult.scriptsError) {
         toast.warning("Scripts step failed", { description: pipeResult.scriptsError });
@@ -4821,8 +4804,6 @@ export default function LinkToAdUniverse({
     }
     const force = Boolean(opts?.forceRegenerateCharge);
     const hasExisting = nanoBananaImageUrls.some((u) => typeof u === "string" && u.trim().length > 0);
-    // Non-trial: first 3-image batch is covered by the URL “full pipeline” charge, so only regen / force bills here.
-    // Trial: initial URL charge is scan+scripts only (LINK_TO_AD_TRIAL_INITIAL_GENERATE), so the first batch must debit.
     const shouldCharge =
       (linkToAdTrialEconomy || force || hasExisting) && !ltaPrepaidThreeImagesRegen;
     const usingPrepaid = ltaPrepaidThreeImagesRegen && !shouldCharge;
@@ -5087,7 +5068,7 @@ export default function LinkToAdUniverse({
       setIsNanoAllImagesSubmitting(false);
 
       const readyCount = urlsByPrompt.filter((u) => typeof u === "string" && u.trim().length > 0).length;
-      if (readyCount > 0 && isTrial) {
+      if (readyCount > 0) {
         trackDatafastGoal(DATAFAST_GOALS.lta_image_generated, {
           ready_count: String(readyCount),
           partial: readyCount < 3 ? "1" : "0",
@@ -5488,10 +5469,10 @@ export default function LinkToAdUniverse({
     }
 
     /** Only count the first user-initiated click, not the auto-chained part 2 of the 30s flow. */
-    if (!chainPart2Prompt && isTrial) {
+    if (!chainPart2Prompt) {
       trackDatafastGoal(DATAFAST_GOALS.lta_video_generate_clicked, {
         duration: String(videoDuration),
-        is_trial: linkToAdTrialEconomy ? "1" : "0",
+        is_trial: "0",
         plan_id: planId,
       });
     }
@@ -5535,20 +5516,15 @@ export default function LinkToAdUniverse({
     }
 
     // Billing rules:
-    // - Trial (`linkToAdTrialEconomy`): keep existing flat charge per call
-    //   (`LINK_TO_AD_TRIAL_FINAL_VIDEO`) — preserves prior behavior for trial users.
-    // - Non-trial initial generation: 0 (already covered by the URL bundle paid in
-    //   `ltaInitialGenerateCharge`).
-    // - Non-trial regenerate: bill the Seedance Preview Fast tariff for the current
+    // - Initial generation: 0 (already covered by the URL bundle paid in `ltaInitialGenerateCharge`).
+    // - Regenerate: bill the Seedance Preview Fast tariff for the current
     //   duration and VIP/Normal selection, so re-renders are not free.
     // - Part 2 of the 30s flow (auto-chained after Part 1): never re-charge — it is a
     //   continuation of the same already-billed job.
     const isPart2Chain = Boolean(chainPart2Prompt);
     const isRegenerate = Boolean(opts?.forceRegenerateCharge);
     let videoSpend = 0;
-    if (linkToAdTrialEconomy) {
-      videoSpend = ltaKlingVideoCharge;
-    } else if (isRegenerate && !isPart2Chain) {
+    if (isRegenerate && !isPart2Chain) {
       videoSpend = creditsLinkToAdFullPipeline(
         LINK_TO_AD_DEFAULT_VIDEO_MODEL,
         videoDuration,
@@ -5561,7 +5537,7 @@ export default function LinkToAdUniverse({
       if (
         !spendLtaCreditsIfEnough(
           videoSpend,
-          linkToAdTrialEconomy ? { presentation: "trial_plans_sheet" } : undefined,
+          undefined,
         )
       ) {
         setLtaFrozenCredits(null);
@@ -5576,7 +5552,7 @@ export default function LinkToAdUniverse({
       klingAbortRef.current?.abort();
       const controller = new AbortController();
       klingAbortRef.current = controller;
-      const effectiveSeedanceTier: LinkToAdSeedanceSpeed = linkToAdTrialEconomy ? "normal" : ltaSeedanceSpeed;
+      const effectiveSeedanceTier: LinkToAdSeedanceSpeed = ltaSeedanceSpeed;
       const generatePayload = {
         linkToAd: true,
         accountPlan: planId,
@@ -6122,25 +6098,16 @@ export default function LinkToAdUniverse({
     [videoDuration, ltaSeedanceSpeed],
   );
   const ltaInitialGenerateCharge = useMemo(
-    () => (linkToAdTrialEconomy ? LINK_TO_AD_TRIAL_INITIAL_GENERATE : ltaGenerateCredits),
-    [linkToAdTrialEconomy, ltaGenerateCredits],
+    () => ltaGenerateCredits,
+    [ltaGenerateCredits],
   );
   const ltaThreeImagesCharge = useMemo(
-    () => (linkToAdTrialEconomy ? LINK_TO_AD_TRIAL_THREE_IMAGES : CREDITS_LINK_TO_AD_THREE_REF_IMAGES),
-    [linkToAdTrialEconomy],
+    () => CREDITS_LINK_TO_AD_THREE_REF_IMAGES,
+    [],
   );
-  const ltaKlingVideoCharge = useMemo(
-    () => (linkToAdTrialEconomy ? LINK_TO_AD_TRIAL_FINAL_VIDEO : 0),
-    [linkToAdTrialEconomy],
-  );
-  /**
-   * Initial "Generate video from selected image" pill: trial pays the flat trial fee,
-   * non-trial sees 0 (the first render is bundled with the URL pipeline charge).
-   */
-  const ltaVideoConfirmCreditsDisplay = useMemo(
-    () => (linkToAdTrialEconomy ? LINK_TO_AD_TRIAL_FINAL_VIDEO : 0),
-    [linkToAdTrialEconomy],
-  );
+  const ltaKlingVideoCharge = 0;
+  /** Initial "Generate video from selected image" pill: bundled with the URL pipeline charge. */
+  const ltaVideoConfirmCreditsDisplay = 0;
   /**
    * "Regenerate video" pill + spend: trial keeps the flat fee, non-trial pays the
    * dynamic Seedance Preview Fast price (VIP or Normal per `ltaSeedanceSpeed`,
@@ -6148,14 +6115,12 @@ export default function LinkToAdUniverse({
    */
   const ltaKlingVideoRegenCharge = useMemo(
     () =>
-      linkToAdTrialEconomy
-        ? LINK_TO_AD_TRIAL_FINAL_VIDEO
-        : creditsLinkToAdFullPipeline(
-            LINK_TO_AD_DEFAULT_VIDEO_MODEL,
-            videoDuration,
-            ltaSeedanceSpeed,
-          ),
-    [linkToAdTrialEconomy, videoDuration, ltaSeedanceSpeed],
+      creditsLinkToAdFullPipeline(
+        LINK_TO_AD_DEFAULT_VIDEO_MODEL,
+        videoDuration,
+        ltaSeedanceSpeed,
+      ),
+    [videoDuration, ltaSeedanceSpeed],
   );
   /** Video-prompt step has no direct credit charge (render charge happens on video generation). */
   const ltaVideoPromptFromImageCreditsDisplay = useMemo(
@@ -9562,30 +9527,19 @@ export default function LinkToAdUniverse({
     ) : null}
 
     {ltaCreditModal ? (
-      ltaCreditModal.presentation === "trial_plans_sheet" ? (
-        <LtaTrialVideoUpgradeDialog
-          open
-          onOpenChange={(open) => {
-            if (!open) setLtaCreditModal(null);
-          }}
-          currentCredits={ltaCreditModal.current}
-          requiredCredits={ltaCreditModal.required}
-        />
-      ) : (
-        <StudioBillingDialog
-          open
-          onOpenChange={(open) => {
-            if (!open) setLtaCreditModal(null);
-          }}
-          planId={planId}
-          studioMode="video"
-          variant={{
-            kind: "credits",
-            currentCredits: ltaCreditModal.current,
-            requiredCredits: ltaCreditModal.required,
-          }}
-        />
-      )
+      <StudioBillingDialog
+        open
+        onOpenChange={(open) => {
+          if (!open) setLtaCreditModal(null);
+        }}
+        planId={planId}
+        studioMode="video"
+        variant={{
+          kind: "credits",
+          currentCredits: ltaCreditModal.current,
+          requiredCredits: ltaCreditModal.required,
+        }}
+      />
     ) : null}
     {resetLinkToAdConfirmOpen ? (
       <div className="fixed inset-0 z-[10050] flex items-center justify-center bg-black/75 p-4">
