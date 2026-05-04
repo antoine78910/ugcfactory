@@ -6,11 +6,9 @@ import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import { Loader2 } from "lucide-react";
 import { Input } from "@/components/ui/input";
-import { useSupabaseBrowserClient } from "@/lib/supabase/BrowserSupabaseProvider";
 import { DATAFAST_GOALS, trackDatafastGoal } from "@/lib/analytics/datafastGoals";
 import { cn } from "@/lib/utils";
 import SetupClient from "@/app/setup/SetupClient";
-import { sectionToPath } from "@/lib/studioPaths";
 
 const OTHER_MAX_LEN = 160;
 
@@ -131,7 +129,6 @@ function OnboardingSteps({ phase }: { phase: "personalize" | "setup" }) {
 export default function OnboardingClient() {
   const router = useRouter();
   const searchParams = useSearchParams();
-  const supabase = useSupabaseBrowserClient();
   const isSetupStep = searchParams.get("step") === "setup";
 
   const [workType, setWorkType] = useState<WorkType | null>(null);
@@ -166,18 +163,6 @@ export default function OnboardingClient() {
       /* non-blocking */
     }
     router.push("/onboarding?step=setup");
-  }
-
-  async function handleLogout() {
-    try {
-      if (supabase) await supabase.auth.signOut();
-    } finally {
-      window.location.href = "/auth";
-    }
-  }
-
-  function handleStartForFree() {
-    window.location.href = sectionToPath("link_to_ad");
   }
 
   return (
@@ -347,16 +332,6 @@ export default function OnboardingClient() {
           </div>
             </>
           ) : null}
-
-          <div className="mt-10 flex justify-center">
-            <button
-              type="button"
-              onClick={handleStartForFree}
-              className="text-xs font-medium text-white/45 underline underline-offset-4 transition hover:text-white/75"
-            >
-              Start for Free
-            </button>
-          </div>
         </div>
       </main>
     </div>

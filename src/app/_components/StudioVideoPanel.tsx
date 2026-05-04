@@ -327,6 +327,30 @@ function minReferenceUrlsPerVideoElement(modelId: string): number {
   return modelId.startsWith("bytedance/seedance") ? 1 : 2;
 }
 
+/** When the working element draft meets save rules, returns sorted drafts after commit; otherwise null. */
+function tryBuildCommittedKlingElementDrafts(
+  drafts: KlingElementDraft[],
+  merged: KlingElementDraft,
+  modelId: string,
+): KlingElementDraft[] | null {
+  const name = merged.name.trim();
+  if (!name) return null;
+  const minUrls = minReferenceUrlsPerVideoElement(modelId);
+  if (merged.urls.length < minUrls || merged.urls.length > 4) return null;
+  if (modelId === "kling-3.0/video" && !merged.description.trim()) return null;
+  const id = merged.id;
+  const isEdit = drafts.some((d) => d.id === id);
+  if (!isEdit && drafts.length >= 3) return null;
+  const committed: KlingElementDraft = {
+    ...merged,
+    name,
+    description: merged.description.trim(),
+  };
+  return sortKlingElementDrafts(
+    isEdit ? drafts.map((d) => (d.id === id ? committed : d)) : [...drafts, committed],
+  );
+}
+
 function formatSecClock(sec: number): string {
   const s = Math.max(0, Math.floor(sec));
   const mm = Math.floor(s / 60);
@@ -949,6 +973,14 @@ export default function StudioVideoPanel({
   const [klingElementUploadBusy, setKlingElementUploadBusy] = useState(false);
   const klingElementFileRef = useRef<HTMLInputElement>(null);
   const klingElementUploadRowIdRef = useRef<string | null>(null);
+  const klingElementFormRef = useRef<KlingElementDraft | null>(null);
+  const klingElementDraftsRef = useRef<KlingElementDraft[]>([]);
+  useEffect(() => {
+    klingElementFormRef.current = klingElementForm;
+  }, [klingElementForm]);
+  useEffect(() => {
+    klingElementDraftsRef.current = klingElementDrafts;
+  }, [klingElementDrafts]);
   const ensureActiveElementFormId = useCallback((): string => {
     if (klingElementForm?.id) return klingElementForm.id;
     const id = crypto.randomUUID();
@@ -1898,6 +1930,51 @@ export default function StudioVideoPanel({
     }
   }, [klingElementForm, klingElementDrafts, modelId, setPrompt]);
 
+  const finalizeKlingElementFileUploadSuccess = useCallback(
+    (u: string, rowId: string, partialToast: "Image added" | "Media added") => {
+      const fallbackName = `element_${Math.min(klingElementDraftsRef.current.length + 1, 3)}`;
+      const prevForm = klingElementFormRef.current;
+      const base: KlingElementDraft =
+        prevForm && prevForm.id === rowId
+          ? prevForm
+          : { id: rowId, name: fallbackName, description: "", urls: [] };
+      const merged: KlingElementDraft = { ...base, urls: [...base.urls, u].slice(0, 4) };
+
+      setElementRefPick({ open: false });
+      elementRefPickCacheRef.current = null;
+
+      const draftsSnap = klingElementDraftsRef.current;
+      const committedList = tryBuildCommittedKlingElementDrafts(draftsSnap, merged, modelId);
+      if (committedList) {
+        const name = merged.name.trim();
+        setKlingElementDrafts(committedList);
+        const elementTag = `@${name}`;
+        setPrompt((prev) => {
+          if (promptUsesKlingElementTag(prev, name)) return prev;
+          const trimmed = prev.trimEnd();
+          return trimmed ? `${trimmed} ${elementTag}` : elementTag;
+        });
+        const wasEdit = draftsSnap.some((d) => d.id === merged.id);
+        toast.success(wasEdit ? "Element updated" : "Element saved");
+        if (committedList.length >= 3) {
+          setKlingElementsModalOpen(false);
+          setKlingElementForm(null);
+        } else {
+          setKlingElementForm({
+            id: crypto.randomUUID(),
+            name: `element_${committedList.length + 1}`,
+            description: "",
+            urls: [],
+          });
+        }
+      } else {
+        setKlingElementForm(merged);
+        toast.success(partialToast);
+      }
+    },
+    [modelId, setPrompt],
+  );
+
   const onKlingElementFileChange = useCallback(async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     const rowId = klingElementUploadRowIdRef.current;
@@ -1905,7 +1982,6 @@ export default function StudioVideoPanel({
     if (!file || !rowId) return;
 
     const seedanceProEl = studioVideoIsSeedance2ProPickerId(modelId);
-    const fallbackName = `element_${Math.min(klingElementDrafts.length + 1, 3)}`;
 
     if (!seedanceProEl) {
       if (file.size > KLING_ELEMENT_MEDIA_MAX_BYTES) {
@@ -1928,12 +2004,7 @@ export default function StudioVideoPanel({
       setKlingElementUploadBusy(true);
       try {
         const u = await uploadStudioMediaFile(file, "image");
-        setKlingElementForm((prev) => {
-          if (!prev) return { id: rowId, name: fallbackName, description: "", urls: [u] };
-          if (prev.id !== rowId || prev.urls.length >= 4) return prev;
-          return { ...prev, urls: [...prev.urls, u] };
-        });
-        toast.success("Image added");
+        finalizeKlingElementFileUploadSuccess(u, rowId, "Image added");
       } catch (err) {
         toast.error("Upload failed", {
           description: userMessageFromCaughtError(err, "Use JPEG, PNG, WebP, or GIF."),
@@ -1999,12 +2070,7 @@ export default function StudioVideoPanel({
     setKlingElementUploadBusy(true);
     try {
       const u = await uploadStudioMediaFile(file, kind);
-      setKlingElementForm((prev) => {
-        if (!prev) return { id: rowId, name: fallbackName, description: "", urls: [u] };
-        if (prev.id !== rowId || prev.urls.length >= 4) return prev;
-        return { ...prev, urls: [...prev.urls, u] };
-      });
-      toast.success("Media added");
+      finalizeKlingElementFileUploadSuccess(u, rowId, "Media added");
     } catch (err) {
       toast.error("Upload failed", {
         description: userMessageFromCaughtError(err, "Try again."),
@@ -2013,7 +2079,7 @@ export default function StudioVideoPanel({
       setKlingElementUploadBusy(false);
       klingElementUploadRowIdRef.current = null;
     }
-  }, [klingElementDrafts.length, modelId]);
+  }, [finalizeKlingElementFileUploadSuccess, modelId]);
 
   const seedanceOmniUsedDurationSec = useMemo(
     () =>

@@ -596,6 +596,7 @@ export default function ElementMentionTextarea({
               {showCreateElementButton && onCreateNew ? (
                 <button
                   type="button"
+                  onMouseDown={(e) => e.preventDefault()}
                   onClick={() => {
                     closeMenu();
                     onCreateNew();
