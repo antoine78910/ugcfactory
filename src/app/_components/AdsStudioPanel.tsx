@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import {
   LayoutList,
   Loader2,
@@ -32,6 +32,7 @@ import {
 import { studioSelectContentClass, studioSelectItemClass } from "@/app/_components/StudioModelPicker";
 import { SEEDANCE_PRO_PROMPT_MAX_CHARS, type PiapiSeedanceAspectRatio } from "@/lib/piapiSeedance";
 import { useCreditsPlan, getPersonalApiKey, getPersonalPiapiApiKey } from "@/app/_components/CreditsPlanContext";
+import { compressImageFileForUpload } from "@/lib/compressImageFileForUpload";
 import { uploadFileToCdn } from "@/lib/uploadBlobUrlToCdn";
 import { STUDIO_IMAGE_FILE_ACCEPT } from "@/lib/studioUploadValidation";
 import { cn } from "@/lib/utils";
@@ -217,6 +218,31 @@ type AdsStudioProjectDetail = { kind: "history"; id: string } | { kind: "job"; i
 
 const LS_ADS_STUDIO_HISTORY = "ugc_ads_studio_history_v1";
 const LS_ADS_STUDIO_ACTIVE_JOBS = "ugc_ads_studio_active_jobs_v1";
+/** Composer draft (prompt + refs + settings), same idea as `ugc_studio_video_create_draft_v1`. */
+const LS_ADS_STUDIO_COMPOSER_DRAFT_V1 = "ugc_ads_studio_composer_draft_v1";
+
+const ADS_STUDIO_RESOLUTION_SET = new Set<string>(ADS_STUDIO_SEEDANCE_RESOLUTIONS);
+
+function isHttpsOrHttpUrl(s: string): boolean {
+  const t = s.trim();
+  return /^https?:\/\//i.test(t);
+}
+
+function safeAdsStudioComposerDuration(raw: unknown): number {
+  const n = typeof raw === "number" ? raw : typeof raw === "string" ? Number(raw) : NaN;
+  if (!Number.isFinite(n)) return 15;
+  return Math.min(ADS_STUDIO_DURATION_MAX, Math.max(ADS_STUDIO_DURATION_MIN, Math.round(n)));
+}
+
+function safeAdsStudioOutputAspect(raw: unknown): AdsStudioOutputAspect {
+  const s = typeof raw === "string" ? raw.trim() : "";
+  return (ADS_STUDIO_SEEDANCE_ASPECTS as readonly string[]).includes(s) ? (s as AdsStudioOutputAspect) : "9:16";
+}
+
+function safeAdsStudioVideoResolution(raw: unknown): AdsStudioVideoResolution {
+  const s = typeof raw === "string" ? raw.trim() : "";
+  return ADS_STUDIO_RESOLUTION_SET.has(s) ? (s as AdsStudioVideoResolution) : "720p";
+}
 /** Drop persisted jobs older than this so stale rows do not poll forever */
 const ADS_STUDIO_MAX_ACTIVE_JOB_AGE_MS = 1000 * 60 * 60 * 24;
 
@@ -1240,6 +1266,60 @@ export default function AdsStudioPanel() {
   const adsStudioDismissedJobIdsRef = useRef(new Set<string>());
   const [activeJobsStorageReady, setActiveJobsStorageReady] = useState(false);
 
+  useLayoutEffect(() => {
+    if (typeof window === "undefined") return;
+    try {
+      const raw = localStorage.getItem(LS_ADS_STUDIO_COMPOSER_DRAFT_V1);
+      if (!raw) return;
+      const parsed = JSON.parse(raw) as Record<string, unknown>;
+      if (typeof parsed.prompt === "string") setPrompt(parsed.prompt);
+      if (typeof parsed.appRefUrl === "string") {
+        const t = parsed.appRefUrl.trim();
+        if (t === "" || isHttpsOrHttpUrl(t)) setAppRefUrl(t);
+      }
+      if (typeof parsed.avatarUrl === "string") {
+        const t = parsed.avatarUrl.trim();
+        if (t === "" || isHttpsOrHttpUrl(t)) setAvatarUrl(t);
+      }
+      setAssetType(parsed.assetType === "app" ? "app" : "product");
+      setVideoDurationSec(safeAdsStudioComposerDuration(parsed.videoDurationSec));
+      setOutputAspect(safeAdsStudioOutputAspect(parsed.outputAspect));
+      setVideoResolution(safeAdsStudioVideoResolution(parsed.videoResolution));
+      setAdsTemplateGalleryKind(parsed.adsTemplateGalleryKind === "app" ? "app" : "product");
+    } catch {
+      /* ignore malformed draft */
+    }
+  }, []);
+
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    const draft = {
+      v: 1 as const,
+      prompt,
+      appRefUrl,
+      avatarUrl,
+      assetType,
+      videoDurationSec,
+      outputAspect,
+      videoResolution,
+      adsTemplateGalleryKind,
+    };
+    try {
+      localStorage.setItem(LS_ADS_STUDIO_COMPOSER_DRAFT_V1, JSON.stringify(draft));
+    } catch {
+      /* ignore quota / private mode */
+    }
+  }, [
+    prompt,
+    appRefUrl,
+    avatarUrl,
+    assetType,
+    videoDurationSec,
+    outputAspect,
+    videoResolution,
+    adsTemplateGalleryKind,
+  ]);
+
   useEffect(() => {
     try {
       const raw = localStorage.getItem(LS_ADS_STUDIO_HISTORY);
@@ -1450,7 +1530,13 @@ export default function AdsStudioPanel() {
     if (kind === "app") setUploadingRefSlot(true);
     else setUploadingAvatar(true);
     try {
-      const url = await uploadFileToCdn(file, { kind: "image" });
+      let toUpload = file;
+      try {
+        toUpload = await compressImageFileForUpload(file);
+      } catch {
+        toUpload = file;
+      }
+      const url = await uploadFileToCdn(toUpload, { kind: "image" });
       if (kind === "app") setAppRefUrl(url);
       else setAvatarUrl(url);
       toast.success(

@@ -1,4 +1,9 @@
-import { waitForSupabaseBrowserClient } from "@/lib/supabase/client";
+import type { SupabaseClient } from "@supabase/supabase-js";
+import {
+  createSupabaseBrowserClient,
+  peekSupabaseBrowserSingleton,
+  waitForSupabaseBrowserClient,
+} from "@/lib/supabase/client";
 import {
   assertStudioUploadForKind,
   inferStudioUploadKind,
@@ -26,21 +31,30 @@ function extFromMime(mime: string): string {
   return m[mime] ?? "";
 }
 
+const UPLOAD_NEXT_API_TIMEOUT_MS = 120_000;
+
 async function uploadViaNextApi(file: File): Promise<string> {
   const fd = new FormData();
   fd.set("file", file);
+  const ac = new AbortController();
+  const timer = setTimeout(() => ac.abort(), UPLOAD_NEXT_API_TIMEOUT_MS);
   let res: Response;
   try {
-    res = await fetch("/api/uploads", { method: "POST", body: fd });
+    res = await fetch("/api/uploads", { method: "POST", body: fd, signal: ac.signal });
   } catch (e) {
+    const aborted = e instanceof Error && e.name === "AbortError";
     const isNetwork = e instanceof TypeError && String(e.message).toLowerCase().includes("fetch");
     throw new Error(
-      isNetwork
-        ? "Upload failed (network). If the file is large, try again, the app may route big uploads directly to storage."
-        : e instanceof Error
-          ? e.message
-          : "Upload failed",
+      aborted
+        ? "Upload timed out. Try a smaller image or check your connection."
+        : isNetwork
+          ? "Upload failed (network). If the file is large, try again, the app may route big uploads directly to storage."
+          : e instanceof Error
+            ? e.message
+            : "Upload failed",
     );
+  } finally {
+    clearTimeout(timer);
   }
   const raw = await res.text().catch(() => "");
   let json: { url?: string; error?: string } = {};
@@ -60,11 +74,7 @@ async function uploadViaNextApi(file: File): Promise<string> {
   return json.url;
 }
 
-async function uploadViaSupabaseDirect(file: File): Promise<string> {
-  const supabase = await waitForSupabaseBrowserClient();
-  if (!supabase) {
-    throw new Error("File upload is unavailable: Supabase is not configured.");
-  }
+async function uploadViaSupabaseDirectWithClient(supabase: SupabaseClient, file: File): Promise<string> {
   const { data: userData, error: userErr } = await supabase.auth.getUser();
   if (userErr || !userData.user) throw new Error("Sign in to upload files.");
 
@@ -93,6 +103,28 @@ async function uploadViaSupabaseDirect(file: File): Promise<string> {
   return publicUrl;
 }
 
+async function uploadViaSupabaseDirect(file: File): Promise<string> {
+  const supabase = await waitForSupabaseBrowserClient(8000);
+  if (!supabase) {
+    throw new Error("File upload is unavailable: Supabase is not configured.");
+  }
+  return uploadViaSupabaseDirectWithClient(supabase, file);
+}
+
+/** When the browser Supabase client is ready, upload straight to Storage (avoids Vercel hop for images). */
+async function tryBrowserDirectImageUpload(file: File): Promise<string | null> {
+  let client = peekSupabaseBrowserSingleton() ?? createSupabaseBrowserClient();
+  if (!client) {
+    client = await waitForSupabaseBrowserClient(5000);
+  }
+  if (!client) return null;
+  try {
+    return await uploadViaSupabaseDirectWithClient(client, file);
+  } catch {
+    return null;
+  }
+}
+
 /**
  * Upload a browser `File` to public CDN URL.
  * Large files and videos use Supabase Storage from the browser (bypasses Vercel body limits).
@@ -107,6 +139,12 @@ export async function uploadFileToCdn(
   assertStudioUploadForKind(file, kind);
 
   const mime = file.type || "";
+  // Reference images: prefer browser → Supabase Storage (faster than browser → Vercel → Storage).
+  if (kind === "image") {
+    const directUrl = await tryBrowserDirectImageUpload(file);
+    if (directUrl) return directUrl;
+  }
+
   const useDirect =
     file.size > VERCEL_SAFE_BODY_BYTES || mime.startsWith("video/") || mime.startsWith("audio/");
 
