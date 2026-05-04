@@ -42,6 +42,10 @@ const ADS_STUDIO_UNBOXING_AVATAR_PATH = "/studio/ads-studio/unboxing-recreate-av
 const ADS_STUDIO_VIRTUAL_TRY_ON_2_PRODUCT_PATH = "/studio/ads-studio/virtual-try-on-2-product.png";
 const ADS_STUDIO_VIRTUAL_TRY_ON_2_AVATAR_PATH = "/studio/ads-studio/virtual-try-on-2-avatar.png";
 
+/** UGC Try On 3 “Recreate”: @image1 product, @image2 avatar (public/studio/ads-studio/). */
+const ADS_STUDIO_TRY_ON_3_PRODUCT_PATH = "/studio/ads-studio/ugc-try-on-3-product.png";
+const ADS_STUDIO_TRY_ON_3_AVATAR_PATH = "/studio/ads-studio/ugc-try-on-3-avatar.png";
+
 /** Default Tutorial (blender) — not Tutorial (2). Bundled stills instead of template preview frames. */
 const ADS_STUDIO_TUTORIAL_STANDARD_AVATAR_PATH = "/studio/ads-studio/tutorial-standard-avatar.png";
 const ADS_STUDIO_TUTORIAL_STANDARD_PRODUCT_PATH = "/studio/ads-studio/tutorial-standard-product.png";
@@ -65,6 +69,10 @@ const ADS_STUDIO_UGC_4_AVATAR_PATH = "/studio/ads-studio/ugc-4-avatar.png";
 /** UGC 5 “Recreate”: @image1 product, @image2 avatar (public/studio/ads-studio/). */
 const ADS_STUDIO_UGC_5_PRODUCT_PATH = "/studio/ads-studio/ugc-5-product.png";
 const ADS_STUDIO_UGC_5_AVATAR_PATH = "/studio/ads-studio/ugc-5-avatar.png";
+
+/** UGC 6 “Recreate”: @image1 product, @image2 avatar (public/studio/ads-studio/). */
+const ADS_STUDIO_UGC_6_PRODUCT_PATH = "/studio/ads-studio/ugc-6-product.png";
+const ADS_STUDIO_UGC_6_AVATAR_PATH = "/studio/ads-studio/ugc-6-avatar.png";
 
 function resolveAdsStudioPublicImage(path: string): string {
   if (typeof window === "undefined") return path;
@@ -385,6 +393,18 @@ function isVirtualTryOn2BundledRecreateLabel(normalizedLabel: string): boolean {
   );
 }
 
+/** UGC Try On 3 (bundled stills); excludes Tutorial. */
+function isTryOn3BundledRecreateLabel(normalizedLabel: string): boolean {
+  const n = normalizedLabel;
+  if (n.includes("tutorial")) return false;
+  return (
+    n.includes("try on 3") ||
+    n.includes("try-on 3") ||
+    n.includes("tryon 3") ||
+    n.includes("tryon3")
+  );
+}
+
 function isHyperMotionTemplateLabel(normalizedLabel: string): boolean {
   const n = normalizedLabel;
   return n.includes("hyper") && n.includes("motion");
@@ -457,6 +477,26 @@ function isUgc5BundledRecreateLabel(normalizedLabel: string): boolean {
   }
   if (/\bugc\s*5\b/u.test(n) || /\bugc5\b/u.test(n)) return true;
   return n.includes("(5)") && n.includes("ugc");
+}
+
+/** UGC 6 only — not UGC 60+, try-on templates, or other numbered UGC variants. */
+function isUgc6BundledRecreateLabel(normalizedLabel: string): boolean {
+  const n = normalizedLabel;
+  if (!n.includes("ugc")) return false;
+  if (n.includes("try on") || n.includes("try-on") || n.includes("tryon")) return false;
+  if (/\bugc\s*[2345789]\b/u.test(n) || /\bugc[2345789]\b/u.test(n)) return false;
+  if (
+    /\bugc\s*1\d\b/u.test(n) ||
+    /\bugc\s*2\d\b/u.test(n) ||
+    /\bugc\s*3\d\b/u.test(n) ||
+    /\bugc\s*4\d\b/u.test(n) ||
+    /\bugc\s*5\d\b/u.test(n) ||
+    /\bugc\s*6\d\b/u.test(n)
+  ) {
+    return false;
+  }
+  if (/\bugc\s*6\b/u.test(n) || /\bugc6\b/u.test(n)) return true;
+  return n.includes("(6)") && n.includes("ugc");
 }
 
 function promptForTemplateLabel(label: string): string {
@@ -1083,6 +1123,12 @@ export default function AdsStudioPanel() {
       setAvatarUrl(resolveAdsStudioPublicImage(ADS_STUDIO_VIRTUAL_TRY_ON_2_AVATAR_PATH));
       return;
     }
+    if (isTryOn3BundledRecreateLabel(n)) {
+      setAssetType("product");
+      setAppRefUrl(resolveAdsStudioPublicImage(ADS_STUDIO_TRY_ON_3_PRODUCT_PATH));
+      setAvatarUrl(resolveAdsStudioPublicImage(ADS_STUDIO_TRY_ON_3_AVATAR_PATH));
+      return;
+    }
     if (isUgc2BundledRecreateLabel(n)) {
       setAssetType("product");
       setAppRefUrl(resolveAdsStudioPublicImage(ADS_STUDIO_UGC_2_PRODUCT_PATH));
@@ -1105,6 +1151,12 @@ export default function AdsStudioPanel() {
       setAssetType("product");
       setAppRefUrl(resolveAdsStudioPublicImage(ADS_STUDIO_UGC_5_PRODUCT_PATH));
       setAvatarUrl(resolveAdsStudioPublicImage(ADS_STUDIO_UGC_5_AVATAR_PATH));
+      return;
+    }
+    if (isUgc6BundledRecreateLabel(n)) {
+      setAssetType("product");
+      setAppRefUrl(resolveAdsStudioPublicImage(ADS_STUDIO_UGC_6_PRODUCT_PATH));
+      setAvatarUrl(resolveAdsStudioPublicImage(ADS_STUDIO_UGC_6_AVATAR_PATH));
       return;
     }
     if (isBundledFroggyUnboxingTemplateLabel(n)) {
