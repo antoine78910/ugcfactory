@@ -471,6 +471,18 @@ const TEMPLATE_PROMPT_APP_0504_1_1 = `10-sec TikTok UGC, 9:16, iPhone on tripod
 0:07–0:10 | She turns laptop back, faces camera, slight nod with pouty satisfied look. "I already ordered three things, no regrets." End.
 Static tripod, warm apartment lighting, natural tones. She talks casually at normal speed — not hyped, more like sharing a secret with a friend. No text overlays, no TikTok UI, raw footage.`;
 
+const TEMPLATE_PROMPT_APP_0504_1_9 = `10-sec TikTok UGC, 9:16, iPhone on tripod
+0:00–0:03 | Medium shot, facing camera — white fluffy sherpa hat with green ears, platinum blonde hair with bangs, white tank top, nose and lip piercings, pouty expression. Stylish apartment with terracotta walls behind her. She's sitting at a desk with MacBook open. Looks at camera: "Wait, I need to show you where I've been getting my clothes."
+0:03–0:07 | She turns the MacBook toward camera — screen shows (LAYERED website, editorial flat-lay hero image, product grid, clean cream UI). She points at the screen with one finger. "This site is actually so good, look at this — everything is styled in layers, they have the cutest pieces." Her finger taps on a product card on screen.
+0:07–0:10 | She turns laptop back, faces camera, slight nod with pouty satisfied look. "I already ordered three things, no regrets." End.
+Static tripod, warm apartment lighting, natural tones. She talks casually at normal speed — not hyped, more like sharing a secret with a friend. No text overlays, no TikTok UI, raw footage.`;
+
+const TEMPLATE_PROMPT_APP_0504_1_3 = `11-sec TikTok UGC, 9:16, iPhone
+0:00–0:03 | Selfie close-up, front camera, young woman mid-twenties named Margot with long dark brown wavy hair parted in the middle falling past her shoulders, thin straight eyebrows, minimal makeup with a soft pink lip, large white drop earrings, wearing a buttoned pale yellow cropped cardigan over a lilac square-neck top, standing just inside the entrance of a modern minimalist coffee shop. Behind her out of focus: an illuminated glass-brick counter glowing warm from within, a linear pendant light, a barista in black moving behind a La Marzocco espresso machine. She shakes her hair back, raises her eyebrows into the lens with a knowing little smile. Playful "you need to know about this" energy.
+0:03–0:08 | Camera flips to iPhone screen showing @image1, static, no scrolling. Her finger with short almond-shaped nude nails taps the "Oat milk" add-on, then "Raw honey," then slides to the 350 ml size, then taps the green "$4.20" button. "Okay I am OBSESSED — I used to stand in line here for like fifteen minutes every morning. Now I just open the app on my walk over, customize everything — oat milk, raw honey, size, done. Pay in-app and it's waiting for me by the time I get here."
+0:08–0:11 | Camera flips back, handheld, now standing at the glowing glass-brick counter — Margot holds up a tall ribbed glass of matcha latte with thick foam and a dusting of bright green matcha powder on top, light catching the ombré green through the glass. She tilts it toward the camera, takes a small sip, closes her eyes for a second and does a tiny happy shoulder shimmy. The warm pendant light glows behind her, espresso machine hissing softly in the background. "No line. No waiting. Just this." She raises the glass like a toast. End.
+One take, soft ambient-lit café setup — warm overhead track lighting, cool daylight spilling from the entrance, muted chatter and milk-steaming sounds in the background. No text overlays, no TikTok UI, raw footage. Chic playful it-girl tone that builds into pure drink-in-hand satisfaction.`;
+
 const TEMPLATE_PROMPT_APP_0504_1_4 = `11-sec TikTok UGC, 9:16, iPhone
 0:00–0:03 | Selfie close-up, front camera, young woman mid-twenties named Clara with dirty-blonde hair pulled back loosely, a few strands falling around her face, natural bare skin with light freckles, no makeup, wearing a black short-sleeve blouse with white polka dots and a crisp white peter-pan collar, standing in a softly lit bedroom corner. Behind her out of focus: two small wooden-framed colorful art prints on a cream wall, a sliver of white window frame catching afternoon light. She tilts her head slightly, gives a warm sheepish smile into the lens, brushing a strand of hair behind her ear. Gentle "okay hear me out" energy.
 0:03–0:08 | Camera flips to iPhone screen showing @image1, static, no scrolling. Her finger with short unpainted nails taps the "Condition" card showing Moisture 68%, Light 45%, Temp 22°C, then gently taps the orange water droplet button. "Okay so — I am the worst plant mom on earth, I kill everything. But this app literally tells me when to water, how much light she needs, everything. Meet Monstera Marge — she's at 92% healthy and I have never been so proud."
@@ -594,6 +606,20 @@ function isAppTemplate050411BundledRecreateLabel(normalizedLabel: string): boole
   return /\b0504\s*\(1\)\(1\)\)/u.test(n) || (n.includes("0504 (1)(1)") && !/\b0504\s*\(1\)\(10\)/u.test(n));
 }
 
+/** App gallery `0504 (1)(3).mp4` — Matcha app + Margot bundled Recreate. */
+function isAppTemplate050413BundledRecreateLabel(normalizedLabel: string): boolean {
+  const n = normalizedLabel;
+  if (n.includes("tutorial")) return false;
+  return /\b0504\s*\(1\)\(3\)/u.test(n) || n.includes("0504 (1)(3)");
+}
+
+/** App gallery `0504 (1)(9).mp4` — LAYERED variant (no @image token) bundled Recreate. */
+function isAppTemplate050419BundledRecreateLabel(normalizedLabel: string): boolean {
+  const n = normalizedLabel;
+  if (n.includes("tutorial")) return false;
+  return /\b0504\s*\(1\)\(9\)/u.test(n) || n.includes("0504 (1)(9)");
+}
+
 /** App gallery `0504 (1)(4).mp4` — Sprout + Clara bundled Recreate. */
 function isAppTemplate050414BundledRecreateLabel(normalizedLabel: string): boolean {
   const n = normalizedLabel;
@@ -713,14 +739,10 @@ async function captureTwoFramesFromTemplateVideo(videoUrl: string): Promise<[Blo
 
 async function uploadTemplateRefsFromPreviewVideo(videoUrl: string): Promise<{ productUrl: string; avatarUrl: string }> {
   const [blob1, blob2] = await captureTwoFramesFromTemplateVideo(videoUrl);
-  const productUrl = await uploadFileToCdn(
-    new File([blob1], "ads-template-product.jpg", { type: "image/jpeg" }),
-    { kind: "image" },
-  );
-  const avatarUrl = await uploadFileToCdn(
-    new File([blob2], "ads-template-avatar.jpg", { type: "image/jpeg" }),
-    { kind: "image" },
-  );
+  const [productUrl, avatarUrl] = await Promise.all([
+    uploadFileToCdn(new File([blob1], "ads-template-product.jpg", { type: "image/jpeg" }), { kind: "image" }),
+    uploadFileToCdn(new File([blob2], "ads-template-avatar.jpg", { type: "image/jpeg" }), { kind: "image" }),
+  ]);
   return { productUrl, avatarUrl };
 }
 
@@ -926,6 +948,12 @@ function promptForTemplateLabel(label: string): string {
   if (n.includes("tutorial")) return TEMPLATE_PROMPT_TUTORIAL;
   if (isAppTemplate050411BundledRecreateLabel(n)) {
     return TEMPLATE_PROMPT_APP_0504_1_1;
+  }
+  if (isAppTemplate050419BundledRecreateLabel(n)) {
+    return TEMPLATE_PROMPT_APP_0504_1_9;
+  }
+  if (isAppTemplate050413BundledRecreateLabel(n)) {
+    return TEMPLATE_PROMPT_APP_0504_1_3;
   }
   if (/\b0504\s*\(1\)\(4\)/u.test(n) || n.includes("0504 (1)(4)")) {
     return TEMPLATE_PROMPT_APP_0504_1_4;
@@ -1137,6 +1165,7 @@ function AdsStudioProjectDetailBody(
 ) {
   const onLoad = props.onLoadIntoComposer;
   const [videoBroken, setVideoBroken] = useState(false);
+  const [copyBusy, setCopyBusy] = useState(false);
 
   const mediaResetKey =
     props.kind === "history"
@@ -1155,6 +1184,21 @@ function AdsStudioProjectDetailBody(
     const playback = resolveAdsStudioPlaybackUrl(h.videoUrl);
     const productSrc = resolveAdsStudioPlaybackUrl(productUrl) ?? productUrl;
     const avatarSrc = resolveAdsStudioPlaybackUrl(avatarUrlResolved) ?? avatarUrlResolved;
+
+    const copyPrompt = async () => {
+      const text = (h.prompt ?? "").trim();
+      if (!text) return;
+      if (copyBusy) return;
+      setCopyBusy(true);
+      try {
+        await navigator.clipboard.writeText(text);
+        toast.success("Prompt copied");
+      } catch {
+        toast.error("Could not copy the prompt");
+      } finally {
+        setCopyBusy(false);
+      }
+    };
 
     const videoBlock =
       playback && !videoBroken ? (
@@ -1186,63 +1230,105 @@ function AdsStudioProjectDetailBody(
       );
 
     return (
-      <div className="flex min-h-0 flex-1 flex-col">
-        <div className="shrink-0 border-b border-white/10 bg-[#0f0f13] px-4 pb-3 pt-2">
-          <p className="mb-2 text-[11px] font-semibold uppercase tracking-wide text-white/50">Video output</p>
-          <div className="overflow-hidden rounded-xl border border-white/10 bg-black/55">{videoBlock}</div>
-        </div>
-        <div className="min-h-0 flex-1 overflow-y-auto p-4">
-          <div>
-            <p className="mb-1.5 text-[11px] font-semibold uppercase tracking-wide text-white/50">Prompt</p>
-            <Textarea
-              readOnly
-              value={h.prompt || "—"}
-              rows={8}
-              className="max-h-[min(40vh,320px)] min-h-[7.5rem] resize-y overflow-y-auto border-white/[0.08] bg-black/30 text-[13px] leading-relaxed text-white/85"
-            />
+      <div className="flex min-h-0 flex-1 flex-col sm:flex-row">
+        <div className="shrink-0 border-b border-white/10 bg-[#0f0f13] p-4 sm:w-[58%] sm:border-b-0 sm:border-r">
+          <div className="flex items-start justify-between gap-3">
+            <div>
+              <p className="text-[11px] font-semibold uppercase tracking-wide text-white/50">Video output</p>
+              <p className="mt-1 text-xs text-white/35">Saved clip</p>
+            </div>
+            <div className="flex shrink-0 gap-2">
+              {playback ? (
+                <a
+                  href={playback}
+                  target="_blank"
+                  rel="noreferrer"
+                  className="inline-flex h-9 items-center justify-center rounded-md border border-white/15 bg-white/5 px-3 text-xs font-semibold text-white/85 transition hover:bg-white/10"
+                >
+                  Open
+                </a>
+              ) : null}
+            </div>
           </div>
+          <div className="mt-3 overflow-hidden rounded-xl border border-white/10 bg-black/55">{videoBlock}</div>
+        </div>
+
+        <div className="min-h-0 flex-1 overflow-y-auto p-4">
+          <div className="flex items-center justify-between gap-2">
+            <p className="text-[11px] font-semibold uppercase tracking-wide text-white/50">Prompt</p>
+            <Button
+              type="button"
+              size="sm"
+              variant="outline"
+              disabled={copyBusy || !(h.prompt ?? "").trim()}
+              onClick={() => void copyPrompt()}
+              className="h-8 border-white/15 bg-transparent px-2.5 text-xs text-white/80 hover:bg-white/10"
+            >
+              Copy
+            </Button>
+          </div>
+          <Textarea
+            readOnly
+            value={h.prompt || "—"}
+            rows={8}
+            className="mt-2 max-h-[min(48vh,460px)] min-h-[9rem] resize-y overflow-y-auto border-white/[0.08] bg-black/30 text-[13px] leading-relaxed text-white/85"
+          />
+
           <div className="mt-4">
-            <p className="mb-2 text-[11px] font-semibold uppercase tracking-wide text-white/50">Reference inputs</p>
+            <p className="mb-2 text-[11px] font-semibold uppercase tracking-wide text-white/50">Uploads</p>
             <div className="flex flex-wrap gap-3">
-              <div className="flex min-w-[120px] flex-1 flex-col gap-1.5">
+              <div className="flex min-w-[140px] flex-1 flex-col gap-1.5">
                 <span className="text-[10px] font-semibold uppercase tracking-wide text-violet-300/85">
                   {assetLabel} (@image1)
                 </span>
-                <div className="aspect-square w-full max-w-[160px] overflow-hidden rounded-lg border border-white/10 bg-black/40">
+                <a
+                  href={productSrc || "#"}
+                  target="_blank"
+                  rel="noreferrer"
+                  className={cn(
+                    "aspect-square w-full max-w-[180px] overflow-hidden rounded-lg border border-white/10 bg-black/40",
+                    productSrc ? "cursor-pointer hover:border-white/20" : "pointer-events-none",
+                  )}
+                >
                   {productSrc ? (
-                    // eslint-disable-next-line @next/next/no-img-element -- remote CDN
+                    // eslint-disable-next-line @next/next/no-img-element
                     <img src={productSrc} alt="" className="h-full w-full object-cover" />
                   ) : (
-                    <div className="flex h-full min-h-[100px] items-center justify-center text-[10px] text-white/35">
+                    <div className="flex h-full min-h-[120px] items-center justify-center text-[10px] text-white/35">
                       None
                     </div>
                   )}
-                </div>
+                </a>
               </div>
-              <div className="flex min-w-[120px] flex-1 flex-col gap-1.5">
+              <div className="flex min-w-[140px] flex-1 flex-col gap-1.5">
                 <span className="text-[10px] font-semibold uppercase tracking-wide text-violet-300/85">
                   Avatar (@image2)
                 </span>
-                <div className="aspect-square w-full max-w-[160px] overflow-hidden rounded-lg border border-white/10 bg-black/40">
+                <a
+                  href={avatarSrc || "#"}
+                  target="_blank"
+                  rel="noreferrer"
+                  className={cn(
+                    "aspect-square w-full max-w-[180px] overflow-hidden rounded-lg border border-white/10 bg-black/40",
+                    avatarSrc ? "cursor-pointer hover:border-white/20" : "pointer-events-none",
+                  )}
+                >
                   {avatarSrc ? (
                     // eslint-disable-next-line @next/next/no-img-element
                     <img src={avatarSrc} alt="" className="h-full w-full object-cover" />
                   ) : (
-                    <div className="flex h-full min-h-[100px] items-center justify-center text-[10px] text-white/35">
+                    <div className="flex h-full min-h-[120px] items-center justify-center text-[10px] text-white/35">
                       None
                     </div>
                   )}
-                </div>
+                </a>
               </div>
             </div>
           </div>
+
           <div className="mt-6 flex flex-wrap justify-end gap-2 border-t border-white/10 pt-3">
             <Dialog.Close asChild>
-              <Button
-                type="button"
-                variant="outline"
-                className="border-white/15 bg-transparent text-white/85 hover:bg-white/10"
-              >
+              <Button type="button" variant="outline" className="border-white/15 bg-transparent text-white/85 hover:bg-white/10">
                 Close
               </Button>
             </Dialog.Close>
@@ -1264,6 +1350,20 @@ function AdsStudioProjectDetailBody(
   const avatarSrc = resolveAdsStudioPlaybackUrl(avatarUrlResolved) ?? avatarUrlResolved;
   const thumbRaw = (j.previewStillUrl ?? j.thumbUrl ?? "").trim();
   const thumbSrc = thumbRaw ? resolveAdsStudioPlaybackUrl(thumbRaw) ?? thumbRaw : null;
+
+  const copyPrompt = async () => {
+    if (!promptText.trim()) return;
+    if (copyBusy) return;
+    setCopyBusy(true);
+    try {
+      await navigator.clipboard.writeText(promptText);
+      toast.success("Prompt copied");
+    } catch {
+      toast.error("Could not copy the prompt");
+    } finally {
+      setCopyBusy(false);
+    }
+  };
 
   const statusBlock =
     j.phase === "failed" ? (
@@ -1289,50 +1389,98 @@ function AdsStudioProjectDetailBody(
     );
 
   return (
-    <div className="flex min-h-0 flex-1 flex-col">
-      <div className="shrink-0 border-b border-white/10 bg-[#0f0f13] px-4 pb-3 pt-2">
-        <p className="mb-2 text-[11px] font-semibold uppercase tracking-wide text-white/50">Preview</p>
-        <div className="overflow-hidden rounded-xl border border-white/10 bg-black/55">{statusBlock}</div>
-      </div>
-      <div className="min-h-0 flex-1 overflow-y-auto p-4">
-        <div>
-          <p className="mb-1.5 text-[11px] font-semibold uppercase tracking-wide text-white/50">Prompt</p>
-          <Textarea
-            readOnly
-            value={promptText}
-            rows={8}
-            className="max-h-[min(40vh,320px)] min-h-[7.5rem] resize-y overflow-y-auto border-white/[0.08] bg-black/30 text-[13px] leading-relaxed text-white/85"
-          />
+    <div className="flex min-h-0 flex-1 flex-col sm:flex-row">
+      <div className="shrink-0 border-b border-white/10 bg-[#0f0f13] p-4 sm:w-[58%] sm:border-b-0 sm:border-r">
+        <div className="flex items-start justify-between gap-3">
+          <div>
+            <p className="text-[11px] font-semibold uppercase tracking-wide text-white/50">Preview</p>
+            <p className="mt-1 text-xs text-white/35">
+              {j.phase === "failed" ? "Failed" : j.phase === "rendering" ? "Rendering" : "Submitting"}
+            </p>
+          </div>
+          <div className="flex shrink-0 gap-2">
+            {thumbSrc ? (
+              <a
+                href={thumbSrc}
+                target="_blank"
+                rel="noreferrer"
+                className="inline-flex h-9 items-center justify-center rounded-md border border-white/15 bg-white/5 px-3 text-xs font-semibold text-white/85 transition hover:bg-white/10"
+              >
+                Open
+              </a>
+            ) : null}
+          </div>
         </div>
+        <div className="mt-3 overflow-hidden rounded-xl border border-white/10 bg-black/55">{statusBlock}</div>
+      </div>
+
+      <div className="min-h-0 flex-1 overflow-y-auto p-4">
+        <div className="flex items-center justify-between gap-2">
+          <p className="text-[11px] font-semibold uppercase tracking-wide text-white/50">Prompt</p>
+          <Button
+            type="button"
+            size="sm"
+            variant="outline"
+            disabled={copyBusy || !promptText.trim()}
+            onClick={() => void copyPrompt()}
+            className="h-8 border-white/15 bg-transparent px-2.5 text-xs text-white/80 hover:bg-white/10"
+          >
+            Copy
+          </Button>
+        </div>
+        <Textarea
+          readOnly
+          value={promptText}
+          rows={8}
+          className="mt-2 max-h-[min(48vh,460px)] min-h-[9rem] resize-y overflow-y-auto border-white/[0.08] bg-black/30 text-[13px] leading-relaxed text-white/85"
+        />
+
         <div className="mt-4">
-          <p className="mb-2 text-[11px] font-semibold uppercase tracking-wide text-white/50">Reference inputs</p>
+          <p className="mb-2 text-[11px] font-semibold uppercase tracking-wide text-white/50">Uploads</p>
           <div className="flex flex-wrap gap-3">
-            <div className="flex min-w-[120px] flex-1 flex-col gap-1.5">
+            <div className="flex min-w-[140px] flex-1 flex-col gap-1.5">
               <span className="text-[10px] font-semibold uppercase tracking-wide text-violet-300/85">
                 {assetLabel} (@image1)
               </span>
-              <div className="aspect-square w-full max-w-[160px] overflow-hidden rounded-lg border border-white/10 bg-black/40">
+              <a
+                href={productSrc || "#"}
+                target="_blank"
+                rel="noreferrer"
+                className={cn(
+                  "aspect-square w-full max-w-[180px] overflow-hidden rounded-lg border border-white/10 bg-black/40",
+                  productSrc ? "cursor-pointer hover:border-white/20" : "pointer-events-none",
+                )}
+              >
                 {productSrc ? (
                   // eslint-disable-next-line @next/next/no-img-element
                   <img src={productSrc} alt="" className="h-full w-full object-cover" />
                 ) : (
-                  <div className="flex h-full min-h-[100px] items-center justify-center text-[10px] text-white/35">None</div>
+                  <div className="flex h-full min-h-[120px] items-center justify-center text-[10px] text-white/35">None</div>
                 )}
-              </div>
+              </a>
             </div>
-            <div className="flex min-w-[120px] flex-1 flex-col gap-1.5">
+            <div className="flex min-w-[140px] flex-1 flex-col gap-1.5">
               <span className="text-[10px] font-semibold uppercase tracking-wide text-violet-300/85">Avatar (@image2)</span>
-              <div className="aspect-square w-full max-w-[160px] overflow-hidden rounded-lg border border-white/10 bg-black/40">
+              <a
+                href={avatarSrc || "#"}
+                target="_blank"
+                rel="noreferrer"
+                className={cn(
+                  "aspect-square w-full max-w-[180px] overflow-hidden rounded-lg border border-white/10 bg-black/40",
+                  avatarSrc ? "cursor-pointer hover:border-white/20" : "pointer-events-none",
+                )}
+              >
                 {avatarSrc ? (
                   // eslint-disable-next-line @next/next/no-img-element
                   <img src={avatarSrc} alt="" className="h-full w-full object-cover" />
                 ) : (
-                  <div className="flex h-full min-h-[100px] items-center justify-center text-[10px] text-white/35">None</div>
+                  <div className="flex h-full min-h-[120px] items-center justify-center text-[10px] text-white/35">None</div>
                 )}
-              </div>
+              </a>
             </div>
           </div>
         </div>
+
         <div className="mt-6 flex flex-wrap justify-end gap-2 border-t border-white/10 pt-3">
           <Dialog.Close asChild>
             <Button type="button" variant="outline" className="border-white/15 bg-transparent text-white/85 hover:bg-white/10">
@@ -1942,6 +2090,7 @@ export default function AdsStudioPanel() {
     const n = normalizeTemplateLabel(label);
     const isTutorial2 =
       n.includes("tutorial 2") || n.includes("tutorial2") || n.includes("tutorial (2)");
+    const isApp0504_1_3 = isAppTemplate050413BundledRecreateLabel(n);
     const nextPrompt = promptForTemplateLabel(label).replace(/\r\n/g, "\n");
     // Always replace current prompt (never append), even when input already contains text.
     setPrompt(nextPrompt);
@@ -1995,6 +2144,14 @@ export default function AdsStudioPanel() {
       setAppRefUrl(resolveAdsStudioPublicImage(ADS_STUDIO_APP_0504_BASE_1_APP_PATH));
       setAvatarUrl(resolveAdsStudioPublicImage(ADS_STUDIO_APP_0504_BASE_1_AVATAR_PATH));
       return;
+    }
+    if (isApp0504_1_3) {
+      // This template expects the App screen as image 2 and Avatar as image 1.
+      // In our composer, App/Product binds to @image1 and Avatar binds to @image2,
+      // so we swap the two captured frames when auto-filling.
+      setAssetType("app");
+      setAppRefUrl("");
+      setAvatarUrl("");
     }
     if (isTutorial2) {
       const avatarResolved = resolveAdsStudioPublicImage(ADS_STUDIO_TUTORIAL_2_AVATAR_PATH);
@@ -2104,9 +2261,17 @@ export default function AdsStudioPanel() {
       setUploadingRefSlot(true);
       setUploadingAvatar(true);
       try {
+        toast.message("Uploading template references…", {
+          description: "Capturing two frames and uploading Product + Avatar.",
+        });
         const { productUrl, avatarUrl } = await uploadTemplateRefsFromPreviewVideo(tplUrl);
-        setAppRefUrl(productUrl);
-        setAvatarUrl(avatarUrl);
+        if (isApp0504_1_3) {
+          setAppRefUrl(avatarUrl);
+          setAvatarUrl(productUrl);
+        } else {
+          setAppRefUrl(productUrl);
+          setAvatarUrl(avatarUrl);
+        }
         toast.success("References added", {
           description: "Two frames from the template preview were uploaded for Product and Avatar.",
         });
@@ -2661,7 +2826,7 @@ export default function AdsStudioPanel() {
                   : "text-white/50 hover:text-white/75",
               )}
             >
-              Product templates
+              Product
             </button>
             <button
               type="button"
@@ -2675,7 +2840,7 @@ export default function AdsStudioPanel() {
                   : "text-white/50 hover:text-white/75",
               )}
             >
-              App templates
+              App
             </button>
           </div>
         </div>
@@ -2759,7 +2924,7 @@ export default function AdsStudioPanel() {
       >
         <Dialog.Portal>
           <Dialog.Overlay className="fixed inset-0 z-[530] bg-black/75 backdrop-blur-[2px] data-[state=open]:animate-in data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=open]:fade-in-0" />
-          <Dialog.Content className="fixed left-1/2 top-1/2 z-[531] flex max-h-[min(92vh,720px)] min-h-0 w-[min(96vw,520px)] -translate-x-1/2 -translate-y-1/2 flex-col overflow-hidden rounded-2xl border border-white/12 bg-[#101014] shadow-[0_24px_80px_rgba(0,0,0,0.75)] outline-none data-[state=open]:animate-in data-[state=closed]:animate-out">
+          <Dialog.Content className="fixed left-1/2 top-1/2 z-[531] flex max-h-[min(92vh,720px)] min-h-0 w-[min(96vw,980px)] -translate-x-1/2 -translate-y-1/2 flex-col overflow-hidden rounded-2xl border border-white/12 bg-[#101014] shadow-[0_24px_80px_rgba(0,0,0,0.75)] outline-none data-[state=open]:animate-in data-[state=closed]:animate-out">
             <div className="flex items-center justify-between gap-2 border-b border-white/10 px-4 py-3">
               <Dialog.Title className="text-base font-semibold text-white">
                 {projectDetailResolved?.kind === "history"

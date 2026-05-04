@@ -1,7 +1,6 @@
 "use client";
 
-import { useState } from "react";
-import { Check, Coins, Gift, X } from "lucide-react";
+import { Check, Coins, X } from "lucide-react";
 import { cn } from "@/lib/utils";
 import {
   planRank,
@@ -9,7 +8,7 @@ import {
   type AccountPlanId,
 } from "@/lib/subscriptionModelAccess";
 import { subscriptionPlanSortIndex, type SubscriptionPlanId } from "@/lib/stripe/subscriptionPrices";
-import { SUBSCRIPTIONS, subscriptionBonusCreditsVsStarter } from "@/lib/pricing";
+import { SUBSCRIPTIONS } from "@/lib/pricing";
 import {
   upToEstimateAiImagesFromCredits,
   upToEstimateAiVideosFromCredits,
@@ -22,14 +21,7 @@ function isModelIncluded(planIdRaw: string, row: (typeof SUBSCRIPTION_MODEL_MATR
   return row.tiers[idx];
 }
 
-function starterBonusForPlan(planId: SubscriptionPlanId, credits: number): { bonus: number; baseCredits: number } {
-  const tierIdx = subscriptionPlanSortIndex(planId);
-  const bonusCtx =
-    tierIdx >= 1 && tierIdx <= 3 ? subscriptionBonusCreditsVsStarter(tierIdx as 1 | 2 | 3) : null;
-  const bonus = bonusCtx ? Math.max(0, Math.round(bonusCtx.bonusCredits)) : 0;
-  const baseCredits = bonus > 0 ? Math.max(0, credits - bonus) : credits;
-  return { bonus, baseCredits };
-}
+// Credits are displayed as the plan monthly allocation (no “bonus credits” breakdown).
 
 export function normalizeSubscriptionBillingCurrency(raw?: string | null): "usd" | "eur" {
   const c = String(raw ?? "").trim().toLowerCase();
@@ -67,60 +59,6 @@ export function SubscriptionPlanCreditsWithBonus({
   compact?: boolean;
   showCoins?: boolean;
 }) {
-  const { bonus, baseCredits } = starterBonusForPlan(planId, credits);
-  const cur = normalizeSubscriptionBillingCurrency(billingCurrency);
-  const [baseCreditsInfoOpen, setBaseCreditsInfoOpen] = useState(false);
-  const baseCreditsInfoText = starterPlanCreditsRatioTitle(cur);
-
-  const pill = (
-    <span
-      className={cn(
-        "inline-flex shrink-0 items-center gap-1 rounded-full border border-amber-400/40",
-        "bg-gradient-to-r from-amber-500/25 via-amber-400/15 to-emerald-500/20",
-        CREDITS_LINE_CLASS,
-        "text-amber-100",
-        "px-1.5 py-px shadow-[0_0_12px_rgba(251,191,36,0.1),inset_0_1px_0_rgba(255,255,255,0.06)]",
-      )}
-      title={`${credits.toLocaleString()} credits/mo total (${baseCredits.toLocaleString()} at Starter-tier value + ${bonus.toLocaleString()} bonus)`}
-      aria-label={`Bonus ${bonus} credits per month. ${credits.toLocaleString()} credits per month total.`}
-    >
-      <Gift className="h-3 w-3 shrink-0 text-amber-200/95" strokeWidth={2.25} aria-hidden />
-      +{bonus.toLocaleString()} credits
-    </span>
-  );
-
-  const baseLabel =
-    bonus > 0 ? (
-      <span className="relative inline-flex shrink-0 items-center">
-        <button
-          type="button"
-          className={cn(
-            "shrink-0 text-white underline decoration-dotted decoration-white/30 underline-offset-2",
-            CREDITS_LINE_CLASS,
-          )}
-          title={baseCreditsInfoText}
-          aria-label="Starter ratio credits info"
-          aria-expanded={baseCreditsInfoOpen}
-          onClick={() => setBaseCreditsInfoOpen((open) => !open)}
-        >
-          {baseCredits.toLocaleString()} credits
-        </button>
-        <span
-          className={cn(
-            "pointer-events-none absolute left-0 top-full z-20 mt-1 w-64 rounded-lg border border-white/15 bg-[#111118] p-2.5 text-[10px] leading-snug text-white/80 shadow-xl",
-            baseCreditsInfoOpen ? "block" : "hidden",
-          )}
-          role="tooltip"
-        >
-          {baseCreditsInfoText}
-        </span>
-      </span>
-    ) : (
-      <span className={cn("shrink-0 text-white", CREDITS_LINE_CLASS)}>
-        {baseCredits.toLocaleString()} credits
-      </span>
-    );
-
   const textRow = (
     <span
       className={cn(
@@ -128,8 +66,9 @@ export function SubscriptionPlanCreditsWithBonus({
         showCoins ? "min-w-0 flex-1" : "inline-flex max-w-full",
       )}
     >
-      {baseLabel}
-      {bonus > 0 ? pill : null}
+      <span className={cn("shrink-0 text-white", CREDITS_LINE_CLASS)} title={`${credits.toLocaleString()} credits/mo`}>
+        {credits.toLocaleString()} credits
+      </span>
     </span>
   );
 

@@ -4183,7 +4183,7 @@ export default function StudioVideoPanel({
                     value={editKlingMode}
                     onValueChange={(v) => setEditKlingMode(v as "std" | "pro")}
                   >
-                    <SelectTrigger className="mt-2 h-12 w-full rounded-xl border-white/15 bg-[#0a0a0d] text-white">
+                    <SelectTrigger className="mt-2 h-12 w-full rounded-xl border-white/12 bg-white/[0.04] text-white shadow-none hover:bg-white/[0.07]">
                       <SelectValue />
                     </SelectTrigger>
                     <SelectContent position="popper" className={studioSelectContentClass}>
@@ -4210,7 +4210,7 @@ export default function StudioVideoPanel({
                       setEditSceneBackground(v as "input_video" | "input_image")
                     }
                   >
-                    <SelectTrigger className="mt-2 h-12 w-full rounded-xl border-white/15 bg-[#0a0a0d] text-white">
+                    <SelectTrigger className="mt-2 h-12 w-full rounded-xl border-white/12 bg-white/[0.04] text-white shadow-none hover:bg-white/[0.07]">
                       <SelectValue />
                     </SelectTrigger>
                     <SelectContent position="popper" className={studioSelectContentClass}>
@@ -4735,7 +4735,7 @@ export default function StudioVideoPanel({
                                     );
                                   }}
                                 >
-                                  <SelectTrigger className="h-8 w-[4.5rem] rounded-lg border-white/12 bg-[#0a0a0d] text-xs text-white">
+                                  <SelectTrigger className="h-8 w-[4.5rem] rounded-lg border-white/12 bg-white/[0.04] text-xs text-white shadow-none hover:bg-white/[0.07]">
                                     <SelectValue />
                                   </SelectTrigger>
                                   <SelectContent position="popper" className={studioSelectContentClass}>
@@ -4822,7 +4822,7 @@ export default function StudioVideoPanel({
                   <div>
                     <Label className="text-xs text-white/45">Aspect ratio</Label>
                     <Select value={veoAspect} onValueChange={(v) => setVeoAspect(v as typeof veoAspect)}>
-                      <SelectTrigger className="mt-2 h-12 w-full rounded-xl border-white/15 bg-[#0a0a0d] text-white">
+                      <SelectTrigger className="mt-2 h-12 w-full rounded-xl border-white/12 bg-white/[0.04] text-white shadow-none hover:bg-white/[0.07]">
                         <SelectValue />
                       </SelectTrigger>
                       <SelectContent position="popper" className={studioSelectContentClass}>
@@ -4845,7 +4845,7 @@ export default function StudioVideoPanel({
                     <div>
                       <Label className="text-xs text-white/45">Duration</Label>
                       <Select value={duration} onValueChange={setDuration}>
-                        <SelectTrigger className="mt-2 h-12 w-full rounded-xl border-white/15 bg-[#0a0a0d] text-white">
+                        <SelectTrigger className="mt-2 h-12 w-full rounded-xl border-white/12 bg-white/[0.04] text-white shadow-none hover:bg-white/[0.07]">
                           <SelectValue />
                         </SelectTrigger>
                         <SelectContent position="popper" className={studioSelectContentClass}>
@@ -4867,7 +4867,7 @@ export default function StudioVideoPanel({
                     <div>
                       <Label className="text-xs text-white/45">Aspect ratio</Label>
                       <Select value={aspect} onValueChange={setAspect}>
-                        <SelectTrigger className="mt-2 h-12 w-full rounded-xl border-white/15 bg-[#0a0a0d] text-white">
+                        <SelectTrigger className="mt-2 h-12 w-full rounded-xl border-white/12 bg-white/[0.04] text-white shadow-none hover:bg-white/[0.07]">
                           <SelectValue />
                         </SelectTrigger>
                         <SelectContent position="popper" className={studioSelectContentClass}>
@@ -4884,7 +4884,7 @@ export default function StudioVideoPanel({
                     <div>
                       <Label className="text-xs text-white/45">Quality</Label>
                       <Select value={klingMode} onValueChange={(v) => setKlingMode(v as "std" | "pro")}>
-                        <SelectTrigger className="mt-2 h-12 w-full rounded-xl border-white/15 bg-[#0a0a0d] text-white">
+                        <SelectTrigger className="mt-2 h-12 w-full rounded-xl border-white/12 bg-white/[0.04] text-white shadow-none hover:bg-white/[0.07]">
                           <SelectValue />
                         </SelectTrigger>
                         <SelectContent position="popper" className={studioSelectContentClass}>

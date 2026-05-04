@@ -189,15 +189,17 @@ export default function SetupClient({ embedded = false }: SetupClientProps) {
           </h1>
         </header>
 
-        <div className="mb-6 flex justify-center">
-          <button
-            type="button"
-            onClick={startForFree}
-            className="h-12 w-full max-w-[360px] rounded-2xl border border-violet-200/30 bg-violet-400 text-base font-extrabold text-black shadow-[0_7px_0_0_rgba(76,29,149,0.9)] transition-all hover:-translate-y-[1px] hover:bg-violet-300 hover:shadow-[0_9px_0_0_rgba(76,29,149,0.9),0_0_34px_rgba(167,139,250,0.45)] active:translate-y-[6px] active:shadow-[0_0_0_0_rgba(76,29,149,0.9)]"
-          >
-            Start for Free
-          </button>
-        </div>
+        {!embedded ? (
+          <div className="mb-6 flex justify-center">
+            <button
+              type="button"
+              onClick={startForFree}
+              className="h-12 w-full max-w-[360px] rounded-2xl border border-violet-200/30 bg-violet-400 text-base font-extrabold text-black shadow-[0_7px_0_0_rgba(76,29,149,0.9)] transition-all hover:-translate-y-[1px] hover:bg-violet-300 hover:shadow-[0_9px_0_0_rgba(76,29,149,0.9),0_0_34px_rgba(167,139,250,0.45)] active:translate-y-[6px] active:shadow-[0_0_0_0_rgba(76,29,149,0.9)]"
+            >
+              Start for Free
+            </button>
+          </div>
+        ) : null}
 
         {/* Plan cards, 4 tiers (Starter → Scale) */}
         <div className="grid min-w-0 grid-cols-1 gap-4 sm:grid-cols-2 sm:gap-6 xl:grid-cols-[repeat(4,minmax(15.75rem,1fr))]">

@@ -589,7 +589,7 @@ export function StudioModelPicker({
 
 /** Dark Radix Select: panel #121212, row highlight / selected #2a2a2a, check discret (ref. maquette). */
 export const studioSelectContentClass =
-  "rounded-lg border border-white/10 bg-[#121212] p-1 text-white shadow-[0_16px_48px_rgba(0,0,0,0.65)] !bg-[#121212]";
+  "rounded-lg border border-white/10 bg-[#121212] p-1 text-white shadow-[0_16px_48px_rgba(0,0,0,0.65)] !bg-[#121212] z-[400]";
 
 export const studioSelectItemClass =
   "relative cursor-default select-none rounded-lg py-2.5 pl-3 pr-10 text-sm text-white outline-none " +

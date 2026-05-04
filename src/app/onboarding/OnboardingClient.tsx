@@ -224,15 +224,6 @@ export default function OnboardingClient() {
           {isSetupStep ? (
             <div className="mx-auto w-full max-w-6xl xl:max-w-[1200px]">
               <SetupClient embedded />
-              <div className="mt-5 flex justify-center">
-                <button
-                  type="button"
-                  onClick={handleStartForFree}
-                  className="h-11 w-full max-w-[280px] rounded-2xl border border-white/15 bg-white/[0.06] text-base font-extrabold text-white/90 transition hover:bg-white/[0.09] hover:text-white"
-                >
-                  Start for Free
-                </button>
-              </div>
             </div>
           ) : null}
 
@@ -356,6 +347,16 @@ export default function OnboardingClient() {
           </div>
             </>
           ) : null}
+
+          <div className="mt-10 flex justify-center">
+            <button
+              type="button"
+              onClick={handleStartForFree}
+              className="text-xs font-medium text-white/45 underline underline-offset-4 transition hover:text-white/75"
+            >
+              Start for Free
+            </button>
+          </div>
         </div>
       </main>
     </div>

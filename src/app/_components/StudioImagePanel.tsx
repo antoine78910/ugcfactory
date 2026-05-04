@@ -730,7 +730,7 @@ export default function StudioImagePanel({ onChangeVoice }: StudioImagePanelProp
           <div>
             <Label className="text-xs text-white/45">Aspect ratio</Label>
             <Select value={aspect} onValueChange={setAspect}>
-              <SelectTrigger className="mt-2 h-12 w-full rounded-xl border-white/15 bg-[#0a0a0d] text-white">
+              <SelectTrigger className="mt-2 h-12 w-full rounded-xl border-white/12 bg-white/[0.04] text-white shadow-none hover:bg-white/[0.07]">
                 <SelectValue placeholder="Ratio" />
               </SelectTrigger>
               <SelectContent position="popper" className={cn(studioSelectContentClass, "max-h-[min(280px,50vh)]")}>
@@ -747,7 +747,7 @@ export default function StudioImagePanel({ onChangeVoice }: StudioImagePanelProp
             <div>
               <Label className="text-xs text-white/45">Quality (resolution)</Label>
               <Select value={resolution} onValueChange={(v) => setResolution(v as (typeof PRO_RESOLUTIONS)[number])}>
-                <SelectTrigger className="mt-2 h-12 w-full rounded-xl border-white/15 bg-[#0a0a0d] text-white">
+                <SelectTrigger className="mt-2 h-12 w-full rounded-xl border-white/12 bg-white/[0.04] text-white shadow-none hover:bg-white/[0.07]">
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent position="popper" className={studioSelectContentClass}>
@@ -767,7 +767,7 @@ export default function StudioImagePanel({ onChangeVoice }: StudioImagePanelProp
               value={String(numImages)}
               onValueChange={(v) => setNumImages(Math.min(4, Math.max(1, Number(v) || 1)))}
             >
-              <SelectTrigger className="mt-2 h-12 w-full rounded-xl border-white/15 bg-[#0a0a0d] text-white">
+              <SelectTrigger className="mt-2 h-12 w-full rounded-xl border-white/12 bg-white/[0.04] text-white shadow-none hover:bg-white/[0.07]">
                 <SelectValue />
               </SelectTrigger>
               <SelectContent position="popper" className={studioSelectContentClass}>
