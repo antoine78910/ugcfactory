@@ -54,6 +54,18 @@ const ADS_STUDIO_PRO_TRY_ON_PRODUCT_PATH = "/studio/ads-studio/pro-try-on-produc
 const ADS_STUDIO_UGC_2_PRODUCT_PATH = "/studio/ads-studio/ugc-2-product.png";
 const ADS_STUDIO_UGC_2_AVATAR_PATH = "/studio/ads-studio/ugc-2-avatar.png";
 
+/** UGC 3 “Recreate”: @image1 product, @image2 avatar (public/studio/ads-studio/). */
+const ADS_STUDIO_UGC_3_PRODUCT_PATH = "/studio/ads-studio/ugc-3-product.png";
+const ADS_STUDIO_UGC_3_AVATAR_PATH = "/studio/ads-studio/ugc-3-avatar.png";
+
+/** UGC 4 “Recreate”: @image1 product, @image2 avatar (public/studio/ads-studio/). */
+const ADS_STUDIO_UGC_4_PRODUCT_PATH = "/studio/ads-studio/ugc-4-product.png";
+const ADS_STUDIO_UGC_4_AVATAR_PATH = "/studio/ads-studio/ugc-4-avatar.png";
+
+/** UGC 5 “Recreate”: @image1 product, @image2 avatar (public/studio/ads-studio/). */
+const ADS_STUDIO_UGC_5_PRODUCT_PATH = "/studio/ads-studio/ugc-5-product.png";
+const ADS_STUDIO_UGC_5_AVATAR_PATH = "/studio/ads-studio/ugc-5-avatar.png";
+
 function resolveAdsStudioPublicImage(path: string): string {
   if (typeof window === "undefined") return path;
   return new URL(path, window.location.origin).href;
@@ -402,6 +414,49 @@ function isUgc2BundledRecreateLabel(normalizedLabel: string): boolean {
   if (/\bugc\s*1\d\b/u.test(n) || /\bugc\s*2\d\b/u.test(n) || /\bugc\s*3\d\b/u.test(n)) return false;
   if (/\bugc\s*2\b/u.test(n) || /\bugc2\b/u.test(n)) return true;
   return n.includes("(2)") && n.includes("ugc");
+}
+
+/** UGC 3 only — not UGC 30+, try-on templates, or other numbered UGC variants. */
+function isUgc3BundledRecreateLabel(normalizedLabel: string): boolean {
+  const n = normalizedLabel;
+  if (!n.includes("ugc")) return false;
+  if (n.includes("try on") || n.includes("try-on") || n.includes("tryon")) return false;
+  if (/\bugc\s*[2456789]\b/u.test(n) || /\bugc[2456789]\b/u.test(n)) return false;
+  if (/\bugc\s*1\d\b/u.test(n) || /\bugc\s*2\d\b/u.test(n) || /\bugc\s*3\d\b/u.test(n)) return false;
+  if (/\bugc\s*3\b/u.test(n) || /\bugc3\b/u.test(n)) return true;
+  return n.includes("(3)") && n.includes("ugc");
+}
+
+/** UGC 4 only — not UGC 40+, try-on templates, or other numbered UGC variants. */
+function isUgc4BundledRecreateLabel(normalizedLabel: string): boolean {
+  const n = normalizedLabel;
+  if (!n.includes("ugc")) return false;
+  if (n.includes("try on") || n.includes("try-on") || n.includes("tryon")) return false;
+  if (/\bugc\s*[2356789]\b/u.test(n) || /\bugc[2356789]\b/u.test(n)) return false;
+  if (/\bugc\s*1\d\b/u.test(n) || /\bugc\s*2\d\b/u.test(n) || /\bugc\s*3\d\b/u.test(n) || /\bugc\s*4\d\b/u.test(n)) {
+    return false;
+  }
+  if (/\bugc\s*4\b/u.test(n) || /\bugc4\b/u.test(n)) return true;
+  return n.includes("(4)") && n.includes("ugc");
+}
+
+/** UGC 5 only — not UGC 50+, try-on templates, or other numbered UGC variants. */
+function isUgc5BundledRecreateLabel(normalizedLabel: string): boolean {
+  const n = normalizedLabel;
+  if (!n.includes("ugc")) return false;
+  if (n.includes("try on") || n.includes("try-on") || n.includes("tryon")) return false;
+  if (/\bugc\s*[2346789]\b/u.test(n) || /\bugc[2346789]\b/u.test(n)) return false;
+  if (
+    /\bugc\s*1\d\b/u.test(n) ||
+    /\bugc\s*2\d\b/u.test(n) ||
+    /\bugc\s*3\d\b/u.test(n) ||
+    /\bugc\s*4\d\b/u.test(n) ||
+    /\bugc\s*5\d\b/u.test(n)
+  ) {
+    return false;
+  }
+  if (/\bugc\s*5\b/u.test(n) || /\bugc5\b/u.test(n)) return true;
+  return n.includes("(5)") && n.includes("ugc");
 }
 
 function promptForTemplateLabel(label: string): string {
@@ -992,7 +1047,7 @@ export default function AdsStudioPanel() {
     const n = normalizeTemplateLabel(label);
     const isTutorial2 =
       n.includes("tutorial 2") || n.includes("tutorial2") || n.includes("tutorial (2)");
-    const nextPrompt = promptForTemplateLabel(label);
+    const nextPrompt = promptForTemplateLabel(label).replace(/\r\n/g, "\n");
     // Always replace current prompt (never append), even when input already contains text.
     setPrompt(nextPrompt);
     scrollComposerIntoView();
@@ -1032,6 +1087,24 @@ export default function AdsStudioPanel() {
       setAssetType("product");
       setAppRefUrl(resolveAdsStudioPublicImage(ADS_STUDIO_UGC_2_PRODUCT_PATH));
       setAvatarUrl(resolveAdsStudioPublicImage(ADS_STUDIO_UGC_2_AVATAR_PATH));
+      return;
+    }
+    if (isUgc3BundledRecreateLabel(n)) {
+      setAssetType("product");
+      setAppRefUrl(resolveAdsStudioPublicImage(ADS_STUDIO_UGC_3_PRODUCT_PATH));
+      setAvatarUrl(resolveAdsStudioPublicImage(ADS_STUDIO_UGC_3_AVATAR_PATH));
+      return;
+    }
+    if (isUgc4BundledRecreateLabel(n)) {
+      setAssetType("product");
+      setAppRefUrl(resolveAdsStudioPublicImage(ADS_STUDIO_UGC_4_PRODUCT_PATH));
+      setAvatarUrl(resolveAdsStudioPublicImage(ADS_STUDIO_UGC_4_AVATAR_PATH));
+      return;
+    }
+    if (isUgc5BundledRecreateLabel(n)) {
+      setAssetType("product");
+      setAppRefUrl(resolveAdsStudioPublicImage(ADS_STUDIO_UGC_5_PRODUCT_PATH));
+      setAvatarUrl(resolveAdsStudioPublicImage(ADS_STUDIO_UGC_5_AVATAR_PATH));
       return;
     }
     if (isBundledFroggyUnboxingTemplateLabel(n)) {
@@ -1264,6 +1337,8 @@ export default function AdsStudioPanel() {
                   elements={mentionElementOptions}
                   mentionTabs={adsMentionTabs}
                   minimalScrollbar
+                  copySyncClassName="max-h-[min(248px,40vh)] min-h-36 pb-10 pr-0.5 text-sm leading-relaxed md:text-sm md:leading-relaxed text-white/90"
+                  textareaClassName="caret-violet-300 placeholder:text-white/35"
                   onPickElement={handlePickMentionElement}
                   emptyElementsHint={
                     avatarLibLoading
@@ -1272,8 +1347,7 @@ export default function AdsStudioPanel() {
                   }
                   showCreateElementButton={false}
                   className={cn(
-                    "max-h-[min(288px,46vh)] min-h-36 w-full overflow-hidden rounded-xl border border-white/10 bg-white/[0.03] shadow-none",
-                    "[&_textarea]:max-h-[min(248px,40vh)] [&_textarea]:min-h-36 [&_textarea]:pb-10 [&_textarea]:pr-0.5 [&_textarea]:text-sm [&_textarea]:leading-relaxed [&_textarea]:caret-violet-300 [&_textarea]:placeholder:text-white/35",
+                    "max-h-[min(288px,46vh)] min-h-36 w-full overflow-hidden rounded-xl border-0 bg-transparent shadow-none ring-0",
                     "focus-within:ring-0",
                   )}
                 />

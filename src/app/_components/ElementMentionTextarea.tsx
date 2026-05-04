@@ -40,10 +40,21 @@ type Props = {
   mentionTabs?: MentionElementTabConfig;
   /** Thin visible scrollbar instead of fully hidden (e.g. Ads Studio prompt). */
   minimalScrollbar?: boolean;
+  /**
+   * Padding, font-size, line-height, min/max height, etc. applied to both the textarea and the
+   * highlight mirror. Keeps the caret aligned with rendered @-mentions (must not live only on
+   * the bordered wrapper while the mirror uses `absolute inset-0`).
+   */
+  copySyncClassName?: string;
+  /** Extra classes for the `<textarea>` only (caret, placeholder, etc.). */
+  textareaClassName?: string;
 };
 
-/** Padding + type scale shared by textarea and highlight overlay so the caret stays aligned (twMerge with className). */
-const TEXTAREA_INNER_LAYOUT = "px-3 py-2 text-base leading-normal md:text-sm md:leading-normal";
+/**
+ * Default padding + type scale shared by textarea and highlight mirror (not on the border wrapper).
+ * Avoid `md:leading-*` here so callers (e.g. Ads Studio `leading-relaxed`) stay consistent at every breakpoint.
+ */
+const TEXTAREA_COPY_LAYOUT = "px-3 py-2 text-base leading-normal md:text-sm";
 
 /** Vertical scrollbar consumes width inside the textarea but not in the mirror layer — line wraps drift without this. */
 function verticalScrollbarReserveX(el: HTMLTextAreaElement): number {
@@ -184,6 +195,8 @@ export default function ElementMentionTextarea({
   showCreateElementButton = true,
   mentionTabs,
   minimalScrollbar = false,
+  copySyncClassName,
+  textareaClassName,
 }: Props) {
   const textareaRef = useRef<HTMLTextAreaElement | null>(null);
   const [open, setOpen] = useState(false);
@@ -203,6 +216,9 @@ export default function ElementMentionTextarea({
 
   useLayoutEffect(() => {
     measureScrollbarReserve();
+    /** One extra frame: layout after long programmatic paste (e.g. Recreate) so mirror width matches textarea. */
+    const id = window.requestAnimationFrame(() => measureScrollbarReserve());
+    return () => window.cancelAnimationFrame(id);
   }, [measureScrollbarReserve, value]);
 
   useLayoutEffect(() => {
@@ -456,13 +472,12 @@ export default function ElementMentionTextarea({
       )}
     >
       {/**
-       * Highlight overlay is absolutely stacked so long prompts cannot inflate layout height — only
-       * the textarea’s box size controls height (scroll inside). Padding lives on this wrapper once.
+       * Border wrapper has no padding: an `absolute inset-0` mirror would otherwise align to the
+       * padding edge while the textarea’s text starts in the content box, breaking caret alignment.
        */}
       <div
         className={cn(
-          "relative overflow-hidden rounded-md border border-input bg-transparent shadow-xs transition-[color,box-shadow] min-h-16",
-          TEXTAREA_INNER_LAYOUT,
+          "relative min-h-16 overflow-hidden rounded-md border border-input bg-transparent shadow-xs transition-[color,box-shadow]",
           className,
         )}
       >
@@ -473,6 +488,7 @@ export default function ElementMentionTextarea({
           onKeyDown={handleKeyDown}
           onKeyUp={refreshFromCaret}
           onClick={refreshFromCaret}
+          spellCheck={false}
           onScroll={(e) => {
             const t = e.currentTarget;
             setOverlayScrollTop(t.scrollTop);
@@ -498,14 +514,17 @@ export default function ElementMentionTextarea({
           rows={rows}
           data-slot="textarea"
           className={cn(
-            "relative z-10 block min-h-16 min-w-0 w-full resize-none overflow-y-auto bg-transparent p-0 shadow-none outline-none ring-0 box-border",
+            TEXTAREA_COPY_LAYOUT,
+            copySyncClassName,
+            "relative z-10 box-border block min-h-16 min-w-0 w-full resize-none overflow-y-auto bg-transparent shadow-none outline-none ring-0",
             minimalScrollbar ? "studio-minimal-scrollbar" : "studio-params-scroll",
-            "border-0 placeholder:text-muted-foreground focus-visible:border-transparent focus-visible:ring-ring/50 aria-invalid:ring-destructive/20 dark:aria-invalid:ring-destructive/40 aria-invalid:border-transparent dark:bg-transparent",
-            "focus-visible:ring-[3px] disabled:cursor-not-allowed disabled:opacity-50",
-            /** Ghost overlay: hide native text; scrollbar hidden globally unless `minimalScrollbar`. */
+            "border-0 placeholder:text-muted-foreground focus-visible:border-transparent focus-visible:ring-0 aria-invalid:border-transparent aria-invalid:ring-destructive/20 dark:bg-transparent dark:aria-invalid:ring-destructive/40",
+            "disabled:cursor-not-allowed disabled:opacity-50",
+            /** Ghost overlay: hide native text; spellcheck squiggles misalign when text is transparent. */
             value
               ? "text-transparent [-webkit-text-fill-color:transparent] caret-white selection:bg-white/25"
               : "",
+            textareaClassName,
           )}
         />
         {value ? (
@@ -514,7 +533,11 @@ export default function ElementMentionTextarea({
             className="pointer-events-none absolute inset-0 z-0 overflow-hidden rounded-[inherit]"
           >
             <div
-              className="h-full w-full whitespace-pre-wrap break-words text-white [font:inherit]"
+              className={cn(
+                TEXTAREA_COPY_LAYOUT,
+                copySyncClassName,
+                "w-full whitespace-pre-wrap break-words text-white",
+              )}
               style={{
                 transform: `translate(${-overlayScrollLeft}px, ${-overlayScrollTop}px)`,
                 paddingRight: scrollbarReserveX,

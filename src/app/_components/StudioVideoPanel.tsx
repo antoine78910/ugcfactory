@@ -4494,7 +4494,9 @@ export default function StudioVideoPanel({
                               ? "Describe your video, and type @ to reference a saved Element."
                               : "Describe your video, like 'A woman walking through a neon-lit city'."
                       }
-                      className="h-[140px] max-h-[42vh] w-full resize-none overflow-y-scroll [field-sizing:fixed] border-white/10 bg-[#0a0a0d] px-3 py-3 text-sm text-white placeholder:text-white/35 focus-visible:ring-0 [&_textarea]:pb-10"
+                      copySyncClassName="h-[140px] max-h-[42vh] px-3 py-3 pb-10 text-sm leading-normal text-white"
+                      textareaClassName="placeholder:text-white/35"
+                      className="w-full resize-none overflow-y-scroll [field-sizing:fixed] border-white/10 bg-[#0a0a0d] focus-visible:ring-0"
                       rows={4}
                     />
                     <PromptEnhanceCornerButton value={prompt} onApply={setPrompt} surface="studio-video" />
@@ -4663,7 +4665,9 @@ export default function StudioVideoPanel({
                                     : `Describe scene ${idx + 1}…`
                                 }
                                 rows={3}
-                                className="min-h-[72px] w-full resize-none border-white/10 bg-[#0a0a0d] px-2.5 py-2 text-xs text-white placeholder:text-white/35 focus-visible:ring-0 [&_textarea]:pb-10"
+                                copySyncClassName="min-h-[72px] px-2.5 py-2 pb-10 text-xs leading-normal text-white"
+                                textareaClassName="placeholder:text-white/35"
+                                className="w-full resize-none border-white/10 bg-[#0a0a0d] focus-visible:ring-0"
                               />
                               <PromptEnhanceCornerButton
                                 value={row.prompt}
