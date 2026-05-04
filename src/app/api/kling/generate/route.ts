@@ -107,6 +107,57 @@ const KLING_TOTAL_DURATION_MIN = 3;
 const KLING_TOTAL_DURATION_MAX = 15;
 const SEEDANCE_LINK_TO_AD_PREVIEW_PROMPT_MAX_CHARS = 1800;
 
+function extractNamedElementMentionsFromPrompts(prompts: string[]): Set<string> {
+  const out = new Set<string>();
+  for (const raw of prompts) {
+    const p = (raw ?? "").trim();
+    if (!p.includes("@")) continue;
+    const re = /@([a-zA-Z_][a-zA-Z0-9_-]*)/g;
+    let m: RegExpExecArray | null;
+    while ((m = re.exec(p)) !== null) {
+      const token = (m[1] ?? "").trim().toLowerCase();
+      if (!token) continue;
+      // Seedance uploaded media tags are not saved Elements rows.
+      if (/^image\d+$/.test(token)) continue;
+      if (/^video\d+$/.test(token)) continue;
+      if (/^audio\d+$/.test(token)) continue;
+      out.add(token);
+    }
+  }
+  return out;
+}
+
+/**
+ * Studio UX rule: only Elements explicitly referenced in the prompt should be forwarded.
+ *
+ * Exception: workflow auto-binding emits synthetic rows named `imageN` (see `workflowNodeRun.ts`).
+ * Those may be present without `@imageN` mentions because Kling keeps prompt text untouched.
+ */
+function filterKlingElementsPayloadForPromptMentions(
+  elements: KlingElementInput[],
+  mentionNames: Set<string>,
+): KlingElementInput[] {
+  if (!elements.length) return elements;
+  const hasUserNamedElement = elements.some((el) => {
+    const n = String(el.name ?? "").trim().toLowerCase();
+    if (!n) return false;
+    return !/^image\d+$/.test(n);
+  });
+  if (!hasUserNamedElement) {
+    // Workflow-style synthetic elements only.
+    return elements;
+  }
+  if (mentionNames.size === 0) {
+    return [];
+  }
+  return elements.filter((el) => {
+    const n = String(el.name ?? "").trim().toLowerCase();
+    if (!n) return false;
+    if (/^image\d+$/.test(n)) return true;
+    return mentionNames.has(n);
+  });
+}
+
 function normalizeKlingMultiPrompt(body: Body): {
   ok: true;
   shots: { prompt: string; duration: number }[];
@@ -487,7 +538,18 @@ export async function POST(req: Request) {
     return NextResponse.json({ error: elementsNorm.error }, { status: 400 });
   }
 
-  if (model === "kling-3.0/video" && elementsNorm.elements.length > 0 && !hasKieReferenceImage) {
+  const mentionPrompts =
+    multiNorm && multiNorm.ok
+      ? [...multiNorm.shots.map((s) => String(s.prompt ?? "").trim()).filter(Boolean), prompt].filter(Boolean)
+      : [prompt].filter(Boolean);
+  const mentionNames = supportsReferenceElements
+    ? extractNamedElementMentionsFromPrompts(mentionPrompts)
+    : new Set<string>();
+  const klingElementsForJob = supportsReferenceElements
+    ? filterKlingElementsPayloadForPromptMentions(elementsNorm.elements, mentionNames)
+    : [];
+
+  if (model === "kling-3.0/video" && klingElementsForJob.length > 0 && !hasKieReferenceImage) {
     return NextResponse.json(
       {
         error:
@@ -497,7 +559,7 @@ export async function POST(req: Request) {
     );
   }
 
-  if (rawModel.startsWith("bytedance/seedance") && elementsNorm.elements.length > 0) {
+  if (rawModel.startsWith("bytedance/seedance") && klingElementsForJob.length > 0) {
     const hasSeedanceStart =
       hasKieReferenceImage ||
       (useCompactSeedancePreviewRefs && compactNorm.urls.length > 0) ||
@@ -572,8 +634,8 @@ export async function POST(req: Request) {
             duration: s.duration,
           })),
         };
-        if (elementsNorm.elements.length) {
-          input.kling_elements = elementsNorm.elements.map((el) => ({
+        if (klingElementsForJob.length) {
+          input.kling_elements = klingElementsForJob.map((el) => ({
             name: el.name,
             description: el.description,
             element_input_urls: el.element_input_urls,
@@ -588,8 +650,8 @@ export async function POST(req: Request) {
           multi_shots: false,
           multi_prompt: [],
         };
-        if (elementsNorm.elements.length) {
-          input.kling_elements = elementsNorm.elements.map((el) => ({
+        if (klingElementsForJob.length) {
+          input.kling_elements = klingElementsForJob.map((el) => ({
             name: el.name,
             description: el.description,
             element_input_urls: el.element_input_urls,
@@ -714,7 +776,7 @@ export async function POST(req: Request) {
             { status: 400 },
           );
         }
-        if (useSeedanceProOmniRefs && elementsNorm.elements.length > 0) {
+        if (useSeedanceProOmniRefs && klingElementsForJob.length > 0) {
           return NextResponse.json(
             {
               error:
@@ -768,11 +830,11 @@ export async function POST(req: Request) {
           if (refImgs.length) kieInput.reference_image_urls = refImgs;
           if (refVids.length) kieInput.reference_video_urls = refVids;
           if (refAuds.length) kieInput.reference_audio_urls = refAuds;
-        } else if (elementsNorm.elements.length > 0) {
+        } else if (klingElementsForJob.length > 0) {
           const ordered = buildSeedanceOrderedReferenceUrls(
             imageUrlRaw,
             hasKieEndImage ? endImageUrlRaw : undefined,
-            elementsNorm.elements,
+            klingElementsForJob,
             SEEDANCE_PRO_MAX_IMAGE_URLS,
           );
           if (ordered.length > SEEDANCE_PRO_MAX_IMAGE_URLS) {
@@ -839,7 +901,7 @@ export async function POST(req: Request) {
         let imagesToMirror: string[] = imageOrder;
         let videosToMirror: string[] = videoOrder;
         let audiosToMirror: string[] = audioOrder;
-        if (elementsNorm.elements.length > 0) {
+        if (klingElementsForJob.length > 0) {
           if (!imageOrder.length) {
             return NextResponse.json(
               {
@@ -852,7 +914,7 @@ export async function POST(req: Request) {
           const cap = SEEDANCE_PRO_OMNI_MAX_MEDIA_ITEMS;
           const flat: string[] = [];
           pushUniqueMediaUrl(flat, imageOrder[0]!, cap);
-          for (const el of elementsNorm.elements) {
+          for (const el of klingElementsForJob) {
             for (const u of el.element_input_urls) {
               pushUniqueMediaUrl(flat, u, cap);
             }
@@ -947,7 +1009,7 @@ export async function POST(req: Request) {
           videoUrls: mirroredVid.length ? mirroredVid : undefined,
           audioUrls: mirroredAud.length ? mirroredAud : undefined,
           preferOmniReference: true,
-          forceOmniReference: elementsNorm.elements.length > 0,
+          forceOmniReference: klingElementsForJob.length > 0,
           duration,
           aspectRatio: seedanceAspectRatio,
           resolution: seedanceResolutionTier,
@@ -963,11 +1025,11 @@ export async function POST(req: Request) {
       let ordered: string[] = [];
       if (useCompactSeedancePreviewRefs) {
         const compactUrls = compactNorm.urls.slice(0, SEEDANCE_COMPACT_PREVIEW_MAX_IMAGE_URLS);
-        if (elementsNorm.elements.length > 0) {
+        if (klingElementsForJob.length > 0) {
           ordered = buildSeedanceOrderedReferenceUrls(
             compactUrls[0]!,
             undefined,
-            elementsNorm.elements,
+            klingElementsForJob,
             maxImages,
           );
           for (let i = 1; i < compactUrls.length; i++) {
@@ -976,7 +1038,7 @@ export async function POST(req: Request) {
         } else {
           ordered = compactUrls;
         }
-      } else if (elementsNorm.elements.length > 0 || hasKieEndImage) {
+      } else if (klingElementsForJob.length > 0 || hasKieEndImage) {
         if (!hasKieReferenceImage) {
           return NextResponse.json(
             { error: "Seedance requires `imageUrl` when using an end frame or reference elements." },
@@ -986,7 +1048,7 @@ export async function POST(req: Request) {
         ordered = buildSeedanceOrderedReferenceUrls(
           imageUrlRaw,
           hasKieEndImage ? endImageUrlRaw : undefined,
-          elementsNorm.elements,
+          klingElementsForJob,
           maxImages,
         );
       } else if (hasKieReferenceImage) {
@@ -1002,7 +1064,7 @@ export async function POST(req: Request) {
         );
       }
 
-      if (preview && elementsNorm.elements.length > 0) {
+      if (preview && klingElementsForJob.length > 0) {
         for (const u of ordered) {
           if (inferSeedanceReferenceKindFromUrl(u) !== "image") {
             return NextResponse.json(
@@ -1054,7 +1116,7 @@ export async function POST(req: Request) {
         videoUrls: mirroredVid.length ? mirroredVid : undefined,
         audioUrls: mirroredAud.length ? mirroredAud : undefined,
         preferOmniReference: mirroredVid.length > 0 || mirroredAud.length > 0,
-        forceOmniReference: elementsNorm.elements.length > 0,
+        forceOmniReference: klingElementsForJob.length > 0,
         duration,
         aspectRatio: seedanceAspectRatio,
         resolution: seedanceResolutionTier,
@@ -1116,7 +1178,7 @@ export async function POST(req: Request) {
         `mentions(image/video/audio)=${imageMentionMax}/${videoMentionMax}/${audioMentionMax}, ` +
         `startImage=${hasKieReferenceImage ? "yes" : "no"}, endImage=${hasKieEndImage ? "yes" : "no"}, ` +
         `compactRefs=${compactNorm.urls.length}, omniRefs=${omniNorm.items.length}, ` +
-        `elements=${elementsNorm.ok ? elementsNorm.elements.length : 0}.`;
+        `elements=${elementsNorm.ok ? klingElementsForJob.length : 0}.`;
       logGenerationFailure("kling/generate/seedance-invalid-params", new Error(seedanceDebug), {
         model: rawModel,
         userFacing,
