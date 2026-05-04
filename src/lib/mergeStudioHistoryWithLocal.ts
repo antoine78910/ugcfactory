@@ -49,6 +49,11 @@ export function mergeStudioHistoryWithServer(
   });
 
   const serverIds = new Set(serverFilteredWithAspect.map((i) => i.id));
+  const serverTaskIds = new Set(
+    serverFilteredWithAspect
+      .map((i) => (i.externalTaskId ?? "").trim())
+      .filter((x): x is string => Boolean(x)),
+  );
   const serverMediaUrls = new Set(
     serverFilteredWithAspect.flatMap((i) => (i.mediaUrl?.trim() ? [i.mediaUrl.trim()] : [])),
   );
@@ -66,6 +71,10 @@ export function mergeStudioHistoryWithServer(
     if (serverIds.has(i.id)) return false;
     const sg = i.studioGenerationId?.trim();
     if (sg && serverIds.has(sg)) {
+      return false;
+    }
+    const et = i.externalTaskId?.trim();
+    if (et && serverTaskIds.has(et)) {
       return false;
     }
     if (

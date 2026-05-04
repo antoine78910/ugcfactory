@@ -159,6 +159,24 @@ function promptHasUnsupportedElementMentions(prompt: string): boolean {
   return false;
 }
 
+function extractPromptElementMentions(prompt: string): Set<string> {
+  const out = new Set<string>();
+  const p = (prompt ?? "").trim();
+  if (!p.includes("@")) return out;
+  const re = /@([a-zA-Z_][a-zA-Z0-9_-]*)/g;
+  let m: RegExpExecArray | null;
+  while ((m = re.exec(p)) !== null) {
+    const token = (m[1] ?? "").trim().toLowerCase();
+    if (!token) continue;
+    // Seedance uploaded media tokens are not saved "Elements".
+    if (/^image\d+$/.test(token)) continue;
+    if (/^video\d+$/.test(token)) continue;
+    if (/^audio\d+$/.test(token)) continue;
+    out.add(token);
+  }
+  return out;
+}
+
 type KlingShotRow = { id: string; prompt: string; durationSec: number };
 type KlingElementDraft = {
   id: string;
@@ -3513,10 +3531,18 @@ export default function StudioVideoPanel({
 
     const supportsReferenceElements = studioVideoSupportsReferenceElements(modelId);
     const minElUrls = minReferenceUrlsPerVideoElement(modelId);
+    const elementMentions = supportsReferenceElements ? extractPromptElementMentions(promptForJob) : new Set<string>();
     const klingElementsPayloadEarly =
       supportsReferenceElements && klingElementDrafts.length
         ? klingElementDrafts
-            .filter((r) => r.name.trim() && r.urls.length >= minElUrls)
+            .filter((r) => {
+              const name = r.name.trim();
+              if (!name) return false;
+              if (r.urls.length < minElUrls) return false;
+              // Only include elements explicitly referenced in the prompt.
+              if (elementMentions.size === 0) return false;
+              return elementMentions.has(name.toLowerCase());
+            })
             .map((r) => ({
               name: r.name.trim(),
               description: r.description.trim() || r.name.trim(),
@@ -4056,12 +4082,19 @@ export default function StudioVideoPanel({
                   <div className="space-y-1.5">
                     <Label className="text-xs text-white/45">Prompt</Label>
                     <div className="relative">
-                      <Textarea
+                      <ElementMentionTextarea
                         value={editPrompt}
-                        onChange={(e) => setEditPrompt(e.target.value)}
+                        onChange={setEditPrompt}
                         placeholder="Describe background and scene details - e.g., 'A corgi runs in' or 'Snowy park setting'. Motion is controlled by your reference video."
-                        className="min-h-[100px] w-full resize-none rounded-xl border-white/10 bg-[#0a0a0d] px-3 pb-10 pt-3 text-sm text-white placeholder:text-white/35 focus-visible:ring-0"
                         rows={4}
+                        elements={mentionElementOptions}
+                        minimalScrollbar
+                        copySyncClassName="min-h-[100px] max-h-[42vh] px-3 py-3 pb-10 text-sm leading-relaxed text-white/90"
+                        textareaClassName="caret-violet-300 placeholder:text-white/35"
+                        className={cn(
+                          "w-full overflow-hidden rounded-xl border border-white/10 bg-[#0a0a0d] shadow-none ring-0",
+                          "focus-within:ring-0",
+                        )}
                       />
                       <PromptEnhanceCornerButton value={editPrompt} onApply={setEditPrompt} surface="studio-video" />
                     </div>
@@ -4071,12 +4104,19 @@ export default function StudioVideoPanel({
                 <div>
                   <Label className="text-xs text-white/45">Prompt</Label>
                   <div className="relative mt-2">
-                    <Textarea
+                    <ElementMentionTextarea
                       value={editPrompt}
-                      onChange={(e) => setEditPrompt(e.target.value)}
-                      placeholder="Describe the change you want, like 'Make it snow'. Add elements using @"
-                      className="min-h-[120px] w-full resize-none rounded-xl border-white/10 bg-[#0a0a0d] px-3 pb-10 pt-3 text-sm text-white placeholder:text-white/35 focus-visible:ring-0"
+                      onChange={setEditPrompt}
+                      placeholder="Describe the change you want, like 'Make it snow'. Type @ to add elements."
                       rows={4}
+                      elements={mentionElementOptions}
+                      minimalScrollbar
+                      copySyncClassName="min-h-[120px] max-h-[46vh] px-3 py-3 pb-10 text-sm leading-relaxed text-white/90"
+                      textareaClassName="caret-violet-300 placeholder:text-white/35"
+                      className={cn(
+                        "w-full overflow-hidden rounded-xl border border-white/10 bg-[#0a0a0d] shadow-none ring-0",
+                        "focus-within:ring-0",
+                      )}
                     />
                     <PromptEnhanceCornerButton value={editPrompt} onApply={setEditPrompt} surface="studio-video" />
                   </div>

@@ -15,6 +15,7 @@ import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
+import ElementMentionTextarea from "@/app/_components/ElementMentionTextarea";
 import {
   StudioModelPicker,
   studioSelectContentClass,
@@ -680,12 +681,20 @@ export default function StudioImagePanel({ onChangeVoice }: StudioImagePanelProp
             ))}
           </div>
           <div className="relative mt-4">
-            <Textarea
+            <ElementMentionTextarea
               value={prompt}
-              onChange={(e) => setPrompt(e.target.value)}
+              onChange={setPrompt}
               placeholder="Describe the scene you imagine."
-              className="min-h-[120px] w-full resize-none border-white/10 bg-[#0a0a0d] px-3 pb-10 pt-3 text-sm text-white placeholder:text-white/35 focus-visible:ring-0"
               rows={4}
+              elements={[]}
+              minimalScrollbar
+              showCreateElementButton={false}
+              copySyncClassName="min-h-[120px] max-h-[46vh] px-3 py-3 pb-10 text-sm leading-relaxed text-white/90"
+              textareaClassName="caret-violet-300 placeholder:text-white/35"
+              className={cn(
+                "w-full overflow-hidden rounded-xl border border-white/10 bg-[#0a0a0d] shadow-none ring-0",
+                "focus-within:ring-0",
+              )}
             />
             <PromptEnhanceCornerButton value={prompt} onApply={setPrompt} surface="studio-image" />
           </div>
