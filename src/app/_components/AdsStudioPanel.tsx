@@ -2151,14 +2151,6 @@ export default function AdsStudioPanel() {
                       <p className="text-center text-sm text-white/55">
                         {selectedHistoryOrJob.job.phase === "submitting" ? "Submitting…" : "Rendering video…"}
                       </p>
-                      {(selectedHistoryOrJob.job.thumbUrl ?? selectedHistoryOrJob.job.previewStillUrl) ? (
-                        // eslint-disable-next-line @next/next/no-img-element
-                        <img
-                          src={(selectedHistoryOrJob.job.thumbUrl ?? selectedHistoryOrJob.job.previewStillUrl)!}
-                          alt=""
-                          className="mt-1 h-28 w-auto max-w-[120px] rounded-lg object-cover opacity-90"
-                        />
-                      ) : null}
                     </>
                   )}
                 </div>
