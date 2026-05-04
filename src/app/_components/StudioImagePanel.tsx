@@ -680,19 +680,19 @@ export default function StudioImagePanel({ onChangeVoice }: StudioImagePanelProp
               </button>
             ))}
           </div>
-          <div className="relative mt-4">
+          <div className="relative z-20 mt-4 min-w-0">
             <ElementMentionTextarea
               value={prompt}
               onChange={setPrompt}
               placeholder="Describe the scene you imagine."
-              rows={4}
+              rows={5}
               elements={[]}
               minimalScrollbar
               showCreateElementButton={false}
-              copySyncClassName="min-h-[120px] max-h-[46vh] px-3 py-3 pb-10 text-sm leading-relaxed text-white/90"
+              copySyncClassName="max-h-[min(248px,40vh)] min-h-36 pb-10 pr-0.5 text-sm leading-relaxed md:text-sm md:leading-relaxed text-white/90"
               textareaClassName="caret-violet-300 placeholder:text-white/35"
               className={cn(
-                "w-full overflow-hidden rounded-xl border border-white/10 bg-[#0a0a0d] shadow-none ring-0",
+                "max-h-[min(288px,46vh)] min-h-36 w-full overflow-hidden rounded-xl border-0 bg-transparent shadow-none ring-0",
                 "focus-within:ring-0",
               )}
             />

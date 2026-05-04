@@ -4147,18 +4147,18 @@ export default function StudioVideoPanel({
                   <p className="text-[11px] font-semibold uppercase tracking-wide text-white/50">Parametres avances</p>
                   <div className="space-y-1.5">
                     <Label className="text-xs text-white/45">Prompt</Label>
-                    <div className="relative">
+                    <div className="relative z-20 min-w-0">
                       <ElementMentionTextarea
                         value={editPrompt}
                         onChange={setEditPrompt}
                         placeholder="Describe background and scene details - e.g., 'A corgi runs in' or 'Snowy park setting'. Motion is controlled by your reference video."
-                        rows={4}
+                        rows={5}
                         elements={mentionElementOptions}
                         minimalScrollbar
-                        copySyncClassName="min-h-[100px] max-h-[42vh] px-3 py-3 pb-10 text-sm leading-relaxed text-white/90"
+                        copySyncClassName="max-h-[min(248px,40vh)] min-h-36 pb-10 pr-0.5 text-sm leading-relaxed md:text-sm md:leading-relaxed text-white/90"
                         textareaClassName="caret-violet-300 placeholder:text-white/35"
                         className={cn(
-                          "w-full overflow-hidden rounded-xl border border-white/10 bg-[#0a0a0d] shadow-none ring-0",
+                          "max-h-[min(288px,46vh)] min-h-36 w-full overflow-hidden rounded-xl border-0 bg-transparent shadow-none ring-0",
                           "focus-within:ring-0",
                         )}
                       />
@@ -4169,18 +4169,18 @@ export default function StudioVideoPanel({
               ) : (
                 <div>
                   <Label className="text-xs text-white/45">Prompt</Label>
-                  <div className="relative mt-2">
+                  <div className="relative z-20 mt-2 min-w-0">
                     <ElementMentionTextarea
                       value={editPrompt}
                       onChange={setEditPrompt}
                       placeholder="Describe the change you want, like 'Make it snow'. Type @ to add elements."
-                      rows={4}
+                      rows={5}
                       elements={mentionElementOptions}
                       minimalScrollbar
-                      copySyncClassName="min-h-[120px] max-h-[46vh] px-3 py-3 pb-10 text-sm leading-relaxed text-white/90"
+                      copySyncClassName="max-h-[min(248px,40vh)] min-h-36 pb-10 pr-0.5 text-sm leading-relaxed md:text-sm md:leading-relaxed text-white/90"
                       textareaClassName="caret-violet-300 placeholder:text-white/35"
                       className={cn(
-                        "w-full overflow-hidden rounded-xl border border-white/10 bg-[#0a0a0d] shadow-none ring-0",
+                        "max-h-[min(288px,46vh)] min-h-36 w-full overflow-hidden rounded-xl border-0 bg-transparent shadow-none ring-0",
                         "focus-within:ring-0",
                       )}
                     />
@@ -4585,7 +4585,7 @@ export default function StudioVideoPanel({
                 </p>
               ) : (
                 <>
-                  <div className="relative mt-4">
+                  <div className="relative z-20 mt-4 min-w-0">
                     <ElementMentionTextarea
                       value={prompt}
                       onChange={setPrompt}
@@ -4600,10 +4600,14 @@ export default function StudioVideoPanel({
                               ? "Describe your video, and type @ to reference a saved Element."
                               : "Describe your video, like 'A woman walking through a neon-lit city'."
                       }
-                      copySyncClassName="h-[140px] max-h-[42vh] px-3 py-3 pb-10 text-sm leading-normal text-white"
-                      textareaClassName="placeholder:text-white/35"
-                      className="w-full resize-none overflow-y-scroll [field-sizing:fixed] border-white/10 bg-[#0a0a0d] focus-visible:ring-0"
-                      rows={4}
+                      rows={5}
+                      minimalScrollbar
+                      copySyncClassName="max-h-[min(248px,40vh)] min-h-36 pb-10 pr-0.5 text-sm leading-relaxed md:text-sm md:leading-relaxed text-white/90"
+                      textareaClassName="caret-violet-300 placeholder:text-white/35"
+                      className={cn(
+                        "max-h-[min(288px,46vh)] min-h-36 w-full overflow-hidden rounded-xl border-0 bg-transparent shadow-none ring-0",
+                        "focus-within:ring-0",
+                      )}
                     />
                     <PromptEnhanceCornerButton value={prompt} onApply={setPrompt} surface="studio-video" />
                   </div>
@@ -4755,7 +4759,7 @@ export default function StudioVideoPanel({
                             <div className="text-[11px] font-medium text-violet-300/85">
                               Shot {idx + 1}
                             </div>
-                            <div className="relative">
+                            <div className="relative z-20 min-w-0">
                               <ElementMentionTextarea
                                 value={row.prompt}
                                 onChange={(v) =>
@@ -4771,9 +4775,13 @@ export default function StudioVideoPanel({
                                     : `Describe scene ${idx + 1}…`
                                 }
                                 rows={3}
-                                copySyncClassName="min-h-[72px] px-2.5 py-2 pb-10 text-xs leading-normal text-white"
-                                textareaClassName="placeholder:text-white/35"
-                                className="w-full resize-none border-white/10 bg-[#0a0a0d] focus-visible:ring-0"
+                                minimalScrollbar
+                                copySyncClassName="max-h-[min(180px,32vh)] min-h-[72px] pb-10 pr-0.5 text-sm leading-relaxed md:text-sm md:leading-relaxed text-white/90"
+                                textareaClassName="caret-violet-300 placeholder:text-white/35"
+                                className={cn(
+                                  "max-h-[min(220px,36vh)] min-h-[72px] w-full overflow-hidden rounded-xl border-0 bg-transparent shadow-none ring-0",
+                                  "focus-within:ring-0",
+                                )}
                               />
                               <PromptEnhanceCornerButton
                                 value={row.prompt}
