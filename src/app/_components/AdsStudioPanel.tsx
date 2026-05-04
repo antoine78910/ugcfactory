@@ -37,6 +37,7 @@ import { calculateVideoCreditsForModel } from "@/lib/pricing";
 import { AdsStudioRefSourceDialog } from "@/app/_components/AdsStudioRefSourceDialog";
 import type { AdsStudioMentionEntry } from "@/app/_components/AdsStudioMentionMenu";
 import { loadAvatarUrls } from "@/lib/avatarLibrary";
+import { logGenerationFailure, userMessageFromCaughtError } from "@/lib/generationUserMessage";
 
 /** Ads Studio: PiAPI Seedance 2 (non–fast) only. */
 const ADS_STUDIO_SEEDANCE_MODEL = "bytedance/seedance-2" as const;
@@ -59,6 +60,38 @@ const ADS_STUDIO_UNBOXING_3_PRODUCT_PATH = "/studio/ads-studio/unboxing-3-produc
 /** Unboxing (4) “Recreate”: @image1 product, @image2 avatar (public/studio/ads-studio/). */
 const ADS_STUDIO_UNBOXING_4_PRODUCT_PATH = "/studio/ads-studio/unboxing-4-product.png";
 const ADS_STUDIO_UNBOXING_4_AVATAR_PATH = "/studio/ads-studio/unboxing-4-avatar.png";
+
+/** App template `0504 (1)` (bare) Recreate: @image1 app UI, @image2 avatar — not `0504 (1)(N)` (public/studio/ads-studio/). */
+const ADS_STUDIO_APP_0504_BASE_1_APP_PATH = "/studio/ads-studio/app-0504-base-1-app.png";
+const ADS_STUDIO_APP_0504_BASE_1_AVATAR_PATH = "/studio/ads-studio/app-0504-base-1-avatar.png";
+
+/** App template `0504 (1)(1)` Recreate: @image1 web UI, @image2 avatar (public/studio/ads-studio/). */
+const ADS_STUDIO_APP_0504_1_1_APP_PATH = "/studio/ads-studio/app-0504-1-1-app.png";
+const ADS_STUDIO_APP_0504_1_1_AVATAR_PATH = "/studio/ads-studio/app-0504-1-1-avatar.png";
+
+/** App template `0504 (1)(4)` Recreate: @image1 app UI, @image2 avatar (public/studio/ads-studio/). */
+const ADS_STUDIO_APP_0504_1_4_APP_PATH = "/studio/ads-studio/app-0504-1-4-app.png";
+const ADS_STUDIO_APP_0504_1_4_AVATAR_PATH = "/studio/ads-studio/app-0504-1-4-avatar.png";
+
+/** App template `0504 (1)(5)` Recreate: @image1 app UI, @image2 avatar (public/studio/ads-studio/). */
+const ADS_STUDIO_APP_0504_1_5_APP_PATH = "/studio/ads-studio/app-0504-1-5-app.png";
+const ADS_STUDIO_APP_0504_1_5_AVATAR_PATH = "/studio/ads-studio/app-0504-1-5-avatar.png";
+
+/** App template `0504 (1)(6)` Recreate: @image1 app UI, @image2 avatar (public/studio/ads-studio/). */
+const ADS_STUDIO_APP_0504_1_6_APP_PATH = "/studio/ads-studio/app-0504-1-6-app.png";
+const ADS_STUDIO_APP_0504_1_6_AVATAR_PATH = "/studio/ads-studio/app-0504-1-6-avatar.png";
+
+/** App template `0504 (1)(7)` Recreate: @image1 app UI, @image2 avatar (public/studio/ads-studio/). */
+const ADS_STUDIO_APP_0504_1_7_APP_PATH = "/studio/ads-studio/app-0504-1-7-app.png";
+const ADS_STUDIO_APP_0504_1_7_AVATAR_PATH = "/studio/ads-studio/app-0504-1-7-avatar.png";
+
+/** App template `0504 (1)(8)` Recreate: @image1 app UI, @image2 avatar (public/studio/ads-studio/). */
+const ADS_STUDIO_APP_0504_1_8_APP_PATH = "/studio/ads-studio/app-0504-1-8-app.png";
+const ADS_STUDIO_APP_0504_1_8_AVATAR_PATH = "/studio/ads-studio/app-0504-1-8-avatar.png";
+
+/** App template `0504 (1)(10)` Recreate: @image1 app UI, @image2 avatar (public/studio/ads-studio/). */
+const ADS_STUDIO_APP_0504_1_10_APP_PATH = "/studio/ads-studio/app-0504-1-10-app.png";
+const ADS_STUDIO_APP_0504_1_10_AVATAR_PATH = "/studio/ads-studio/app-0504-1-10-avatar.png";
 
 /** UGC Virtual Try On 2 “Recreate”: @image1 product, @image2 avatar (public/studio/ads-studio/). */
 const ADS_STUDIO_VIRTUAL_TRY_ON_2_PRODUCT_PATH = "/studio/ads-studio/virtual-try-on-2-product.png";
@@ -181,6 +214,10 @@ const LS_ADS_STUDIO_HISTORY = "ugc_ads_studio_history_v1";
 const LS_ADS_STUDIO_ACTIVE_JOBS = "ugc_ads_studio_active_jobs_v1";
 /** Drop persisted jobs older than this so stale rows do not poll forever */
 const ADS_STUDIO_MAX_ACTIVE_JOB_AGE_MS = 1000 * 60 * 60 * 24;
+
+/** PiAPI / provider can take a long time; client used to cap at ~3 min and marked jobs failed incorrectly. */
+const ADS_STUDIO_VIDEO_POLL_MAX_MS = 2 * 60 * 60 * 1000; // 2 hours
+const ADS_STUDIO_VIDEO_POLL_INTERVAL_MS = 2000;
 
 type TemplateVideoItem = { filename: string; label: string; url: string };
 
@@ -330,6 +367,55 @@ Like, nothing extra — just clean, perfect details."
 
 NO MUSIC, ONLY SFX`;
 
+const TEMPLATE_PROMPT_APP_0504_1 = `10-sec TikTok UGC, 9:16, iPhone
+0:00–0:03 | Selfie handheld, tall slim guy, green cap, beige fuzzy sweater, plaid shorts. He's standing outside on a street, a pink car parked behind him slightly out of focus. He looks at camera casually: "Bro I literally just rented this car in two minutes."
+0:03–0:07 | He flips camera to show his phone screen — @image1, static, no scrolling — NOVARIDE app, map screen with pink car pins, the pink NOVA car card visible at the bottom. His thumb taps the "Book Now" button on screen. Then he pans the camera up from the phone to the actual pink car parked right there on the street. "Found it on the app, walked here, unlocked it. That's it."
+0:07–0:10 | Camera flips back to his face. Slight smirk, nods. "Fifteen bucks an hour. I'm not giving this back." End.
+Handheld selfie, outdoor daylight, urban street setting. He talks relaxed and low-energy — not selling, just showing. No text overlays, no TikTok UI, raw footage.`;
+
+const TEMPLATE_PROMPT_APP_0504_1_1 = `10-sec TikTok UGC, 9:16, iPhone on tripod
+0:00–0:03 | Medium shot, facing camera — white fluffy sherpa hat with green ears, platinum blonde hair with bangs, white tank top, nose and lip piercings, pouty expression. Stylish apartment with terracotta walls behind her. She's sitting at a desk with MacBook open. Looks at camera: "Wait, I need to show you where I've been getting my clothes."
+0:03–0:07 | She turns the MacBook toward camera — screen shows @image1, static, no scrolling — LAYERED website, editorial flat-lay hero image, product grid, clean cream UI. She points at the screen with one finger. "This site is actually so good, look at this — everything is styled in layers, they have the cutest pieces." Her finger taps on a product card on screen.
+0:07–0:10 | She turns laptop back, faces camera, slight nod with pouty satisfied look. "I already ordered three things, no regrets." End.
+Static tripod, warm apartment lighting, natural tones. She talks casually at normal speed — not hyped, more like sharing a secret with a friend. No text overlays, no TikTok UI, raw footage.`;
+
+const TEMPLATE_PROMPT_APP_0504_1_4 = `11-sec TikTok UGC, 9:16, iPhone
+0:00–0:03 | Selfie close-up, front camera, young woman mid-twenties named Clara with dirty-blonde hair pulled back loosely, a few strands falling around her face, natural bare skin with light freckles, no makeup, wearing a black short-sleeve blouse with white polka dots and a crisp white peter-pan collar, standing in a softly lit bedroom corner. Behind her out of focus: two small wooden-framed colorful art prints on a cream wall, a sliver of white window frame catching afternoon light. She tilts her head slightly, gives a warm sheepish smile into the lens, brushing a strand of hair behind her ear. Gentle "okay hear me out" energy.
+0:03–0:08 | Camera flips to iPhone screen showing @image1, static, no scrolling. Her finger with short unpainted nails taps the "Condition" card showing Moisture 68%, Light 45%, Temp 22°C, then gently taps the orange water droplet button. "Okay so — I am the worst plant mom on earth, I kill everything. But this app literally tells me when to water, how much light she needs, everything. Meet Monstera Marge — she's at 92% healthy and I have never been so proud."
+0:08–0:11 | Camera flips back to face, now crouched next to a large Monstera deliciosa in a terracotta pot sitting on a small white wooden stool in the corner of her bedroom — the plant's big split leaves spilling out to both sides, rich soil visible, two small framed colorful art prints on the wall above, edge of a white bed visible in the foreground. Clara cups one of the large glossy leaves in her palm, cheek close to the plant, looking into the camera with a giddy proud grin. A small silver watering can rests on the stool beside the pot. "Go download Sprout. Marge says thank you." She gives the leaf a tiny kiss. End.
+One take, cozy golden-hour bedroom setup — warm natural sunlight filtering through a sheer curtain, soft shadows on the cream wall, lived-in and intimate. No text overlays, no TikTok UI, raw footage. Soft affectionate plant-mom tone that builds into genuine pride and excitement.`;
+
+const TEMPLATE_PROMPT_APP_0504_1_5 = `10-sec TikTok UGC, 9:16, iPhone
+0:00–0:02 | Selfie close-up, front camera, young Asian woman mid-twenties with messy short black pixie haircut and choppy fringe, small silver hoop nose ring, no-makeup look, oversized cream cotton t-shirt, sitting on a deep blue velvet tufted sofa, vintage art posters softly out of focus behind her (yellow peaches "1999," black cat "NINE LIVES NONE LEFT"), warm afternoon sunlight from balcony window. She tilts her head, gives a soft excited smile straight into the lens. Gentle "omg you guys" energy.
+0:02–0:07 | Camera flips to iPhone screen showing @image1, static, no scrolling. Her finger with short unpainted nails taps the "Activity monitoring" and "Nutrition" sections of the PawTrack app. "Okay so — I found this app that tracks literally everything about my dog. Activity, nutrition, GPS, sleep quality. And Buddy has never been healthier, look at his stats. This is actually life-changing for pet moms."
+0:07–0:10 | Camera flips back to face, now sitting on the beige patterned rug hugging her young German Shepherd puppy from the side, cheek pressed against his fluffy head, both looking into the camera. Puppy has perky ears, bright eyes, glossy golden-brown coat, pink tongue out, small black GPS collar with paw icon. She grins widely, scratching behind his ear. "Go download it, I'm serious. My baby says hi." Dog licks her cheek. End.
+One take, cozy afternoon setup — warm natural sunlight, sheer curtains glow, silver arc lamp and glass coffee table in frame. No text overlays, no TikTok UI, raw footage. Soft affectionate pet-mom tone that builds into genuine love and excitement.`;
+
+const TEMPLATE_PROMPT_APP_0504_1_6 = `15-sec TikTok UGC, 9:16, iPhone
+0:00–0:03 | Wide handheld shot, phone propped on a bench across the gym floor, young man mid-twenties named Adam, Black, clean low fade haircut, sharp jawline, sweat glistening across forehead and collarbones, wearing a fitted plain black ribbed tank top and black athletic shorts, mid-set on a flat bench pressing heavy dumbbells. Gym interior: dim low-lit space with black rubber flooring, rows of heavy dumbbells on a black rack, Technogym benches, mirrored wall reflecting warm pendant lighting, moody industrial vibe. He finishes his last rep with a loud grunt, slams both dumbbells down onto the rubber floor — loud THUD echoes — stands up fast, grabs the phone. Intense "listen up" energy.
+0:03–0:06 | Selfie close-up, front camera, Adam breathing hard, veins visible in his neck, sweat dripping down his temple, staring dead into the lens. He points aggressively at the camera, jaw tight. "Yo — STOP paying a trainer two hundred bucks a session. I'm not playing with you right now."
+0:06–0:11 | Camera flips to iPhone screen showing @image1, static, no scrolling. His thumb aggressively taps the neon-green "Today's Pick" AI banner, then taps into the "Strength" program card showing 42 min, 6/8 exercises, then the bar chart highlighting Set 7, then the Heart Rate 138 BPM tile. "This app builds your ENTIRE program. AI literally reads your recovery, your heart rate, your hydration — and gives you EXACTLY what to do today. 42 minutes. Eight exercises. Done. No guessing. No excuses."
+0:11–0:15 | Camera flips back, Adam now standing in front of the dumbbell rack, grabs two heavier dumbbells, curls them up once hard, flexes into the camera, chest heaving, face intense but with a fired-up smirk breaking through. He kisses his bicep, then jabs his finger at the lens. "Download it. Right now. No more excuses. See you in the gym." He tosses the phone toward the bench — cut to black. End.
+One take, dim industrial gym setup — moody overhead lighting, shadows on black rubber flooring, reflections in the mirror wall, live ambient sounds of weights clanking, heavy breathing, sneakers squeaking. No text overlays, no TikTok UI, raw handheld footage. Aggressive alpha gym-bro tone throughout — loud, intense, no-nonsense, borderline yelling but controlled.`;
+
+const TEMPLATE_PROMPT_APP_0504_1_7 = `12-sec TikTok UGC, 9:16, iPhone
+0:00–0:03 | Tripod, medium shot. Girl sitting at desk facing camera — green frog beanie, short blonde hair, zigzag knit tank top over white skirt. Cloth ventriloquist puppet on right hand raised to face level — puppet is her mini-me: same blonde hair, same green frog beanie, same zigzag top. She looks at puppet sideways. Puppet's mouth opens: "Hey, show them where you got me." She raises eyebrow. Her own voice pitched slightly higher for the puppet, lips barely moving.
+0:03–0:09 | She holds up her phone in her left hand, screen facing camera — the phone shows @image1, static, no scrolling — a cute doll/puppet customization app with pink-purple UI, a "Build Your Mini-Me" screen visible with options for hair, outfit, accessories, and a preview of a custom puppet that looks like her. Right hand keeps the puppet raised next to the phone so both are in frame — the puppet and its digital version on screen side by side. Puppet's mouth moves: "You literally designed me on here. Pick the hair, pick the outfit, they make it and ship it. Look how accurate I am." She tilts the puppet toward the phone for comparison. Same ventriloquist voice, lips barely moving.
+0:09–0:12 | She lowers the phone, faces camera with puppet still up. Puppet: "Go make your own." She drops the act, normal voice: "She's right, it's actually so fun." Slight smirk. End.
+Tripod the whole time, bright indoor daylight, white wall, wooden desk. Puppet is a soft cloth hand puppet with hinged fabric mouth, blonde hair, matching outfit. Amateur ventriloquism — her voice, lips closed, slightly higher pitch for puppet. No text overlays, no TikTok UI, raw footage.`;
+
+const TEMPLATE_PROMPT_APP_0504_1_8 = `12-sec TikTok UGC, 9:16, iPhone on tripod
+0:00–0:03 | Medium shot, facing camera, blue beanie with ear ties, dark red hair, gold rimless glasses, cropped white graphic tee, denim shorts. Stylish apartment with checkerboard floor behind her. She holds her phone up next to her face, screen facing camera showing @image1 — COZYBOX app, purple/pink UI, cute 3D home goods. Static, no scrolling. "Okay so I found this app and I already spent too much money."
+0:03–0:08 | She lowers the phone, steps to the side revealing a small pastel pink armchair and a mushroom-shaped lamp sitting on the floor/table behind her — actual items she ordered. She gestures at them with one hand, other hand still holding phone. "I got this chair and this lamp, look how cute they are in person." She picks up or touches the lamp briefly. Genuine happy energy, showing off her finds.
+0:08–0:12 | She holds the phone back up to camera showing @image1 again, taps the screen. "It's called COZYBOX, everything on here is adorable. I'm going back in." She looks down at her phone and starts scrolling, half-smiling, already shopping again. End.
+Static tripod, warm indoor apartment lighting, checkerboard floor visible in background. She talks at normal speed, casual and genuine — like telling a friend about a good find, not selling. No text overlays, no TikTok UI, no subtitles, raw footage.`;
+
+const TEMPLATE_PROMPT_APP_0504_1_10 = `11-sec TikTok UGC, 9:16, iPhone
+0:00–0:03 | Selfie close-up, front camera, young man mid-twenties named Erik with tousled shoulder-length dirty-blonde curly hair falling around his face, light stubble, hazel eyes, natural skin, wearing a plain neutral charcoal-grey football jersey (short sleeves, crew neck, lightweight breathable fabric, no logos or branding) paired with matching plain black athletic shorts, standing on the edge of a turf soccer field. Behind him out of focus: tall black netting, steel floodlight pole, hazy Manhattan skyline catching golden-hour light. He pushes a curl out of his eyes, gives a half-smirk into the lens. Laid-back "bro, listen" energy.
+0:03–0:08 | Camera flips to iPhone screen showing @image1, static, no scrolling. His finger taps the "TONIGHT — 12+ matches near you" banner, then scrolls through the match list — "Midweek Mashup" at Hackney Marshes, 8/10 players — then taps into the match detail screen and selects the "MID" position button, finally hovering over the neon-green "JOIN MATCH" button. "Okay real talk — I just moved here and had literally nobody to kick a ball with. Found this app called Pitchup, it shows you every pickup match near you tonight. Pick your level, pick your position, tap join. That's it — I had a game locked in within a day."
+0:08–0:11 | Camera flips back, handheld, now mid-field on the turf — Erik jogging backwards with a white soccer ball at his feet, wearing the same plain charcoal-grey unbranded football jersey and black shorts, now with a pair of plain black football cleats, grinning wide, a bit sweaty with jersey slightly clinging to him, the Manhattan skyline silhouetted behind him under a dusty pink and blue dusk sky, floodlights just coming on, other players small in the background. He flicks the ball up with his toe, catches it in his hand, points at the camera. "Seriously. Download it. I'll see you on the pitch." He drops the ball and turns to sprint after it. End.
+One take, golden-to-dusk outdoor setup — warm waning sunlight, soft haze over the skyline, live ambient sounds of distant shouts and ball kicks. No text overlays, no TikTok UI, raw footage. Chill confident guy-who-just-found-his-people tone that builds into genuine hype and joy.`;
+
 const TEMPLATE_PROMPT_UGC_TRY_ON_6 = `Style: UGC luxury, iPhone front camera, natural high-end lifestyle
 Prompt:
 A young stylish woman  is inside a modern luxury mansion (large windows, soft sunlight, neutral tones, minimal expensive interior).
@@ -404,6 +490,66 @@ function isUnboxing4BundledRecreateLabel(normalizedLabel: string): boolean {
     n.includes("unoboxing 4") ||
     n.includes("unoboxing4")
   );
+}
+
+/**
+ * App gallery `0504 (1)(1).mp4` — LAYERED web + avatar bundled Recreate.
+ * Uses regex so `0504 (1)(10)` does not match as `(1)(1)`.
+ */
+function isAppTemplate050411BundledRecreateLabel(normalizedLabel: string): boolean {
+  const n = normalizedLabel;
+  if (n.includes("tutorial")) return false;
+  return /\b0504\s*\(1\)\(1\)\)/u.test(n) || (n.includes("0504 (1)(1)") && !/\b0504\s*\(1\)\(10\)/u.test(n));
+}
+
+/** App gallery `0504 (1)(4).mp4` — Sprout + Clara bundled Recreate. */
+function isAppTemplate050414BundledRecreateLabel(normalizedLabel: string): boolean {
+  const n = normalizedLabel;
+  if (n.includes("tutorial")) return false;
+  return /\b0504\s*\(1\)\(4\)/u.test(n) || n.includes("0504 (1)(4)");
+}
+
+/** App gallery `0504 (1)(5).mp4` — PawTrack + pet-mom avatar bundled Recreate. */
+function isAppTemplate050415BundledRecreateLabel(normalizedLabel: string): boolean {
+  const n = normalizedLabel;
+  if (n.includes("tutorial")) return false;
+  return /\b0504\s*\(1\)\(5\)/u.test(n) || n.includes("0504 (1)(5)");
+}
+
+/** App gallery `0504 (1)(6).mp4` — Adam + fitness app UI bundled Recreate. */
+function isAppTemplate050416BundledRecreateLabel(normalizedLabel: string): boolean {
+  const n = normalizedLabel;
+  if (n.includes("tutorial")) return false;
+  return /\b0504\s*\(1\)\(6\)/u.test(n) || n.includes("0504 (1)(6)");
+}
+
+/** App gallery `0504 (1)(7).mp4` — Mini-Me app + ventriloquist bundled Recreate. */
+function isAppTemplate050417BundledRecreateLabel(normalizedLabel: string): boolean {
+  const n = normalizedLabel;
+  if (n.includes("tutorial")) return false;
+  return /\b0504\s*\(1\)\(7\)/u.test(n) || n.includes("0504 (1)(7)");
+}
+
+/** App gallery `0504 (1)(8).mp4` — COZYBOX app + avatar bundled Recreate. */
+function isAppTemplate050418BundledRecreateLabel(normalizedLabel: string): boolean {
+  const n = normalizedLabel;
+  if (n.includes("tutorial")) return false;
+  return /\b0504\s*\(1\)\(8\)/u.test(n) || n.includes("0504 (1)(8)");
+}
+
+/** App gallery `0504 (1)(10).mp4` — Pitchup + Erik bundled Recreate. */
+function isAppTemplate0504110BundledRecreateLabel(normalizedLabel: string): boolean {
+  const n = normalizedLabel;
+  if (n.includes("tutorial")) return false;
+  return /\b0504\s*\(1\)\(10\)/u.test(n) || n.includes("0504 (1)(10)");
+}
+
+/** App gallery `0504 (1).mp4` (bare) — NOVARIDE + renter bundled Recreate; excludes `0504 (1)(N)`. */
+function isAppTemplate0504Bare1BundledRecreateLabel(normalizedLabel: string): boolean {
+  const n = normalizedLabel;
+  if (n.includes("tutorial")) return false;
+  if (/\b0504\s*\(1\)\s*\(/u.test(n)) return false;
+  return /\b0504\s*\(1\)/u.test(n);
 }
 
 /**
@@ -686,6 +832,30 @@ function promptForTemplateLabel(label: string): string {
     return TEMPLATE_PROMPT_TUTORIAL_2;
   }
   if (n.includes("tutorial")) return TEMPLATE_PROMPT_TUTORIAL;
+  if (isAppTemplate050411BundledRecreateLabel(n)) {
+    return TEMPLATE_PROMPT_APP_0504_1_1;
+  }
+  if (/\b0504\s*\(1\)\(4\)/u.test(n) || n.includes("0504 (1)(4)")) {
+    return TEMPLATE_PROMPT_APP_0504_1_4;
+  }
+  if (/\b0504\s*\(1\)\(5\)/u.test(n) || n.includes("0504 (1)(5)")) {
+    return TEMPLATE_PROMPT_APP_0504_1_5;
+  }
+  if (/\b0504\s*\(1\)\(6\)/u.test(n) || n.includes("0504 (1)(6)")) {
+    return TEMPLATE_PROMPT_APP_0504_1_6;
+  }
+  if (/\b0504\s*\(1\)\(7\)/u.test(n) || n.includes("0504 (1)(7)")) {
+    return TEMPLATE_PROMPT_APP_0504_1_7;
+  }
+  if (/\b0504\s*\(1\)\(8\)/u.test(n) || n.includes("0504 (1)(8)")) {
+    return TEMPLATE_PROMPT_APP_0504_1_8;
+  }
+  if (/\b0504\s*\(1\)\(10\)/u.test(n) || n.includes("0504 (1)(10)")) {
+    return TEMPLATE_PROMPT_APP_0504_1_10;
+  }
+  if (isAppTemplate0504Bare1BundledRecreateLabel(n)) {
+    return TEMPLATE_PROMPT_APP_0504_1;
+  }
   if (
     n.includes("unboxing (4)") ||
     n.includes("unboxing 4") ||
@@ -786,9 +956,11 @@ function promptForTemplateLabel(label: string): string {
 }
 
 async function pollVideo(taskId: string, personalApiKey?: string, piapiApiKey?: string): Promise<string> {
-  const max = 120;
+  const deadline = Date.now() + ADS_STUDIO_VIDEO_POLL_MAX_MS;
   const keyParam = `${personalApiKey ? `&personalApiKey=${encodeURIComponent(personalApiKey)}` : ""}${piapiApiKey ? `&piapiApiKey=${encodeURIComponent(piapiApiKey)}` : ""}`;
-  for (let i = 0; i < max; i++) {
+  const wait = () => new Promise((r) => setTimeout(r, ADS_STUDIO_VIDEO_POLL_INTERVAL_MS));
+
+  while (Date.now() < deadline) {
     const res = await fetch(`/api/kling/status?taskId=${encodeURIComponent(taskId)}${keyParam}`, { cache: "no-store" });
     const json = (await res.json()) as {
       data?: { status?: string; response?: string[]; error_message?: string | null };
@@ -796,7 +968,7 @@ async function pollVideo(taskId: string, personalApiKey?: string, piapiApiKey?: 
     };
     if (!res.ok) {
       if (res.status === 429 || res.status === 502 || res.status === 503 || res.status === 504) {
-        await new Promise((r) => setTimeout(r, 1500));
+        await wait();
         continue;
       }
       throw new Error(json.error || `Video poll failed (HTTP ${res.status}).`);
@@ -817,13 +989,13 @@ async function pollVideo(taskId: string, personalApiKey?: string, piapiApiKey?: 
       "DONE",
     ]);
     if (inFlight.has(st)) {
-      await new Promise((r) => setTimeout(r, 1500));
+      await wait();
       continue;
     }
     if (st === "SUCCESS") {
       const u = json.data.response?.[0];
       if (!u || typeof u !== "string") {
-        await new Promise((r) => setTimeout(r, 1500));
+        await wait();
         continue;
       }
       return u;
@@ -831,9 +1003,12 @@ async function pollVideo(taskId: string, personalApiKey?: string, piapiApiKey?: 
     if (st === "FAILED") {
       throw new Error(json.data.error_message?.trim() || "Video generation failed.");
     }
-    await new Promise((r) => setTimeout(r, 1500));
+    await wait();
   }
-  throw new Error("Timeout waiting for video.");
+  const hours = ADS_STUDIO_VIDEO_POLL_MAX_MS / (60 * 60 * 1000);
+  throw new Error(
+    `Video is still processing on the server, but this tab stopped waiting after ${hours} hour(s). Refresh the page or check back later.`,
+  );
 }
 
 export default function AdsStudioPanel() {
@@ -1048,20 +1223,14 @@ export default function AdsStudioPanel() {
     [activeJobs],
   );
 
-  const selectedHistoryOrJob = useMemo(() => {
-    if (!selectedSidebarKey) return null;
-    if (selectedSidebarKey.startsWith("history:")) {
-      const id = selectedSidebarKey.slice(8);
-      const item = history.find((h) => h.id === id);
-      return item ? ({ kind: "history" as const, item } as const) : null;
-    }
-    if (selectedSidebarKey.startsWith("job:")) {
-      const id = selectedSidebarKey.slice(4);
-      const job = activeJobs.find((j) => j.id === id);
-      return job ? ({ kind: "job" as const, job } as const) : null;
-    }
-    return null;
-  }, [selectedSidebarKey, history, activeJobs]);
+  const selectedFailedJobMessage = useMemo(() => {
+    if (!selectedSidebarKey?.startsWith("job:")) return null;
+    const id = selectedSidebarKey.slice(4);
+    const j = activeJobs.find((x) => x.id === id);
+    if (!j || j.phase !== "failed" || !j.error?.trim()) return null;
+    return j.error.trim();
+  }, [selectedSidebarKey, activeJobs]);
+
   const generationCredits = useMemo(
     () =>
       calculateVideoCreditsForModel({
@@ -1092,7 +1261,8 @@ export default function AdsStudioPanel() {
           : "Avatar uploaded",
       );
     } catch (err) {
-      toast.error("Upload failed", { description: err instanceof Error ? err.message : "Unknown error" });
+      logGenerationFailure("ads-studio.ref-upload", err, { kind });
+      toast.error("Upload failed", { description: userMessageFromCaughtError(err, "Upload failed.") });
     } finally {
       if (kind === "app") setUploadingRefSlot(false);
       else setUploadingAvatar(false);
@@ -1255,7 +1425,8 @@ export default function AdsStudioPanel() {
           adsStudioDismissedJobIdsRef.current.delete(jobId);
           return;
         }
-        const msg = err instanceof Error ? err.message : "Unknown error";
+        logGenerationFailure("ads-studio.generate", err, { jobId });
+        const msg = userMessageFromCaughtError(err);
         setActiveJobs((prev) =>
           prev.map((j) => (j.id === jobId ? { ...j, phase: "failed" as const, error: msg } : j)),
         );
@@ -1310,7 +1481,8 @@ export default function AdsStudioPanel() {
             adsStudioDismissedJobIdsRef.current.delete(jobId);
             return;
           }
-          const msg = err instanceof Error ? err.message : "Unknown error";
+          logGenerationFailure("ads-studio.resume-poll", err, { jobId, taskId });
+          const msg = userMessageFromCaughtError(err);
           setActiveJobs((prev) =>
             prev.map((j) => (j.id === jobId ? { ...j, phase: "failed" as const, error: msg } : j)),
           );
@@ -1369,124 +1541,154 @@ export default function AdsStudioPanel() {
     // Always replace current prompt (never append), even when input already contains text.
     setPrompt(nextPrompt);
     scrollComposerIntoView();
+    const recreateAssetType: "product" | "app" = templateGalleryKind === "app" ? "app" : "product";
+    setAssetType(recreateAssetType);
+    if (isAppTemplate050411BundledRecreateLabel(n)) {
+      setAssetType("app");
+      setAppRefUrl(resolveAdsStudioPublicImage(ADS_STUDIO_APP_0504_1_1_APP_PATH));
+      setAvatarUrl(resolveAdsStudioPublicImage(ADS_STUDIO_APP_0504_1_1_AVATAR_PATH));
+      return;
+    }
+    if (isAppTemplate050414BundledRecreateLabel(n)) {
+      setAssetType("app");
+      setAppRefUrl(resolveAdsStudioPublicImage(ADS_STUDIO_APP_0504_1_4_APP_PATH));
+      setAvatarUrl(resolveAdsStudioPublicImage(ADS_STUDIO_APP_0504_1_4_AVATAR_PATH));
+      return;
+    }
+    if (isAppTemplate050415BundledRecreateLabel(n)) {
+      setAssetType("app");
+      setAppRefUrl(resolveAdsStudioPublicImage(ADS_STUDIO_APP_0504_1_5_APP_PATH));
+      setAvatarUrl(resolveAdsStudioPublicImage(ADS_STUDIO_APP_0504_1_5_AVATAR_PATH));
+      return;
+    }
+    if (isAppTemplate050416BundledRecreateLabel(n)) {
+      setAssetType("app");
+      setAppRefUrl(resolveAdsStudioPublicImage(ADS_STUDIO_APP_0504_1_6_APP_PATH));
+      setAvatarUrl(resolveAdsStudioPublicImage(ADS_STUDIO_APP_0504_1_6_AVATAR_PATH));
+      return;
+    }
+    if (isAppTemplate050417BundledRecreateLabel(n)) {
+      setAssetType("app");
+      setAppRefUrl(resolveAdsStudioPublicImage(ADS_STUDIO_APP_0504_1_7_APP_PATH));
+      setAvatarUrl(resolveAdsStudioPublicImage(ADS_STUDIO_APP_0504_1_7_AVATAR_PATH));
+      return;
+    }
+    if (isAppTemplate050418BundledRecreateLabel(n)) {
+      setAssetType("app");
+      setAppRefUrl(resolveAdsStudioPublicImage(ADS_STUDIO_APP_0504_1_8_APP_PATH));
+      setAvatarUrl(resolveAdsStudioPublicImage(ADS_STUDIO_APP_0504_1_8_AVATAR_PATH));
+      return;
+    }
+    if (isAppTemplate0504110BundledRecreateLabel(n)) {
+      setAssetType("app");
+      setAppRefUrl(resolveAdsStudioPublicImage(ADS_STUDIO_APP_0504_1_10_APP_PATH));
+      setAvatarUrl(resolveAdsStudioPublicImage(ADS_STUDIO_APP_0504_1_10_AVATAR_PATH));
+      return;
+    }
+    if (isAppTemplate0504Bare1BundledRecreateLabel(n)) {
+      setAssetType("app");
+      setAppRefUrl(resolveAdsStudioPublicImage(ADS_STUDIO_APP_0504_BASE_1_APP_PATH));
+      setAvatarUrl(resolveAdsStudioPublicImage(ADS_STUDIO_APP_0504_BASE_1_AVATAR_PATH));
+      return;
+    }
     if (isTutorial2) {
       const avatarResolved = resolveAdsStudioPublicImage(ADS_STUDIO_TUTORIAL_2_AVATAR_PATH);
       const productResolved = resolveAdsStudioPublicImage(ADS_STUDIO_TUTORIAL_2_PRODUCT_PATH);
-      setAssetType("product");
       setAppRefUrl(productResolved);
       setAvatarUrl(avatarResolved);
       return;
     }
     if (isHyperMotionTemplateLabel(n)) {
-      setAssetType("product");
       setAppRefUrl("");
       setAvatarUrl("");
       return;
     }
     if (isTutorialStandardTemplateLabel(n)) {
-      setAssetType("product");
       setAppRefUrl(resolveAdsStudioPublicImage(ADS_STUDIO_TUTORIAL_STANDARD_PRODUCT_PATH));
       setAvatarUrl(resolveAdsStudioPublicImage(ADS_STUDIO_TUTORIAL_STANDARD_AVATAR_PATH));
       return;
     }
     if (isProTryOnTemplateLabel(n)) {
-      setAssetType("product");
       setAppRefUrl(resolveAdsStudioPublicImage(ADS_STUDIO_PRO_TRY_ON_PRODUCT_PATH));
       setAvatarUrl(resolveAdsStudioPublicImage(ADS_STUDIO_PRO_TRY_ON_AVATAR_PATH));
       return;
     }
     if (isVirtualTryOn2BundledRecreateLabel(n)) {
-      setAssetType("product");
       setAppRefUrl(resolveAdsStudioPublicImage(ADS_STUDIO_VIRTUAL_TRY_ON_2_PRODUCT_PATH));
       setAvatarUrl(resolveAdsStudioPublicImage(ADS_STUDIO_VIRTUAL_TRY_ON_2_AVATAR_PATH));
       return;
     }
     if (isTryOn3BundledRecreateLabel(n)) {
-      setAssetType("product");
       setAppRefUrl(resolveAdsStudioPublicImage(ADS_STUDIO_TRY_ON_3_PRODUCT_PATH));
       setAvatarUrl(resolveAdsStudioPublicImage(ADS_STUDIO_TRY_ON_3_AVATAR_PATH));
       return;
     }
     if (isTryOn4BundledRecreateLabel(n)) {
-      setAssetType("product");
       setAppRefUrl(resolveAdsStudioPublicImage(ADS_STUDIO_TRY_ON_4_PRODUCT_PATH));
       setAvatarUrl(resolveAdsStudioPublicImage(ADS_STUDIO_TRY_ON_4_AVATAR_PATH));
       return;
     }
     if (isTryOn5BundledRecreateLabel(n)) {
-      setAssetType("product");
       setAppRefUrl(resolveAdsStudioPublicImage(ADS_STUDIO_TRY_ON_5_PRODUCT_PATH));
       setAvatarUrl(resolveAdsStudioPublicImage(ADS_STUDIO_TRY_ON_5_AVATAR_PATH));
       return;
     }
     if (isTryOn6NoRefsBundledRecreateLabel(n)) {
-      setAssetType("product");
       setAppRefUrl("");
       setAvatarUrl("");
       return;
     }
     if (isGenericUgcTryOnBundledRecreateLabel(n)) {
-      setAssetType("product");
       setAppRefUrl(resolveAdsStudioPublicImage(ADS_STUDIO_UGC_TRY_ON_STREET_PRODUCT_PATH));
       setAvatarUrl(resolveAdsStudioPublicImage(ADS_STUDIO_UGC_TRY_ON_STREET_AVATAR_PATH));
       return;
     }
     if (isUgcWomanBundledRecreateLabel(n)) {
-      setAssetType("product");
       setAppRefUrl(resolveAdsStudioPublicImage(ADS_STUDIO_UGC_WOMAN_PRODUCT_PATH));
       setAvatarUrl(resolveAdsStudioPublicImage(ADS_STUDIO_UGC_WOMAN_AVATAR_PATH));
       return;
     }
     if (isUgc2BundledRecreateLabel(n)) {
-      setAssetType("product");
       setAppRefUrl(resolveAdsStudioPublicImage(ADS_STUDIO_UGC_2_PRODUCT_PATH));
       setAvatarUrl(resolveAdsStudioPublicImage(ADS_STUDIO_UGC_2_AVATAR_PATH));
       return;
     }
     if (isUgc3BundledRecreateLabel(n)) {
-      setAssetType("product");
       setAppRefUrl(resolveAdsStudioPublicImage(ADS_STUDIO_UGC_3_PRODUCT_PATH));
       setAvatarUrl(resolveAdsStudioPublicImage(ADS_STUDIO_UGC_3_AVATAR_PATH));
       return;
     }
     if (isUgc4BundledRecreateLabel(n)) {
-      setAssetType("product");
       setAppRefUrl(resolveAdsStudioPublicImage(ADS_STUDIO_UGC_4_PRODUCT_PATH));
       setAvatarUrl(resolveAdsStudioPublicImage(ADS_STUDIO_UGC_4_AVATAR_PATH));
       return;
     }
     if (isUgc5BundledRecreateLabel(n)) {
-      setAssetType("product");
       setAppRefUrl(resolveAdsStudioPublicImage(ADS_STUDIO_UGC_5_PRODUCT_PATH));
       setAvatarUrl(resolveAdsStudioPublicImage(ADS_STUDIO_UGC_5_AVATAR_PATH));
       return;
     }
     if (isUgc6BundledRecreateLabel(n)) {
-      setAssetType("product");
       setAppRefUrl(resolveAdsStudioPublicImage(ADS_STUDIO_UGC_6_PRODUCT_PATH));
       setAvatarUrl(resolveAdsStudioPublicImage(ADS_STUDIO_UGC_6_AVATAR_PATH));
       return;
     }
     if (isUnboxing2BundledRecreateLabel(n)) {
-      setAssetType("product");
       setAppRefUrl(resolveAdsStudioPublicImage(ADS_STUDIO_UNBOXING_2_PRODUCT_PATH));
       setAvatarUrl(resolveAdsStudioPublicImage(ADS_STUDIO_UNBOXING_2_AVATAR_PATH));
       return;
     }
     if (isUnboxing3BundledProductOnlyRecreateLabel(n)) {
-      setAssetType("product");
       setAppRefUrl(resolveAdsStudioPublicImage(ADS_STUDIO_UNBOXING_3_PRODUCT_PATH));
       setAvatarUrl("");
       return;
     }
     if (isUnboxing4BundledRecreateLabel(n)) {
-      setAssetType("product");
       setAppRefUrl(resolveAdsStudioPublicImage(ADS_STUDIO_UNBOXING_4_PRODUCT_PATH));
       setAvatarUrl(resolveAdsStudioPublicImage(ADS_STUDIO_UNBOXING_4_AVATAR_PATH));
       return;
     }
     if (isBundledFroggyUnboxingTemplateLabel(n)) {
-      setAssetType("product");
       setAppRefUrl(resolveAdsStudioPublicImage(ADS_STUDIO_UNBOXING_PRODUCT_PATH));
       setAvatarUrl(resolveAdsStudioPublicImage(ADS_STUDIO_UNBOXING_AVATAR_PATH));
       return;
@@ -1498,7 +1700,6 @@ export default function AdsStudioPanel() {
       setUploadingAvatar(true);
       try {
         const { productUrl, avatarUrl } = await uploadTemplateRefsFromPreviewVideo(tplUrl);
-        setAssetType(templateGalleryKind === "app" ? "app" : "product");
         setAppRefUrl(productUrl);
         setAvatarUrl(avatarUrl);
         toast.success("References added", {
@@ -1515,17 +1716,6 @@ export default function AdsStudioPanel() {
       scrollComposerIntoView();
     }
   }
-
-  const projectFocusOpen = selectedHistoryOrJob !== null;
-
-  const projectFocusVideoUrl = useMemo(() => {
-    if (!selectedHistoryOrJob) return null;
-    if (selectedHistoryOrJob.kind === "history") {
-      const u = selectedHistoryOrJob.item.videoUrl?.trim();
-      return u || null;
-    }
-    return null;
-  }, [selectedHistoryOrJob]);
 
   useEffect(() => {
     if (!selectedSidebarKey) return;
@@ -1563,24 +1753,6 @@ export default function AdsStudioPanel() {
       }
     }
   }, [selectedSidebarKey, history, activeJobs]);
-
-  useEffect(() => {
-    if (!projectFocusOpen || typeof document === "undefined") return;
-    const prev = document.body.style.overflow;
-    document.body.style.overflow = "hidden";
-    const onKey = (e: KeyboardEvent) => {
-      if (e.key === "Escape") setSelectedSidebarKey(null);
-    };
-    window.addEventListener("keydown", onKey);
-    return () => {
-      document.body.style.overflow = prev;
-      window.removeEventListener("keydown", onKey);
-    };
-  }, [projectFocusOpen]);
-
-  function closeProjectFocus() {
-    setSelectedSidebarKey(null);
-  }
 
   const renderAdsGradientComposerCard = () => (
     <div className="relative w-full min-w-0 max-w-[1080px] rounded-[20px]">
@@ -1981,20 +2153,25 @@ export default function AdsStudioPanel() {
             ref={composerPanelRef}
             className="mx-auto flex w-full max-w-[1080px] min-w-0 flex-col items-center gap-4 scroll-mt-20 pt-8 sm:pt-10 md:scroll-mt-28 md:gap-5 md:pt-14 lg:pt-16"
           >
-          {!projectFocusOpen ? (
-            <h2 className="relative max-w-[44rem] px-3 text-center text-[1.625rem] font-semibold leading-[1.18] tracking-tight sm:text-3xl sm:leading-[1.15] md:text-[2.125rem] md:leading-[1.12]">
-              <span
-                aria-hidden
-                className="pointer-events-none absolute inset-x-4 top-1/2 -z-10 h-[62%] -translate-y-1/2 rounded-full bg-violet-500/14 blur-[46px] md:inset-x-8"
-              />
-              <span className="bg-gradient-to-br from-white via-zinc-100 to-violet-300/85 bg-clip-text text-transparent">
-                Turn any product into a video ad
-              </span>
-            </h2>
+          <h2 className="relative max-w-[44rem] px-3 text-center text-[1.625rem] font-semibold leading-[1.18] tracking-tight sm:text-3xl sm:leading-[1.15] md:text-[2.125rem] md:leading-[1.12]">
+            <span
+              aria-hidden
+              className="pointer-events-none absolute inset-x-4 top-1/2 -z-10 h-[62%] -translate-y-1/2 rounded-full bg-violet-500/14 blur-[46px] md:inset-x-8"
+            />
+            <span className="bg-gradient-to-br from-white via-zinc-100 to-violet-300/85 bg-clip-text text-transparent">
+              Turn any product into a video ad
+            </span>
+          </h2>
+          {selectedFailedJobMessage ? (
+            <div
+              role="alert"
+              className="mx-auto w-full max-w-[1080px] rounded-xl border border-rose-400/35 bg-rose-950/45 px-4 py-3 text-left shadow-[0_8px_28px_rgba(0,0,0,0.25)]"
+            >
+              <p className="text-[11px] font-semibold uppercase tracking-wide text-rose-200/90">Ads Studio</p>
+              <p className="mt-1 text-sm leading-snug text-rose-50/95">{selectedFailedJobMessage}</p>
+            </div>
           ) : null}
-          {!projectFocusOpen ? (
-            <div className="flex min-h-[min(58vh,540px)] w-full min-w-0 justify-center">{renderAdsGradientComposerCard()}</div>
-          ) : null}
+          <div className="flex min-h-[min(58vh,540px)] w-full min-w-0 justify-center">{renderAdsGradientComposerCard()}</div>
           <input
             ref={appInputRef}
             type="file"
@@ -2149,78 +2326,6 @@ export default function AdsStudioPanel() {
         </div>
       </section>
         </div>
-
-      {projectFocusOpen && selectedHistoryOrJob ? (
-        <div
-          className="fixed inset-0 z-[480] flex items-end justify-center p-3 pb-[max(0.75rem,env(safe-area-inset-bottom))] sm:items-center sm:p-6"
-          role="dialog"
-          aria-modal="true"
-          aria-labelledby="ads-project-focus-title"
-        >
-          <button
-            type="button"
-            aria-label="Close project view"
-            className="absolute inset-0 bg-black/50 backdrop-blur-xl transition hover:bg-black/55"
-            onClick={closeProjectFocus}
-          />
-          <div
-            className="relative z-10 flex max-h-[min(100dvh,920px)] w-full max-w-2xl flex-col gap-4 overflow-y-auto overscroll-contain rounded-2xl border border-white/12 bg-[#090910]/97 p-4 shadow-[0_24px_80px_rgba(0,0,0,0.65)] sm:max-w-3xl sm:p-5"
-            onClick={(e) => e.stopPropagation()}
-          >
-            <div className="flex items-center justify-between gap-3 border-b border-white/10 pb-3">
-              <h3 id="ads-project-focus-title" className="text-sm font-semibold text-white/90 sm:text-base">
-                {selectedHistoryOrJob.kind === "history"
-                  ? "Project"
-                  : selectedHistoryOrJob.job.phase === "failed"
-                    ? "Generation failed"
-                    : "Generation in progress"}
-              </h3>
-              <Button
-                type="button"
-                variant="ghost"
-                size="sm"
-                onClick={closeProjectFocus}
-                className="h-9 w-9 shrink-0 p-0 text-white/70 hover:bg-white/10 hover:text-white"
-              >
-                <X className="size-5" aria-hidden />
-              </Button>
-            </div>
-
-            <div className="relative w-full shrink-0 overflow-hidden rounded-xl border border-white/10 bg-black">
-              {projectFocusVideoUrl ? (
-                <video
-                  key={projectFocusVideoUrl}
-                  src={projectFocusVideoUrl}
-                  controls
-                  playsInline
-                  className="mx-auto max-h-[min(52vh,560px)] w-full bg-black object-contain"
-                />
-              ) : selectedHistoryOrJob.kind === "job" ? (
-                <div className="flex min-h-[200px] flex-col items-center justify-center gap-3 px-4 py-10">
-                  {selectedHistoryOrJob.job.phase === "failed" ? (
-                    <p className="max-w-md text-center text-sm text-rose-200/90">
-                      {selectedHistoryOrJob.job.error ?? "Something went wrong."}
-                    </p>
-                  ) : (
-                    <>
-                      <Loader2 className="size-10 shrink-0 animate-spin text-violet-300" aria-hidden />
-                      <p className="text-center text-sm text-white/55">
-                        {selectedHistoryOrJob.job.phase === "submitting" ? "Submitting…" : "Rendering video…"}
-                      </p>
-                    </>
-                  )}
-                </div>
-              ) : (
-                <div className="flex min-h-[120px] items-center justify-center px-4 py-8 text-sm text-white/50">
-                  No video for this project yet.
-                </div>
-              )}
-            </div>
-
-            {renderAdsGradientComposerCard()}
-          </div>
-        </div>
-      ) : null}
     </div>
   );
 }

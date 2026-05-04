@@ -57,7 +57,12 @@ export function userFacingProviderError(raw: string | null | undefined): string 
 
   const lower = s.toLowerCase();
 
-  if (/nsfw|porn|sexual|nude|moderation|content policy|policy violation|safety system|unsafe content|blocked|not allowed|prohibited|violate/.test(lower)) {
+  if (
+    /nsfw|porn|sexual|nude|moderation|content policy|policy violation|safety system|unsafe content|blocked|not allowed|prohibited|violate|inappropriate|restricted content|guardrails?|community standard|harmful content|responsible ai|\brai\b/.test(
+      lower,
+    ) ||
+    /content guideline|guidelines?|content guide|use policy|policy\b.*\b(violat|reject|block)/i.test(lower)
+  ) {
     return "Blocked by content guidelines. Try a different prompt or reference image.";
   }
   if (/rate ?limit|too many requests|\b429\b|throttl/.test(lower)) {

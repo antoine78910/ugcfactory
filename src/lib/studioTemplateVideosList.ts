@@ -15,6 +15,9 @@ const APP_TEMPLATE_SUBDIR = "template-app";
 /** Extra folder for new app template preview videos (same URL rules as product `template/`). */
 const APP_TEMPLATE_PREVIEW_SUBDIR = "app-template-preview";
 
+/** Basenames (no extension) hidden from the App templates grid only. */
+const APP_TEMPLATE_LISTING_EXCLUDED_BASE_NAMES = new Set(["0504 (1)(2)"]);
+
 function toLabel(filename: string): string {
   const base = filename.replace(/\.[^.]+$/, "");
   if (base.trim().toLowerCase() === "ugc") return "UGC Woman";
@@ -51,6 +54,11 @@ function mergeTemplateItemsByFilename(layers: StudioTemplateVideoItem[][]): Stud
   );
 }
 
+function isExcludedFromAppTemplateListing(filename: string): boolean {
+  const base = filename.replace(/\.[^.]+$/, "").trim().toLowerCase();
+  return APP_TEMPLATE_LISTING_EXCLUDED_BASE_NAMES.has(base);
+}
+
 /** Lists template preview videos for Ads Studio (server-only). */
 export async function listStudioTemplateVideosFromDisk(
   kind: StudioTemplateVideoListKind = "product",
@@ -60,5 +68,7 @@ export async function listStudioTemplateVideosFromDisk(
   }
   const appMain = await listTemplateVideosInPublicStudioSubdir(APP_TEMPLATE_SUBDIR);
   const appPreview = await listTemplateVideosInPublicStudioSubdir(APP_TEMPLATE_PREVIEW_SUBDIR);
-  return mergeTemplateItemsByFilename([appMain, appPreview]);
+  return mergeTemplateItemsByFilename([appMain, appPreview]).filter(
+    (item) => !isExcludedFromAppTemplateListing(item.filename),
+  );
 }
