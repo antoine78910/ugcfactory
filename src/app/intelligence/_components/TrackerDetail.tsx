@@ -323,7 +323,10 @@ export function TrackerDetail({
       <section className="rounded-2xl border border-white/10 bg-white/5 p-4 backdrop-blur-sm">
         <BlockHeader title="Top Hooks" onRefresh={() => fetchAds(true)} loading={adsLoading} />
         {adsLoading && <Skeleton rows={4} />}
-        {!adsLoading && <HooksTable ads={ads} />}
+        {!adsLoading && <HooksTable
+          ads={ads}
+          brandSlug={tracker.name.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-+|-+$/g, "")}
+        />}
       </section>
 
       <section className="rounded-2xl border border-white/10 bg-white/5 p-4 backdrop-blur-sm">
