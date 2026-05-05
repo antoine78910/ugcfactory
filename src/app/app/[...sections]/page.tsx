@@ -37,6 +37,7 @@ import {
   isPlatformCreditBypassActive,
   getPersonalElevenLabsApiKey,
 } from "@/app/_components/CreditsPlanContext";
+import { guardedFetch } from "@/lib/guardedFetch";
 import { refundPlatformCredits } from "@/lib/refundPlatformCredits";
 import {
   mergeStudioHistoryWithServer,
@@ -2973,7 +2974,7 @@ export default function AppBrandWizard() {
         setImageGen({ kind: "idle" });
         return;
       }
-      const res = await fetch("/api/nanobanana/generate", {
+      const { blocked, response: res } = await guardedFetch("/api/nanobanana/generate", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
@@ -2988,6 +2989,10 @@ export default function AppBrandWizard() {
           personalApiKey: getPersonalApiKey(),
         }),
       });
+      if (blocked) {
+        setImageGen({ kind: "idle" });
+        return;
+      }
       const json = (await res.json()) as { taskId?: string; error?: string };
       if (!res.ok || !json.taskId) throw new Error(json.error || "NanoBanana generate failed");
       setImageGen({ kind: "polling", taskId: json.taskId });
@@ -3131,7 +3136,7 @@ export default function AppBrandWizard() {
             ? 15
             : 15;
       const promptWithAudio = withAudioHint(videoPrompt);
-      const res = await fetch("/api/kling/generate", {
+      const { blocked, response: res } = await guardedFetch("/api/kling/generate", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
@@ -3145,6 +3150,10 @@ export default function AppBrandWizard() {
           personalApiKey: getPersonalApiKey(),
         }),
       });
+      if (blocked) {
+        setVideoGen({ kind: "idle" });
+        return;
+      }
       const json = (await res.json()) as { taskId?: string; error?: string };
       if (!res.ok || !json.taskId) throw new Error(json.error || "Video generate failed");
       setVideoGen({ kind: "polling", taskId: json.taskId });
@@ -4530,7 +4539,7 @@ export default function AppBrandWizard() {
                                 });
 
                                 // 3. Send storage path + params (server downloads via admin client)
-                                const res = await fetch("/api/elevenlabs/speech-to-speech", {
+                                const { blocked, response: res } = await guardedFetch("/api/elevenlabs/speech-to-speech", {
                                   method: "POST",
                                   headers: { "Content-Type": "application/json" },
                                   body: JSON.stringify({
@@ -4548,6 +4557,11 @@ export default function AppBrandWizard() {
                                     personalElevenLabsApiKey: getPersonalElevenLabsApiKey() || undefined,
                                   }),
                                 });
+                                if (blocked) {
+                                  refundPlatformCredits(platformChargeMotion, grantCredits, creditsRef);
+                                  setVoiceHistoryItems((prev) => prev.filter((i) => i.id !== jobId));
+                                  return;
+                                }
 
                                 let json: { rowId?: string; mediaUrl?: string; kind?: string; error?: string };
                                 try {
@@ -4643,9 +4657,9 @@ export default function AppBrandWizard() {
                                 );
                               }
 
-                              const res =
+                              const { blocked: motionBlocked, response: res } =
                                 appSection === "ad_clone"
-                                  ? await fetch("/api/wavespeed/video-translate", {
+                                  ? await guardedFetch("/api/wavespeed/video-translate", {
                                       method: "POST",
                                       headers: { "Content-Type": "application/json" },
                                       body: JSON.stringify({
@@ -4653,7 +4667,7 @@ export default function AppBrandWizard() {
                                         outputLanguage: adCloneOutputLanguage,
                                       }),
                                     })
-                                  : await fetch("/api/kling/motion-control", {
+                                  : await guardedFetch("/api/kling/motion-control", {
                                       method: "POST",
                                       headers: { "Content-Type": "application/json" },
                                       body: JSON.stringify({
@@ -4667,6 +4681,13 @@ export default function AppBrandWizard() {
                                         personalApiKey: getPersonalApiKey(),
                                       }),
                                     });
+                              if (motionBlocked) {
+                                refundPlatformCredits(platformChargeMotion, grantCredits, creditsRef);
+                                (isTranslate ? setTranslateHistoryItems : setMotionControlHistoryItems)(
+                                  (prev) => prev.filter((i) => i.id !== jobId),
+                                );
+                                return;
+                              }
                               const json = (await res.json()) as {
                                 taskId?: string;
                                 status?: string;

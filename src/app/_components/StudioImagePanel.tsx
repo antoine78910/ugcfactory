@@ -8,6 +8,7 @@ import {
   isPersonalApiActive,
   isPlatformCreditBypassActive,
 } from "@/app/_components/CreditsPlanContext";
+import { guardedFetch } from "@/lib/guardedFetch";
 import { refundPlatformCredits } from "@/lib/refundPlatformCredits";
 import { Loader2, Plus, Sparkles, UserRound } from "lucide-react";
 import { toast } from "sonner";
@@ -528,7 +529,7 @@ export default function StudioImagePanel({ onChangeVoice }: StudioImagePanelProp
 
     void (async () => {
       try {
-        const res = await fetch("/api/studio/generations/start", {
+        const { blocked, response: res } = await guardedFetch("/api/studio/generations/start", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
@@ -544,6 +545,10 @@ export default function StudioImagePanel({ onChangeVoice }: StudioImagePanelProp
             personalApiKey: getPersonalApiKey() ?? undefined,
           }),
         });
+        if (blocked) {
+          refundPlatformCredits(platformCharge, grantCredits, creditsRef);
+          return;
+        }
         const json = (await res.json()) as {
           data?: { id?: string; rows?: { id: string }[]; error?: string };
           error?: string;

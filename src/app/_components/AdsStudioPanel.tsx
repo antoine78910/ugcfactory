@@ -41,6 +41,7 @@ import { AdsStudioRefSourceDialog } from "@/app/_components/AdsStudioRefSourceDi
 import type { AdsStudioMentionEntry } from "@/app/_components/AdsStudioMentionMenu";
 import { loadAvatarUrls } from "@/lib/avatarLibrary";
 import { logGenerationFailure, userMessageFromCaughtError } from "@/lib/generationUserMessage";
+import { guardedFetch } from "@/lib/guardedFetch";
 
 /** Ads Studio: PiAPI Seedance 2 (non–fast) only. */
 const ADS_STUDIO_SEEDANCE_MODEL = "bytedance/seedance-2" as const;
@@ -2000,11 +2001,15 @@ export default function AdsStudioPanel() {
           videoPayload.imageUrl = avUrl;
         }
 
-        const videoRes = await fetch("/api/kling/generate", {
+        const { blocked: videoBlocked, response: videoRes } = await guardedFetch("/api/kling/generate", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify(videoPayload),
         });
+        if (videoBlocked) {
+          setActiveJobs((prev) => prev.filter((j) => j.id !== jobId));
+          return;
+        }
         const videoJson = (await videoRes.json()) as { taskId?: string; error?: string };
         if (!videoRes.ok || !videoJson.taskId) throw new Error(videoJson.error || "Video generation failed");
 

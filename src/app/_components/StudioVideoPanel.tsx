@@ -73,6 +73,7 @@ import {
   appendStudioHistoryNextPage,
 } from "@/lib/mergeStudioHistoryWithLocal";
 import { isKieServableReferenceImageUrl } from "@/lib/kieSoraReferenceImage";
+import { guardedFetch } from "@/lib/guardedFetch";
 import { refundPlatformCredits } from "@/lib/refundPlatformCredits";
 import { calculateVideoCredits } from "@/lib/linkToAd/generationCredits";
 import { calculateStudioVideoEditCredits } from "@/lib/pricing";
@@ -3357,7 +3358,7 @@ export default function StudioVideoPanel({
       try {
         const editPKey = getPersonalApiKey();
         if (snap.motionEdit) {
-          const res = await fetch("/api/kling/motion-control", {
+          const { blocked, response: res } = await guardedFetch("/api/kling/motion-control", {
             method: "POST",
             headers: { "Content-Type": "application/json" },
             body: JSON.stringify({
@@ -3371,6 +3372,12 @@ export default function StudioVideoPanel({
               personalApiKey: editPKey,
             }),
           });
+          if (blocked) {
+            refundPlatformCredits(platformChargeEdit, grantCredits, creditsRef);
+            setHistoryItems((prev) => prev.filter((i) => i.id !== jobId));
+            setIsEditStartingGeneration(false);
+            return;
+          }
           const json = (await res.json()) as { taskId?: string; error?: string };
           if (!res.ok || !json.taskId) throw new Error(json.error || "Motion control failed");
           const studioGenId = await registerStudioTask({
@@ -3402,7 +3409,7 @@ export default function StudioVideoPanel({
           return;
         }
 
-        const res = await fetch("/api/kling/video-edit", {
+        const { blocked, response: res } = await guardedFetch("/api/kling/video-edit", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
@@ -3417,6 +3424,12 @@ export default function StudioVideoPanel({
             personalApiKey: editPKey,
           }),
         });
+        if (blocked) {
+          refundPlatformCredits(platformChargeEdit, grantCredits, creditsRef);
+          setHistoryItems((prev) => prev.filter((i) => i.id !== jobId));
+          setIsEditStartingGeneration(false);
+          return;
+        }
         const json = (await res.json()) as { taskId?: string; error?: string };
         if (!res.ok || !json.taskId) throw new Error(json.error || "Video edit failed");
         const studioGenId = await registerStudioTask({
@@ -3710,7 +3723,7 @@ export default function StudioVideoPanel({
         const pKey = getPersonalApiKey();
         const piKey = getPersonalPiapiApiKey() ?? undefined;
         if (snap.family === "sora") {
-          const res = await fetch("/api/kling/generate", {
+          const { blocked, response: res } = await guardedFetch("/api/kling/generate", {
             method: "POST",
             headers: { "Content-Type": "application/json" },
             body: JSON.stringify({
@@ -3727,6 +3740,12 @@ export default function StudioVideoPanel({
               personalApiKey: pKey,
             }),
           });
+          if (blocked) {
+            refundPlatformCredits(platformChargeCreate, grantCredits, creditsRef);
+            setHistoryItems((prev) => prev.filter((i) => i.id !== jobId));
+            setIsCreateStartingGeneration(false);
+            return;
+          }
           const json = (await res.json()) as { taskId?: string; error?: string };
           if (!res.ok || !json.taskId)
             throw new Error(json.error || (snap.modelId === "openai/sora-2-pro" ? "Sora 2 Pro failed" : "Sora 2 failed"));
@@ -3765,7 +3784,7 @@ export default function StudioVideoPanel({
           const generationType: "TEXT_2_VIDEO" | "FIRST_AND_LAST_FRAMES_2_VIDEO" =
             urls.length > 0 ? "FIRST_AND_LAST_FRAMES_2_VIDEO" : "TEXT_2_VIDEO";
 
-          const res = await fetch("/api/kie/veo/generate", {
+          const { blocked, response: res } = await guardedFetch("/api/kie/veo/generate", {
             method: "POST",
             headers: { "Content-Type": "application/json" },
             body: JSON.stringify({
@@ -3778,6 +3797,12 @@ export default function StudioVideoPanel({
               personalApiKey: pKey,
             }),
           });
+          if (blocked) {
+            refundPlatformCredits(platformChargeCreate, grantCredits, creditsRef);
+            setHistoryItems((prev) => prev.filter((i) => i.id !== jobId));
+            setIsCreateStartingGeneration(false);
+            return;
+          }
           const json = (await res.json()) as { taskId?: string; provider?: string; error?: string };
           if (!res.ok || !json.taskId) throw new Error(json.error || "Veo failed");
           const studioGenId = await registerStudioTask({
@@ -3869,11 +3894,17 @@ export default function StudioVideoPanel({
           klingGenerateBody.videoResolution =
             snap.modelId === "bytedance/seedance-2-fast" && r === "1080p" ? "720p" : r;
         }
-        const res = await fetch("/api/kling/generate", {
+        const { blocked, response: res } = await guardedFetch("/api/kling/generate", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify(klingGenerateBody),
         });
+        if (blocked) {
+          refundPlatformCredits(platformChargeCreate, grantCredits, creditsRef);
+          setHistoryItems((prev) => prev.filter((i) => i.id !== jobId));
+          setIsCreateStartingGeneration(false);
+          return;
+        }
         const json = (await res.json()) as { taskId?: string; provider?: string; error?: string };
         if (!res.ok || !json.taskId) throw new Error(json.error || "Video task failed");
         const studioGenId = await registerStudioTask({

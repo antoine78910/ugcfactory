@@ -13,6 +13,7 @@ import {
   isPlatformCreditBypassActive,
 } from "@/app/_components/CreditsPlanContext";
 import { userMessageFromCaughtError } from "@/lib/generationUserMessage";
+import { guardedFetch } from "@/lib/guardedFetch";
 import { refundPlatformCredits } from "@/lib/refundPlatformCredits";
 import { StudioBillingDialog } from "@/app/_components/StudioBillingDialog";
 import { StudioOutputPane } from "@/app/_components/StudioEmptyExamples";
@@ -368,7 +369,7 @@ export default function StudioAvatarPanel({
 
     void (async () => {
       try {
-        const res = await fetch("/api/studio/generations/start", {
+        const { blocked, response: res } = await guardedFetch("/api/studio/generations/start", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
@@ -384,6 +385,11 @@ export default function StudioAvatarPanel({
             personalApiKey: getPersonalApiKey(),
           }),
         });
+        if (blocked) {
+          setHistoryItems((prev) => prev.filter((i) => i.id !== optimisticId));
+          refundPlatformCredits(platformCharge, grantCredits, creditsRef);
+          return;
+        }
         const json = (await res.json()) as { data?: { id: string }; error?: string };
         if (!res.ok) throw new Error(json.error || "Start failed");
         const id = json.data?.id;
@@ -500,7 +506,7 @@ export default function StudioAvatarPanel({
 
     void (async () => {
       try {
-        const res = await fetch("/api/studio/generations/start", {
+        const { blocked, response: res } = await guardedFetch("/api/studio/generations/start", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
@@ -517,6 +523,11 @@ export default function StudioAvatarPanel({
             personalApiKey: getPersonalApiKey(),
           }),
         });
+        if (blocked) {
+          setHistoryItems((prev) => prev.filter((i) => i.id !== optimisticId));
+          refundPlatformCredits(platformCharge, grantCredits, creditsRef);
+          return;
+        }
         const json = (await res.json()) as { data?: { id: string }; error?: string };
         if (!res.ok) throw new Error(json.error || "Start failed");
         const id = json.data?.id;

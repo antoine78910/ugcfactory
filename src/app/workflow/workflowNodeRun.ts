@@ -35,6 +35,7 @@ import {
 } from "@/lib/studioVideoModelCapabilities";
 import { SEEDANCE_PRO_MAX_VIDEO_URLS, SEEDANCE_PRO_PROMPT_MAX_CHARS } from "@/lib/piapiSeedance";
 import { uploadBlobUrlToCdn } from "@/lib/uploadBlobUrlToCdn";
+import { guardedFetch } from "@/lib/guardedFetch";
 
 import { workflowVideoResolutionToPiapiSeedance } from "./workflowVideoExportDimensions";
 import {
@@ -1004,7 +1005,7 @@ export async function runWorkflowImageJob(params: WorkflowRunImageParams): Promi
     cappedRefs.length ? cappedRefs : undefined,
   );
 
-  const startRes = await fetch("/api/studio/generations/start", {
+  const { blocked, response: startRes } = await guardedFetch("/api/studio/generations/start", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({
@@ -1020,6 +1021,7 @@ export async function runWorkflowImageJob(params: WorkflowRunImageParams): Promi
       imageUrls: resolvedReferenceUrls.length ? resolvedReferenceUrls : undefined,
     }),
   });
+  if (blocked) throw new Error("INSUFFICIENT_CREDITS");
   const startJson = (await startRes.json()) as {
     data?: { taskId?: string; rows?: { taskId?: string }[] };
     error?: string;
@@ -1255,7 +1257,7 @@ export async function runWorkflowMotionControlJob(
   }
 
   const motionPrompt = params.prompt?.trim() || undefined;
-  const res = await fetch("/api/kling/motion-control", {
+  const { blocked, response: res } = await guardedFetch("/api/kling/motion-control", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({
@@ -1269,6 +1271,7 @@ export async function runWorkflowMotionControlJob(
       personalApiKey: pKey,
     }),
   });
+  if (blocked) throw new Error("INSUFFICIENT_CREDITS");
   const json = (await res.json()) as { taskId?: string; provider?: string; error?: string };
   if (!res.ok || !json.taskId) throw new Error(json.error || "Motion control failed");
   params.onTaskStarted?.(json.taskId);
@@ -1372,7 +1375,7 @@ export async function runWorkflowVideoJob(params: WorkflowRunVideoParams): Promi
       throw new Error(veoUpgradeMessage(params.planId, veoModel) ?? "Subscription upgrade required for Veo.");
     }
     const veoAspect = veoAspectFromWorkflowAspect(params.aspectRatio);
-    const res = await fetch("/api/kie/veo/generate", {
+    const { blocked, response: res } = await guardedFetch("/api/kie/veo/generate", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
@@ -1385,6 +1388,7 @@ export async function runWorkflowVideoJob(params: WorkflowRunVideoParams): Promi
         personalApiKey: pKey,
       }),
     });
+    if (blocked) throw new Error("INSUFFICIENT_CREDITS");
     const json = (await res.json()) as { taskId?: string; provider?: string; error?: string };
     if (!res.ok || !json.taskId) throw new Error(json.error || "Veo failed");
     params.onTaskStarted?.(json.taskId);
@@ -1517,11 +1521,12 @@ export async function runWorkflowVideoJob(params: WorkflowRunVideoParams): Promi
       personalApiKey: pKey,
       piapiApiKey: piKey,
     };
-    const genRes = await fetch("/api/kling/generate", {
+    const { blocked: genBlocked, response: genRes } = await guardedFetch("/api/kling/generate", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify(generatePayload),
     });
+    if (genBlocked) throw new Error("INSUFFICIENT_CREDITS");
     lastStatus = genRes.status;
     genJson = (await genRes.json().catch(() => ({}))) as {
       taskId?: string;

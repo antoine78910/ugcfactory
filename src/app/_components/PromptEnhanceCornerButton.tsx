@@ -8,6 +8,7 @@ import {
   dispatchAuthoritativeCreditBalance,
   useCreditsPlanOptional,
 } from "@/app/_components/CreditsPlanContext";
+import { guardedFetch } from "@/lib/guardedFetch";
 import type { PromptEnhanceSurface } from "@/lib/promptEnhance";
 import { PROMPT_ENHANCE_CREDITS } from "@/lib/pricing";
 import { cn } from "@/lib/utils";
@@ -41,12 +42,13 @@ export function PromptEnhanceCornerButton({ value, onApply, surface, className, 
     }
     setBusy(true);
     try {
-      const res = await fetch("/api/studio/prompt-enhance", {
+      const { blocked, response: res } = await guardedFetch("/api/studio/prompt-enhance", {
         method: "POST",
         credentials: "include",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ prompt: trimmed, surface }),
       });
+      if (blocked) return;
       const json = (await res.json().catch(() => null)) as {
         enhanced?: string;
         error?: string;

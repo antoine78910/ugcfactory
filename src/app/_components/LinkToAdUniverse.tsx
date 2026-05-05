@@ -33,6 +33,7 @@ import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { CreditCostBadge } from "@/app/_components/CreditCostBadge";
 import { UploadBusyOverlay } from "@/app/_components/UploadBusyOverlay";
+import { guardedFetch } from "@/lib/guardedFetch";
 import { absolutizeImageUrl } from "@/lib/imageUrl";
 import {
   allProductUrlsForNanoBanana,
@@ -5544,14 +5545,19 @@ export default function LinkToAdUniverse({
         piapiApiKey: getPersonalPiapiApiKey(),
       };
       let json: { taskId?: string; error?: string } | undefined;
+      let blockedByCredits = false;
       const MAX_GENERATE_ATTEMPTS = 2;
       for (let attempt = 0; attempt < MAX_GENERATE_ATTEMPTS; attempt++) {
-        const res = await fetch("/api/kling/generate", {
+        const { blocked, response: res } = await guardedFetch("/api/kling/generate", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           signal: controller.signal,
           body: JSON.stringify(generatePayload),
         });
+        if (blocked) {
+          blockedByCredits = true;
+          break;
+        }
         json = (await res.json()) as { taskId?: string; error?: string };
         if (res.ok && json.taskId) break;
         const isTimeout =
@@ -5561,6 +5567,14 @@ export default function LinkToAdUniverse({
           throw new Error(json.error || "Video generation failed");
         }
         toast.info("Video provider was slow, retrying automatically…");
+      }
+      if (blockedByCredits) {
+        if (videoSpend > 0 && !isPlatformCreditBypassActive()) {
+          grantCredits(videoSpend);
+          creditsBalanceRef.current += videoSpend;
+          setLtaFrozenCredits(null);
+        }
+        return;
       }
       if (!json?.taskId) throw new Error(json?.error || "Video generation failed");
       {

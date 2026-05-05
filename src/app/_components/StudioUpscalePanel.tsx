@@ -7,6 +7,7 @@ import {
   getPersonalPiapiApiKey,
   isPlatformCreditBypassActive,
 } from "@/app/_components/CreditsPlanContext";
+import { guardedFetch } from "@/lib/guardedFetch";
 import { refundPlatformCredits } from "@/lib/refundPlatformCredits";
 import { Play, Plus, Sparkles, Wand2, X } from "lucide-react";
 import { toast } from "sonner";
@@ -388,11 +389,16 @@ export default function StudioUpscalePanel() {
           ? { imageUrl: inputUrl, upscaleFactor: imageUpscaleTier, personalApiKey: upPKey }
           : { videoUrl: inputUrl, upscaleFactor: videoUpscaleFactor, personalApiKey: upPKey };
 
-        const res = await fetch(endpoint, {
+        const { blocked, response: res } = await guardedFetch(endpoint, {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify(body),
         });
+        if (blocked) {
+          refundPlatformCredits(platformCharge, grantCredits, creditsRef);
+          setHistoryItems((prev) => prev.filter((i) => i.id !== jobId));
+          return;
+        }
         const json = (await res.json()) as { taskId?: string; model?: string; error?: string };
         if (!res.ok || !json.taskId) throw new Error(json.error || "Upscale request failed");
 
