@@ -8,13 +8,12 @@ import {
   refundUserCredits,
   spendUserCredits,
 } from "@/lib/creditGrants";
-import { isSubscriptionUnlimitedEmail } from "@/lib/allowedUsers";
+import { shouldChargePlatformCredits } from "@/lib/credits/metering";
 import { parsePromptEnhanceSurface, promptEnhanceSystem } from "@/lib/promptEnhance";
 import { PROMPT_ENHANCE_CREDITS } from "@/lib/pricing";
 import { resolveAuthUserEmail } from "@/lib/sessionUserEmail";
 import { createSupabaseServiceClient } from "@/lib/supabase/admin";
 import { requireSupabaseUser } from "@/lib/supabase/requireUser";
-import { getUserPlan } from "@/lib/supabase/getUserPlan";
 
 const MAX_PROMPT = 12_000;
 
@@ -41,17 +40,15 @@ export async function POST(req: Request) {
     return NextResponse.json({ error: "Prompt too long." }, { status: 400 });
   }
 
-  const unlimited = isSubscriptionUnlimitedEmail(email);
-  const planId = await getUserPlan(auth.user.id);
-  const chargeFreeLedger = planId === "free" && !unlimited;
+  const charges = shouldChargePlatformCredits({ usesPersonalApi: false, email });
 
-  if (!admin && chargeFreeLedger) {
+  if (!admin && charges) {
     return NextResponse.json({ error: "Credits unavailable." }, { status: 503 });
   }
 
   let charged = 0;
 
-  if (chargeFreeLedger && admin) {
+  if (charges && admin) {
     const { balance } = await getUserCreditBalance(admin, auth.user.id);
     if (balance < PROMPT_ENHANCE_CREDITS) {
       return NextResponse.json(
