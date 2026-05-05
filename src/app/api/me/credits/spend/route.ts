@@ -7,7 +7,6 @@ import { spendUserCredits, getUserCreditBalance } from "@/lib/creditGrants";
 import { isSubscriptionUnlimitedEmail } from "@/lib/allowedUsers";
 import { resolveAuthUserEmail } from "@/lib/sessionUserEmail";
 import { displayCreditsToLedgerTicks } from "@/lib/creditLedgerTicks";
-import { getUserPlan } from "@/lib/supabase/getUserPlan";
 
 export async function POST(req: Request) {
   const auth = await requireSupabaseUser();
@@ -24,12 +23,7 @@ export async function POST(req: Request) {
     return NextResponse.json({ error: "DB not configured" }, { status: 503 });
   }
 
-  // Product rule: platform credits are deducted only for free/trial access.
-  const planId = await getUserPlan(auth.user.id);
-  if (planId !== "free") {
-    const { balance } = await getUserCreditBalance(admin, auth.user.id);
-    return NextResponse.json({ spent: 0, balance });
-  }
+  // Every user (free + paid + comp) is debited unless on the unlimited allowlist or using personal API keys (handled at the calling endpoint).
 
   const body = (await req.json()) as { amount?: number };
   const display = Math.max(0, Number(body.amount) || 0);
