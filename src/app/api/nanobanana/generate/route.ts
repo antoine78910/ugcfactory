@@ -17,6 +17,11 @@ import { requireSupabaseUser } from "@/lib/supabase/requireUser";
 import { getUserPlan } from "@/lib/supabase/getUserPlan";
 import { mergeNanoPromptForApi, splitNanoPromptBodyForEditing } from "@/lib/linkToAdUniverse";
 import { LINK_TO_AD_NANO_IMAGE_SERVER_SUFFIX } from "@/lib/linkToAd/nanoImageServerSuffix";
+import { createSupabaseServiceClient } from "@/lib/supabase/admin";
+import { resolveAuthUserEmail } from "@/lib/sessionUserEmail";
+import { shouldChargePlatformCredits, assertSufficientCreditsResponse } from "@/lib/credits/metering";
+import { studioImageCreditsChargedTotal } from "@/lib/pricing";
+import { isStudioGptImage2PickerModelId } from "@/lib/studioImageModels";
 
 type Body = {
   accountPlan?: string;
@@ -109,8 +114,10 @@ export async function POST(req: Request) {
       { status: 503 },
     );
   }
+  let dbPlanResolved: string | null = null;
   if (!personalKey) {
     const dbPlan = await getUserPlan(user.id);
+    dbPlanResolved = dbPlan;
     const accountPlan = dbPlan !== "free" ? dbPlan : parseAccountPlan(body.accountPlan);
     const skipTierGate = body.linkToAd === true;
     if (!skipTierGate && !canUseStudioImagePickerModel(accountPlan, model)) {
@@ -124,6 +131,30 @@ export async function POST(req: Request) {
         { status: 403 },
       );
     }
+  }
+
+  const usesPersonalApi = Boolean(personalKey);
+  const admin = createSupabaseServiceClient();
+  const email = await resolveAuthUserEmail(user, admin);
+  const charges = shouldChargePlatformCredits({ usesPersonalApi, email });
+  if (charges && admin) {
+    const numImagesForCost = Math.max(1, Math.min(Number(body.numImages) || 1, 10));
+    const supportsResolution = !isStudioGptImage2PickerModelId(model);
+    const requestedResolution = (body.resolution as "1K" | "2K" | "4K" | undefined) ?? "1K";
+    const resolutionForCredits = supportsResolution ? requestedResolution : "1K";
+    const costDisplayCredits = studioImageCreditsChargedTotal({
+      studioModel: model,
+      resolution: resolutionForCredits,
+      numImages: numImagesForCost,
+    });
+    const dbPlan = dbPlanResolved ?? (await getUserPlan(user.id));
+    const gate = await assertSufficientCreditsResponse({
+      admin,
+      userId: user.id,
+      planId: dbPlan ?? "free",
+      costDisplayCredits,
+    });
+    if (gate) return gate;
   }
 
   try {
