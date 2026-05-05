@@ -25,6 +25,22 @@ function parseKindParam(kindParam: string): { mode: "all" } | { kinds: string[] 
   return { kinds };
 }
 
+const STUDIO_GENERATIONS_DEFAULT_PAGE_LIMIT = 60;
+const STUDIO_GENERATIONS_MAX_PAGE_LIMIT = 200;
+
+function parsePageLimit(raw: string | null): number {
+  const n = Number((raw ?? "").trim());
+  if (!Number.isFinite(n) || n <= 0) return STUDIO_GENERATIONS_DEFAULT_PAGE_LIMIT;
+  return Math.min(Math.floor(n), STUDIO_GENERATIONS_MAX_PAGE_LIMIT);
+}
+
+function parseBeforeCursor(raw: string | null): string | undefined {
+  const t = (raw ?? "").trim();
+  if (!t) return undefined;
+  const ms = Date.parse(t);
+  return Number.isFinite(ms) && ms > 0 ? t : undefined;
+}
+
 export async function GET(req: Request) {
   const { supabase, user, response } = await requireSupabaseUser();
   if (response) return response;
@@ -32,13 +48,15 @@ export async function GET(req: Request) {
   const { searchParams } = new URL(req.url);
   const all = searchParams.get("all") === "1";
   const kindRaw = (searchParams.get("kind") ?? KIND_DEFAULT).trim() || KIND_DEFAULT;
+  const limit = parsePageLimit(searchParams.get("limit"));
+  const before = parseBeforeCursor(searchParams.get("before"));
 
   try {
-    const fetchOptions: { mode: "all" } | { kinds: string[] } = (() => {
+    const fetchOptions: { mode: "all" } | { kinds: string[]; limit: number; before?: string } = (() => {
       if (all) return { mode: "all" } as const;
       const parsed = parseKindParam(kindRaw);
       if ("mode" in parsed) return { mode: "all" } as const;
-      return { kinds: parsed.kinds };
+      return { kinds: parsed.kinds, limit, ...(before ? { before } : {}) };
     })();
 
     const kindsToSweep: string[] =
@@ -62,8 +80,11 @@ export async function GET(req: Request) {
 
     const refundHints = refundHintsChunks.flat();
     const items = rows.map(studioGenerationRowToHistoryItem);
+    // hasMore is approximate: when DB returned exactly `limit` rows we cannot tell if more exist.
+    // false negatives cause "Load more" to disappear a click early; false positives cause one empty fetch.
+    const hasMore = !all && rowsRaw.length >= limit;
 
-    return NextResponse.json({ data: items, refundHints });
+    return NextResponse.json({ data: items, refundHints, hasMore });
   } catch (err) {
     const message = err instanceof Error ? err.message : "Unknown error.";
     return NextResponse.json({ error: message }, { status: 502 });
