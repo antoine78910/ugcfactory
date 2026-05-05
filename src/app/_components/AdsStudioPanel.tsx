@@ -72,6 +72,10 @@ const ADS_STUDIO_APP_0504_BASE_1_AVATAR_PATH = "/studio/ads-studio/app-0504-base
 const ADS_STUDIO_APP_0504_1_1_APP_PATH = "/studio/ads-studio/app-0504-1-1-app.png";
 const ADS_STUDIO_APP_0504_1_1_AVATAR_PATH = "/studio/ads-studio/app-0504-1-1-avatar.png";
 
+/** App template `0504 (1)(3)` Recreate: @image1 app UI, @image2 avatar (public/studio/ads-studio/). */
+const ADS_STUDIO_APP_0504_1_3_APP_PATH = "/studio/ads-studio/app-0504-1-3-app.png";
+const ADS_STUDIO_APP_0504_1_3_AVATAR_PATH = "/studio/ads-studio/app-0504-1-3-avatar.png";
+
 /** App template `0504 (1)(4)` Recreate: @image1 app UI, @image2 avatar (public/studio/ads-studio/). */
 const ADS_STUDIO_APP_0504_1_4_APP_PATH = "/studio/ads-studio/app-0504-1-4-app.png";
 const ADS_STUDIO_APP_0504_1_4_AVATAR_PATH = "/studio/ads-studio/app-0504-1-4-avatar.png";
@@ -606,7 +610,7 @@ function isAppTemplate050411BundledRecreateLabel(normalizedLabel: string): boole
   return /\b0504\s*\(1\)\(1\)\)/u.test(n) || (n.includes("0504 (1)(1)") && !/\b0504\s*\(1\)\(10\)/u.test(n));
 }
 
-/** App gallery `0504 (1)(3).mp4` — Matcha app + Margot bundled Recreate. */
+/** App gallery `0504 (1)(3).mp4` — Recreate uses bundled `app-0504-1-3-*` stills (@image1 app, @image2 avatar). */
 function isAppTemplate050413BundledRecreateLabel(normalizedLabel: string): boolean {
   const n = normalizedLabel;
   if (n.includes("tutorial")) return false;
@@ -2090,7 +2094,6 @@ export default function AdsStudioPanel() {
     const n = normalizeTemplateLabel(label);
     const isTutorial2 =
       n.includes("tutorial 2") || n.includes("tutorial2") || n.includes("tutorial (2)");
-    const isApp0504_1_3 = isAppTemplate050413BundledRecreateLabel(n);
     const nextPrompt = promptForTemplateLabel(label).replace(/\r\n/g, "\n");
     // Always replace current prompt (never append), even when input already contains text.
     setPrompt(nextPrompt);
@@ -2101,6 +2104,12 @@ export default function AdsStudioPanel() {
       setAssetType("app");
       setAppRefUrl(resolveAdsStudioPublicImage(ADS_STUDIO_APP_0504_1_1_APP_PATH));
       setAvatarUrl(resolveAdsStudioPublicImage(ADS_STUDIO_APP_0504_1_1_AVATAR_PATH));
+      return;
+    }
+    if (isAppTemplate050413BundledRecreateLabel(n)) {
+      setAssetType("app");
+      setAppRefUrl(resolveAdsStudioPublicImage(ADS_STUDIO_APP_0504_1_3_APP_PATH));
+      setAvatarUrl(resolveAdsStudioPublicImage(ADS_STUDIO_APP_0504_1_3_AVATAR_PATH));
       return;
     }
     if (isAppTemplate050414BundledRecreateLabel(n)) {
@@ -2143,15 +2152,6 @@ export default function AdsStudioPanel() {
       setAssetType("app");
       setAppRefUrl(resolveAdsStudioPublicImage(ADS_STUDIO_APP_0504_BASE_1_APP_PATH));
       setAvatarUrl(resolveAdsStudioPublicImage(ADS_STUDIO_APP_0504_BASE_1_AVATAR_PATH));
-      return;
-    }
-    if (isApp0504_1_3) {
-      // App slot → @image1, Avatar slot → @image2. Do not capture frames from the template
-      // preview video (users upload their own app UI + avatar stills).
-      setAssetType("app");
-      setAppRefUrl("");
-      setAvatarUrl("");
-      scrollComposerIntoView();
       return;
     }
     if (isTutorial2) {
