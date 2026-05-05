@@ -299,6 +299,47 @@ function safeAdsStudioComposerDuration(raw: unknown): number {
   return Math.min(ADS_STUDIO_DURATION_MAX, Math.max(ADS_STUDIO_DURATION_MIN, Math.round(n)));
 }
 
+/** Only scan the opening so mid-prompt dialogue ("fifteen minutes") does not change duration. */
+const ADS_TEMPLATE_PROMPT_DURATION_SCAN_CHARS = 1400;
+
+/**
+ * Infer Ads Studio clip length from a bundled template prompt (e.g. `11-sec TikTok`, `A 15-second vertical`,
+ * `VIDEO — 10-second`, or beat ranges like `13–15s`). Returns null when unknown — use 15s default on Recreate.
+ */
+function extractAdsTemplateDurationSecFromPrompt(prompt: string): number | null {
+  const slice = (prompt ?? "").slice(0, ADS_TEMPLATE_PROMPT_DURATION_SCAN_CHARS);
+
+  const explicitPatterns: RegExp[] = [
+    /\bVIDEO\s*[—\u2013\u2014-]\s*(\d{1,2})\s*-second\b/i,
+    /\bA\s+trendy\s+(\d{1,2})\s*-second\b/i,
+    /\bA\s+(\d{1,2})\s*-second\b/i,
+    /\b(\d{1,2})\s*-second\b/i,
+    /\b(\d{1,2})\s*-sec\b/i,
+  ];
+
+  for (const re of explicitPatterns) {
+    const m = slice.match(re);
+    if (m?.[1]) {
+      const n = Number(m[1]);
+      if (!Number.isFinite(n)) continue;
+      const clamped = Math.min(ADS_STUDIO_DURATION_MAX, Math.max(ADS_STUDIO_DURATION_MIN, Math.round(n)));
+      return clamped;
+    }
+  }
+
+  const rangeRe = /(\d{1,2})\s*[–\u2013\-]\s*(\d{1,2})\s*s(?:ec)?\b/gi;
+  let maxEnd = 0;
+  let rm: RegExpExecArray | null;
+  rangeRe.lastIndex = 0;
+  while ((rm = rangeRe.exec(slice)) !== null) {
+    const end = Number(rm[2]);
+    if (Number.isFinite(end) && end > maxEnd) maxEnd = end;
+  }
+  if (maxEnd >= ADS_STUDIO_DURATION_MIN && maxEnd <= ADS_STUDIO_DURATION_MAX) return maxEnd;
+
+  return null;
+}
+
 function safeAdsStudioOutputAspect(raw: unknown): AdsStudioOutputAspect {
   const s = typeof raw === "string" ? raw.trim() : "";
   return (ADS_STUDIO_SEEDANCE_ASPECTS as readonly string[]).includes(s) ? (s as AdsStudioOutputAspect) : "9:16";
@@ -2093,6 +2134,8 @@ export default function AdsStudioPanel() {
     const isTutorial2 =
       n.includes("tutorial 2") || n.includes("tutorial2") || n.includes("tutorial (2)");
     const nextPrompt = promptForTemplateLabel(label).replace(/\r\n/g, "\n");
+    const parsedDur = extractAdsTemplateDurationSecFromPrompt(nextPrompt);
+    setVideoDurationSec(safeAdsStudioComposerDuration(parsedDur ?? 15));
     // Always replace current prompt (never append), even when input already contains text.
     setPrompt(nextPrompt);
     scrollComposerIntoView();
