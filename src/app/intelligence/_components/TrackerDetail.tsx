@@ -280,7 +280,7 @@ export function TrackerDetail({
   }, [tracker.id]);
 
   return (
-    <div className="flex flex-col gap-6 p-6">
+    <div className="flex flex-col gap-5 p-6">
       <IntelligenceHero
         tracker={tracker}
         overview={overview}
@@ -291,7 +291,7 @@ export function TrackerDetail({
         refreshing={anyLoading}
       />
 
-      <section className="rounded-2xl border border-white/10 bg-white/5 p-4 backdrop-blur-sm">
+      <section className="rounded-2xl border border-white/10 bg-white/[0.04] p-5 backdrop-blur-sm">
         <BlockHeader title="Top Ads" onRefresh={() => fetchAds(true)} loading={adsLoading} />
         {adsLoading && (
           <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5">
@@ -313,14 +313,14 @@ export function TrackerDetail({
         )}
       </section>
 
-      <section className="rounded-2xl border border-white/10 bg-white/5 p-4 backdrop-blur-sm">
+      <section className="rounded-2xl border border-white/10 bg-white/[0.04] p-5 backdrop-blur-sm">
         <BlockHeader title="Dominant Angles" onRefresh={() => fetchAngles(true)} loading={anglesLoading} />
         {anglesLoading && <Skeleton rows={5} />}
         {anglesError && <p className="text-xs text-red-400">{anglesError}</p>}
         {!anglesLoading && <AnglesChart angles={angles} />}
       </section>
 
-      <section className="rounded-2xl border border-white/10 bg-white/5 p-4 backdrop-blur-sm">
+      <section className="rounded-2xl border border-white/10 bg-white/[0.04] p-5 backdrop-blur-sm">
         <BlockHeader title="Top Hooks" onRefresh={() => fetchAds(true)} loading={adsLoading} />
         {adsLoading && <Skeleton rows={4} />}
         {!adsLoading && <HooksTable
@@ -329,7 +329,7 @@ export function TrackerDetail({
         />}
       </section>
 
-      <section className="rounded-2xl border border-white/10 bg-white/5 p-4 backdrop-blur-sm">
+      <section className="rounded-2xl border border-white/10 bg-white/[0.04] p-5 backdrop-blur-sm">
         <BlockHeader title="5 Opportunities" onRefresh={() => fetchOpportunities(true)} loading={oppsLoading} />
         {oppsLoading && <Skeleton rows={5} />}
         {oppsError && <p className="text-xs text-red-400">{oppsError}</p>}
