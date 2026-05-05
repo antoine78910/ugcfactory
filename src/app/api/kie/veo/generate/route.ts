@@ -13,6 +13,10 @@ import { canUseVeoApiModel, parseAccountPlan, veoUpgradeMessage } from "@/lib/su
 import { logGenerationFailure, userFacingProviderErrorOrDefault } from "@/lib/generationUserMessage";
 import { requireSupabaseUser } from "@/lib/supabase/requireUser";
 import { getUserPlan } from "@/lib/supabase/getUserPlan";
+import { createSupabaseServiceClient } from "@/lib/supabase/admin";
+import { resolveAuthUserEmail } from "@/lib/sessionUserEmail";
+import { shouldChargePlatformCredits, assertSufficientCreditsResponse } from "@/lib/credits/metering";
+import { calculateVeo31Credits } from "@/lib/pricing";
 
 type Body = {
   accountPlan?: string;
@@ -56,8 +60,10 @@ export async function POST(req: Request) {
   }
   const personalKey =
     body && hasPersonalApiKey(body.personalApiKey) ? body.personalApiKey.trim() : undefined;
+  let dbPlanResolved: string | null = null;
   if (!personalKey) {
     const dbPlan = await getUserPlan(user.id);
+    dbPlanResolved = dbPlan;
     const accountPlan = dbPlan !== "free" ? dbPlan : parseAccountPlan(body?.accountPlan);
     if (!canUseVeoApiModel(accountPlan, veoModel)) {
       return NextResponse.json(
@@ -68,6 +74,22 @@ export async function POST(req: Request) {
         { status: 403 },
       );
     }
+  }
+
+  const usesPersonalApi = Boolean(personalKey);
+  const admin = createSupabaseServiceClient();
+  const email = await resolveAuthUserEmail(user, admin);
+  const charges = shouldChargePlatformCredits({ usesPersonalApi, email });
+  if (charges && admin) {
+    const costDisplayCredits = calculateVeo31Credits(veoModel);
+    const dbPlan = dbPlanResolved ?? (await getUserPlan(user.id));
+    const gate = await assertSufficientCreditsResponse({
+      admin,
+      userId: user.id,
+      planId: dbPlan ?? "free",
+      costDisplayCredits,
+    });
+    if (gate) return gate;
   }
 
   try {
