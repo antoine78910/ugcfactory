@@ -1,11 +1,12 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { RefreshCw } from "lucide-react";
 import type { TTOverview, TTAd } from "@/lib/trendtrack";
 import type { Angle } from "@/app/api/intelligence/trackers/[id]/angles/route";
 import type { Opportunity } from "@/app/api/intelligence/trackers/[id]/opportunities/route";
 import type { SelectedTracker } from "./TrackerList";
+import { IntelligenceHero } from "./IntelligenceHero";
 import { AdCard } from "./AdCard";
 import { HooksTable } from "./HooksTable";
 import { AnglesChart } from "./AnglesChart";
@@ -43,13 +44,6 @@ function Skeleton({ rows = 3 }: { rows?: number }) {
       ))}
     </div>
   );
-}
-
-function formatNum(n?: number): string {
-  if (!n) return "—";
-  if (n >= 1_000_000) return `${(n / 1_000_000).toFixed(1)}M`;
-  if (n >= 1_000) return `${(n / 1_000).toFixed(0)}K`;
-  return String(n);
 }
 
 // ── Typed error helpers ────────────────────────────────────────────────────
@@ -131,6 +125,7 @@ export function TrackerDetail({
           return;
         }
         setOverview(parsed.data);
+        setOverviewAt(new Date().toISOString());
       } catch {
         setOverviewError("Network error");
       } finally {
@@ -166,6 +161,7 @@ export function TrackerDetail({
           return;
         }
         setAds(parsed.data);
+        setAdsAt(new Date().toISOString());
       } catch {
         setAdsError("Network error");
       } finally {
@@ -194,6 +190,7 @@ export function TrackerDetail({
           return;
         }
         setAngles(parsed.data);
+        setAnglesAt(new Date().toISOString());
       } catch {
         setAnglesError("Network error");
       } finally {
@@ -230,6 +227,7 @@ export function TrackerDetail({
             setOppsError(intelErrorMessage(parsed.error));
           } else {
             setOpportunities(parsed.data);
+            setOpportunitiesAt(new Date().toISOString());
           }
         }
       } catch {
@@ -240,6 +238,30 @@ export function TrackerDetail({
     },
     [tracker.id, tracker.name, ownTrackerIds]
   );
+
+  // Last successful fetch timestamps
+  const [overviewAt, setOverviewAt] = useState<string | null>(null);
+  const [adsAt, setAdsAt] = useState<string | null>(null);
+  const [anglesAt, setAnglesAt] = useState<string | null>(null);
+  const [opportunitiesAt, setOpportunitiesAt] = useState<string | null>(null);
+
+  const lastRefreshIso = useMemo(() => {
+    const candidates = [overviewAt, adsAt, anglesAt, opportunitiesAt].filter(
+      (v): v is string => Boolean(v)
+    );
+    if (candidates.length === 0) return null;
+    return candidates.sort().slice(-1)[0];
+  }, [overviewAt, adsAt, anglesAt, opportunitiesAt]);
+
+  const refreshAll = useCallback(() => {
+    fetchOverview(true);
+    fetchAds(true);
+    fetchAngles(true);
+    fetchOpportunities(true);
+  }, [fetchOverview, fetchAds, fetchAngles, fetchOpportunities]);
+
+  const anyLoading =
+    overviewLoading || adsLoading || anglesLoading || oppsLoading;
 
   useEffect(() => {
     setOverview(null);
@@ -255,51 +277,15 @@ export function TrackerDetail({
 
   return (
     <div className="flex flex-col gap-6 p-6">
-      <div className="flex items-center gap-3">
-        {tracker.logo ? (
-          <img
-            src={tracker.logo}
-            alt={tracker.name}
-            className="h-10 w-10 rounded-xl bg-white/10 p-1 object-contain"
-          />
-        ) : (
-          <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-violet-500/20 text-sm font-bold text-violet-300">
-            {tracker.name.charAt(0).toUpperCase()}
-          </div>
-        )}
-        <div>
-          <h2 className="text-lg font-semibold text-white">{tracker.name}</h2>
-          <p className="text-xs text-white/40">
-            {isOwnTracker ? "Your tracker" : "Searched brand"}
-          </p>
-        </div>
-      </div>
-
-      {isOwnTracker && (
-        <section className="rounded-2xl border border-white/10 bg-white/5 p-4 backdrop-blur-sm">
-          <BlockHeader title="Overview" onRefresh={() => fetchOverview(true)} loading={overviewLoading} />
-          {overviewLoading && <Skeleton rows={1} />}
-          {overviewError && <p className="text-xs text-red-400">{overviewError}</p>}
-          {!overviewLoading && overview && (
-            <div className="flex gap-6">
-              <div>
-                <p className="text-2xl font-bold text-white">{formatNum(overview.activeAds)}</p>
-                <p className="text-xs text-white/40">Active ads</p>
-              </div>
-              <div>
-                <p className="text-2xl font-bold text-white">{formatNum(overview.totalTraffic)}</p>
-                <p className="text-xs text-white/40">Total traffic</p>
-              </div>
-              {overview.rank && (
-                <div>
-                  <p className="text-2xl font-bold text-white">#{overview.rank}</p>
-                  <p className="text-xs text-white/40">Rank</p>
-                </div>
-              )}
-            </div>
-          )}
-        </section>
-      )}
+      <IntelligenceHero
+        tracker={tracker}
+        overview={overview}
+        isOwnTracker={isOwnTracker}
+        lastRefreshIso={lastRefreshIso}
+        domain={(tracker as SelectedTracker & { domain?: string }).domain}
+        onRefreshAll={refreshAll}
+        refreshing={anyLoading}
+      />
 
       <section className="rounded-2xl border border-white/10 bg-white/5 p-4 backdrop-blur-sm">
         <BlockHeader title="Top Ads" onRefresh={() => fetchAds(true)} loading={adsLoading} />

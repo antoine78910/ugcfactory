@@ -65,6 +65,7 @@ export type SelectedTracker = {
   name: string;
   logo?: string;
   sourceType: "tracker" | "search";
+  domain?: string;
 };
 
 export function TrackerList({
@@ -79,6 +80,9 @@ export function TrackerList({
   const [trackers, setTrackers] = useState<TTTracker[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [pinned, setPinned] = useState<
+    Array<{ advertiser_id: string; name: string; logo: string | null; domain: string | null }>
+  >([]);
 
   useEffect(() => {
     fetch("/api/intelligence/trackers")
@@ -91,25 +95,85 @@ export function TrackerList({
       .finally(() => setLoading(false));
   }, []);
 
+  useEffect(() => {
+    fetch("/api/intelligence/pinned")
+      .then((r) => r.json())
+      .then((data) => {
+        if (Array.isArray(data)) setPinned(data);
+      })
+      .catch(() => {});
+  }, []);
+
   if (loading) return <Skeleton />;
   if (error) return <p className="text-xs text-red-400">{error}</p>;
 
   return (
     <div className="flex flex-col gap-2">
       {searchResult && (
-        <TrackerCard
-          name={searchResult.name}
-          logo={searchResult.logo ?? searchResult.logoUrl}
-          isSelected={selectedId === searchResult.id}
-          onClick={() =>
-            onSelect({
-              id: searchResult.id,
+        <div className="relative">
+          <TrackerCard
+            name={searchResult.name}
+            logo={searchResult.logo ?? searchResult.logoUrl}
+            isSelected={selectedId === searchResult.id}
+            onClick={() =>
+              onSelect({
+                id: searchResult.id,
+                name: searchResult.name,
+                logo: searchResult.logo ?? searchResult.logoUrl,
+                sourceType: searchResult.type === "brandtracker" ? "tracker" : "search",
+                domain: searchResult.domain ?? undefined,
+              })
+            }
+          />
+          <PinButton
+            advertiser={{
+              advertiser_id: searchResult.id,
               name: searchResult.name,
-              logo: searchResult.logo ?? searchResult.logoUrl,
-              sourceType: searchResult.type === "brandtracker" ? "tracker" : "search",
-            })
-          }
-        />
+              logo: searchResult.logo ?? searchResult.logoUrl ?? null,
+              domain: searchResult.domain ?? null,
+            }}
+            isPinned={pinned.some((p) => p.advertiser_id === searchResult.id)}
+            onChange={(next) =>
+              setPinned((prev) =>
+                next
+                  ? [
+                      {
+                        advertiser_id: searchResult.id,
+                        name: searchResult.name,
+                        logo: searchResult.logo ?? searchResult.logoUrl ?? null,
+                        domain: searchResult.domain ?? null,
+                      },
+                      ...prev,
+                    ]
+                  : prev.filter((p) => p.advertiser_id !== searchResult.id)
+              )
+            }
+          />
+        </div>
+      )}
+      {pinned.length > 0 && (
+        <>
+          <p className="px-1 pt-1 text-[10px] font-semibold uppercase tracking-[0.12em] text-white/35">
+            Pinned brands
+          </p>
+          {pinned.map((p) => (
+            <TrackerCard
+              key={`pinned:${p.advertiser_id}`}
+              name={p.name}
+              logo={p.logo ?? undefined}
+              isSelected={selectedId === p.advertiser_id}
+              onClick={() =>
+                onSelect({
+                  id: p.advertiser_id,
+                  name: p.name,
+                  logo: p.logo ?? undefined,
+                  sourceType: "search",
+                  domain: p.domain ?? undefined,
+                })
+              }
+            />
+          ))}
+        </>
       )}
       {trackers.map((t) => (
         <TrackerCard
@@ -125,6 +189,7 @@ export function TrackerList({
               name: t.name,
               logo: t.logo ?? t.logoUrl ?? t.favicon,
               sourceType: "tracker",
+              domain: t.domain,
             })
           }
         />
@@ -133,5 +198,47 @@ export function TrackerList({
         <p className="text-xs text-white/40 px-2">No trackers yet. Search for a brand above.</p>
       )}
     </div>
+  );
+}
+
+function PinButton({
+  advertiser,
+  isPinned,
+  onChange,
+}: {
+  advertiser: { advertiser_id: string; name: string; logo: string | null; domain: string | null };
+  isPinned: boolean;
+  onChange: (next: boolean) => void;
+}) {
+  const [busy, setBusy] = useState(false);
+  return (
+    <button
+      onClick={async () => {
+        setBusy(true);
+        try {
+          if (isPinned) {
+            await fetch(
+              `/api/intelligence/pinned?advertiser_id=${encodeURIComponent(advertiser.advertiser_id)}`,
+              { method: "DELETE" }
+            );
+            onChange(false);
+          } else {
+            await fetch("/api/intelligence/pinned", {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify(advertiser),
+            });
+            onChange(true);
+          }
+        } finally {
+          setBusy(false);
+        }
+      }}
+      disabled={busy}
+      className="absolute right-2 top-2 rounded-md border border-white/10 bg-white/5 px-1.5 py-0.5 text-[10px] font-medium text-white/65 transition hover:border-violet-400/40 hover:text-white disabled:opacity-50"
+      title={isPinned ? "Unpin brand" : "Pin brand to revisit later"}
+    >
+      {isPinned ? "Pinned" : "+ Pin"}
+    </button>
   );
 }
