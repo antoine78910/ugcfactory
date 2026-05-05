@@ -8,6 +8,7 @@ import type { Opportunity } from "@/app/api/intelligence/trackers/[id]/opportuni
 import type { SelectedTracker } from "./TrackerList";
 import { IntelligenceHero } from "./IntelligenceHero";
 import { AdCard } from "./AdCard";
+import { AdModal } from "./AdModal";
 import { HooksTable } from "./HooksTable";
 import { AnglesChart } from "./AnglesChart";
 import { OpportunitiesPanel } from "./OpportunitiesPanel";
@@ -134,6 +135,9 @@ export function TrackerDetail({
     },
     [tracker.id, isOwnTracker]
   );
+
+  // Ad modal
+  const [openAd, setOpenAd] = useState<TTAd | null>(null);
 
   // Block 2 — Top Ads
   const [ads, setAds] = useState<TTAd[]>([]);
@@ -300,7 +304,7 @@ export function TrackerDetail({
         {!adsLoading && ads.length > 0 && (
           <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5">
             {ads.map((ad) => (
-              <AdCard key={ad.id} ad={ad} />
+              <AdCard key={ad.id} ad={ad} onView={() => setOpenAd(ad)} />
             ))}
           </div>
         )}
@@ -334,6 +338,8 @@ export function TrackerDetail({
           />
         )}
       </section>
+
+      <AdModal ad={openAd} onClose={() => setOpenAd(null)} />
     </div>
   );
 }

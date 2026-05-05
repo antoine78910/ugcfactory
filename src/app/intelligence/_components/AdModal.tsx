@@ -1,0 +1,107 @@
+"use client";
+
+import { useEffect, useState } from "react";
+import { Copy, ExternalLink, X } from "lucide-react";
+import type { TTAd } from "@/lib/trendtrack";
+
+const PLATFORM_LABELS: Record<string, string> = {
+  meta: "Meta",
+  facebook: "Facebook",
+  tiktok: "TikTok",
+};
+
+export function AdModal({ ad, onClose }: { ad: TTAd | null; onClose: () => void }) {
+  const [copied, setCopied] = useState(false);
+
+  useEffect(() => {
+    if (!ad) return;
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === "Escape") onClose();
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [ad, onClose]);
+
+  if (!ad) return null;
+
+  const thumbnail = ad.thumbnailUrl ?? ad.previewUrl ?? ad.imageUrl;
+  const hook = ad.headline ?? ad.title ?? "";
+  const body = ad.body ?? ad.text ?? "";
+  const platform = ad.platform ?? "meta";
+  const label = PLATFORM_LABELS[platform.toLowerCase()] ?? platform;
+
+  return (
+    <div
+      className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 p-6 backdrop-blur-sm"
+      onClick={onClose}
+    >
+      <div
+        className="relative flex max-h-[90dvh] w-full max-w-3xl flex-col overflow-hidden rounded-2xl border border-white/10 bg-[#0b0912]/95 shadow-2xl"
+        onClick={(e) => e.stopPropagation()}
+      >
+        <button
+          onClick={onClose}
+          className="absolute right-3 top-3 z-10 flex h-8 w-8 items-center justify-center rounded-lg border border-white/10 bg-black/60 text-white/70 backdrop-blur transition hover:border-violet-400/35 hover:text-white"
+          aria-label="Close"
+        >
+          <X className="h-4 w-4" />
+        </button>
+
+        <div className="relative aspect-video w-full bg-black">
+          {thumbnail ? (
+            <img src={thumbnail} alt={hook} className="h-full w-full object-contain" />
+          ) : (
+            <div className="flex h-full w-full items-center justify-center text-sm text-white/40">
+              No preview
+            </div>
+          )}
+        </div>
+
+        <div className="flex flex-col gap-3 overflow-y-auto p-5">
+          <div className="flex flex-wrap items-center gap-2 text-[11px]">
+            <span className="rounded-full bg-violet-500/15 px-2 py-0.5 font-medium text-violet-200">
+              {label}
+            </span>
+            {ad.reach && (
+              <span className="rounded-full border border-white/10 bg-white/5 px-2 py-0.5 text-white/60">
+                Reach {ad.reach.toLocaleString()}
+              </span>
+            )}
+            {ad.startDate && (
+              <span className="text-white/40">First seen {ad.startDate}</span>
+            )}
+          </div>
+          {hook && <p className="text-base font-semibold text-white">{hook}</p>}
+          {body && <p className="text-sm leading-relaxed text-white/70">{body}</p>}
+
+          <div className="mt-2 flex items-center gap-2">
+            {hook && (
+              <button
+                onClick={async () => {
+                  await navigator.clipboard.writeText(hook);
+                  setCopied(true);
+                  window.setTimeout(() => setCopied(false), 1500);
+                }}
+                className="flex items-center gap-1.5 rounded-xl bg-violet-400 px-3 py-1.5 text-xs font-semibold text-black shadow-[0_4px_0_0_rgba(76,29,149,0.95)] transition hover:bg-violet-300 active:translate-y-[2px] active:shadow-none"
+              >
+                <Copy className="h-3 w-3" />
+                {copied ? "Copied!" : "Copy hook"}
+              </button>
+            )}
+            {ad.adUrl && (
+              <a
+                href={ad.adUrl}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="flex items-center gap-1.5 rounded-xl border border-white/10 bg-white/5 px-3 py-1.5 text-xs font-medium text-white/80 transition hover:border-violet-400/35 hover:text-white"
+              >
+                <ExternalLink className="h-3 w-3" />
+                Original ad
+              </a>
+            )}
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
