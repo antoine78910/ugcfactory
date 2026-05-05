@@ -163,7 +163,12 @@ export function TrackerDetail({
           : await fetch(endpoint, {
               method: "POST",
               headers: { "Content-Type": "application/json" },
-              body: JSON.stringify({ advertiser: tracker.id }),
+              // TrendTrack query payloads vary; send both keys and the domain hint when available.
+              body: JSON.stringify({
+                advertiser: tracker.id,
+                advertiser_id: tracker.id,
+                ...(tracker.domain ? { domain: tracker.domain } : {}),
+              }),
             });
         const parsed = await parseIntelResponse<TTAd[]>(res);
         if (activeIdRef.current !== tracker.id) return;
