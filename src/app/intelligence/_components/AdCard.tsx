@@ -20,6 +20,7 @@ export function AdCard({ ad, onView }: { ad: TTAd; onView?: () => void }) {
   const platform = ad.platform ?? "meta";
   const label = PLATFORM_LABELS[platform.toLowerCase()] ?? platform;
   const date = ad.startDate ?? ad.firstSeen;
+  const rank = (ad as TTAd & { rank?: number }).rank;
 
   const Wrapper = onView ? "button" : "div";
   return (
@@ -39,6 +40,11 @@ export function AdCard({ ad, onView }: { ad: TTAd; onView?: () => void }) {
             No preview
           </div>
         )}
+        {typeof rank === "number" && Number.isFinite(rank) && rank > 0 ? (
+          <span className="absolute right-2 top-2 rounded-full border border-white/10 bg-black/70 px-2 py-0.5 text-[10px] font-bold text-white/90 backdrop-blur">
+            #{rank}
+          </span>
+        ) : null}
         <span className="absolute left-2 top-2 rounded-full bg-black/60 px-2 py-0.5 text-[10px] font-medium text-white/85 backdrop-blur">
           {label}
         </span>

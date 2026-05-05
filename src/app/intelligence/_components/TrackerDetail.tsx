@@ -318,8 +318,12 @@ export function TrackerDetail({
         {adsError && <p className="text-xs text-red-400">{adsError}</p>}
         {!adsLoading && ads.length > 0 && (
           <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5">
-            {ads.map((ad) => (
-              <AdCard key={ad.id} ad={ad} onView={() => setOpenAd(ad)} />
+            {ads.map((ad, idx) => (
+              <AdCard
+                key={ad.id}
+                ad={{ ...ad, rank: idx + 1 }}
+                onView={() => setOpenAd(ad)}
+              />
             ))}
           </div>
         )}
