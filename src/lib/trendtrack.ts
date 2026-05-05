@@ -2,6 +2,43 @@ import { requireEnv } from "@/lib/env";
 
 const BASE = "https://api.trendtrack.io";
 
+export type TrendTrackErrorCode =
+  | "auth"
+  | "rate_limit"
+  | "not_found"
+  | "server"
+  | "unknown";
+
+export class TrendTrackError extends Error {
+  status: number;
+  code: TrendTrackErrorCode;
+  retryAfterSec?: number;
+  raw: string;
+
+  constructor(opts: {
+    status: number;
+    code: TrendTrackErrorCode;
+    retryAfterSec?: number;
+    raw: string;
+    message: string;
+  }) {
+    super(opts.message);
+    this.name = "TrendTrackError";
+    this.status = opts.status;
+    this.code = opts.code;
+    this.retryAfterSec = opts.retryAfterSec;
+    this.raw = opts.raw;
+  }
+}
+
+function classifyTrendTrackStatus(status: number): TrendTrackErrorCode {
+  if (status === 401 || status === 403) return "auth";
+  if (status === 404) return "not_found";
+  if (status === 429) return "rate_limit";
+  if (status >= 500) return "server";
+  return "unknown";
+}
+
 async function ttFetch<T>(path: string, init?: RequestInit): Promise<T> {
   const apiKey = requireEnv("TRENDTRACK_API_KEY");
   const res = await fetch(`${BASE}${path}`, {
@@ -14,7 +51,15 @@ async function ttFetch<T>(path: string, init?: RequestInit): Promise<T> {
   });
   if (!res.ok) {
     const body = await res.text().catch(() => "");
-    throw new Error(`TrendTrack ${res.status} ${path}: ${body}`);
+    const retryAfterRaw = res.headers.get("retry-after");
+    const retryAfterSec = retryAfterRaw ? Number(retryAfterRaw) : undefined;
+    throw new TrendTrackError({
+      status: res.status,
+      code: classifyTrendTrackStatus(res.status),
+      retryAfterSec: Number.isFinite(retryAfterSec) ? retryAfterSec : undefined,
+      raw: body,
+      message: `TrendTrack ${res.status} ${path}: ${body || "(no body)"}`,
+    });
   }
   return res.json() as Promise<T>;
 }
