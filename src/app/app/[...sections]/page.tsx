@@ -38,7 +38,11 @@ import {
   getPersonalElevenLabsApiKey,
 } from "@/app/_components/CreditsPlanContext";
 import { refundPlatformCredits } from "@/lib/refundPlatformCredits";
-import { mergeStudioHistoryWithServer } from "@/lib/mergeStudioHistoryWithLocal";
+import {
+  mergeStudioHistoryWithServer,
+  mergeStudioHistoryFirstPageWithLocal,
+  appendStudioHistoryNextPage,
+} from "@/lib/mergeStudioHistoryWithLocal";
 import {
   mergeServerHistoryWithMotionPending,
   patchMotionPendingJob,
@@ -1054,6 +1058,13 @@ export default function AppBrandWizard() {
   const [voiceChangeVoiceTab, setVoiceChangeVoiceTab] = useState<"all" | "favorites">("all");
   const [motionControlHistoryItems, setMotionControlHistoryItems] = useState<StudioHistoryItem[]>([]);
   const [translateHistoryItems, setTranslateHistoryItems] = useState<StudioHistoryItem[]>([]);
+  const [voiceHasMore, setVoiceHasMore] = useState(false);
+  const [voiceLoadingMore, setVoiceLoadingMore] = useState(false);
+  const [translateHasMore, setTranslateHasMore] = useState(false);
+  const [translateLoadingMore, setTranslateLoadingMore] = useState(false);
+  const [motionHasMore, setMotionHasMore] = useState(false);
+  const [motionLoadingMore, setMotionLoadingMore] = useState(false);
+  const SECTION_PAGE_LIMIT = 60;
   const [motionServerHistory, setMotionServerHistory] = useState<boolean | null>(null);
   type MotionBilling =
     | { open: false }
@@ -1291,6 +1302,34 @@ export default function AppBrandWizard() {
     return deduped.sort((a, b) => a.localeCompare(b));
   }, []);
 
+  const activeHasMore =
+    appSection === "voice"
+      ? voiceHasMore
+      : appSection === "ad_clone"
+        ? translateHasMore
+        : motionHasMore;
+
+  const setActiveHasMore =
+    appSection === "voice"
+      ? setVoiceHasMore
+      : appSection === "ad_clone"
+        ? setTranslateHasMore
+        : setMotionHasMore;
+
+  const activeLoadingMore =
+    appSection === "voice"
+      ? voiceLoadingMore
+      : appSection === "ad_clone"
+        ? translateLoadingMore
+        : motionLoadingMore;
+
+  const setActiveLoadingMore =
+    appSection === "voice"
+      ? setVoiceLoadingMore
+      : appSection === "ad_clone"
+        ? setTranslateLoadingMore
+        : setMotionLoadingMore;
+
   const setActiveHistoryItems =
     appSection === "voice"
       ? setVoiceHistoryItems
@@ -1302,10 +1341,13 @@ export default function AppBrandWizard() {
     const ac = new AbortController();
     void (async () => {
       try {
-        const res = await fetch(`/api/studio/generations?kind=${encodeURIComponent(historyKindsKey)}`, {
-          cache: "no-store",
-          signal: ac.signal,
-        });
+        const res = await fetch(
+          `/api/studio/generations?kind=${encodeURIComponent(historyKindsKey)}&limit=${SECTION_PAGE_LIMIT}`,
+          {
+            cache: "no-store",
+            signal: ac.signal,
+          },
+        );
         if (ac.signal.aborted) return;
         if (res.status === 401) {
           setMotionServerHistory(false);
@@ -1316,9 +1358,14 @@ export default function AppBrandWizard() {
           setMotionServerHistory(false);
           return;
         }
-        const json = (await res.json()) as { data?: StudioHistoryItem[]; refundHints?: RefundHint[] };
+        const json = (await res.json()) as {
+          data?: StudioHistoryItem[];
+          refundHints?: RefundHint[];
+          hasMore?: boolean;
+        };
         if (ac.signal.aborted) return;
         setMotionServerHistory(true);
+        setActiveHasMore(Boolean(json.hasMore));
         const serverList = json.data ?? [];
         const pendingMotion = readMotionPendingJobs();
         const pendingTranslate = readTranslatePendingJobs();
@@ -1399,10 +1446,19 @@ export default function AppBrandWizard() {
       }
     })();
     return () => ac.abort();
-  }, [applyRefundHints, getPersonalApiKey, historyKindsKey, setActiveHistoryItems]);
+  }, [applyRefundHints, getPersonalApiKey, historyKindsKey, setActiveHasMore, setActiveHistoryItems]);
+
+  const activeHistoryItemsForPoll =
+    appSection === "voice"
+      ? voiceHistoryItems
+      : appSection === "ad_clone"
+        ? translateHistoryItems
+        : motionControlHistoryItems;
+  const hasInFlightSection = activeHistoryItemsForPoll.some((i) => i.status === "generating");
 
   useEffect(() => {
     if (motionServerHistory !== true) return;
+    if (!hasInFlightSection) return;
 
     const tick = () => {
       void (async () => {
@@ -1434,8 +1490,9 @@ export default function AppBrandWizard() {
                 : serverList;
           const mergeHistory =
             historyKindsKey === VOICE_HISTORY_API_KINDS
-              ? mergeVoiceHistoryWithServer
-              : mergeStudioHistoryWithServer;
+              ? (server: StudioHistoryItem[], prev: StudioHistoryItem[]) =>
+                  mergeVoiceHistoryWithServer(server, prev)
+              : mergeStudioHistoryFirstPageWithLocal;
           setActiveHistoryItems((prev) => mergeHistory(withPending, prev));
         }
         const hints = json.refundHints ?? [];
@@ -1449,7 +1506,58 @@ export default function AppBrandWizard() {
     tick();
     const id = window.setInterval(tick, 4000);
     return () => window.clearInterval(id);
-  }, [applyRefundHints, historyKindsKey, motionServerHistory, setActiveHistoryItems]);
+  }, [applyRefundHints, historyKindsKey, motionServerHistory, setActiveHistoryItems, hasInFlightSection]);
+
+  const onLoadMoreSection = useCallback(async () => {
+    if (activeLoadingMore || !activeHasMore) return;
+    setActiveLoadingMore(true);
+    try {
+      const items =
+        appSection === "voice"
+          ? voiceHistoryItems
+          : appSection === "ad_clone"
+            ? translateHistoryItems
+            : motionControlHistoryItems;
+      const oldest = items.reduce<number | null>(
+        (acc, i) => (acc === null || i.createdAt < acc ? i.createdAt : acc),
+        null,
+      );
+      if (oldest === null) {
+        setActiveHasMore(false);
+        return;
+      }
+      const before = new Date(oldest).toISOString();
+      const res = await fetch(
+        `/api/studio/generations?kind=${encodeURIComponent(historyKindsKey)}&limit=${SECTION_PAGE_LIMIT}&before=${encodeURIComponent(before)}`,
+        { cache: "no-store" },
+      );
+      if (!res.ok) return;
+      const json = (await res.json()) as {
+        data?: StudioHistoryItem[];
+        hasMore?: boolean;
+      };
+      const next = json.data ?? [];
+      if (next.length === 0) {
+        setActiveHasMore(false);
+        return;
+      }
+      setActiveHistoryItems((prev) => appendStudioHistoryNextPage(prev, next));
+      setActiveHasMore(Boolean(json.hasMore));
+    } finally {
+      setActiveLoadingMore(false);
+    }
+  }, [
+    appSection,
+    activeHasMore,
+    activeLoadingMore,
+    historyKindsKey,
+    motionControlHistoryItems,
+    setActiveHasMore,
+    setActiveHistoryItems,
+    setActiveLoadingMore,
+    translateHistoryItems,
+    voiceHistoryItems,
+  ]);
 
   /**
    * Client-side poller for translate jobs that were in-progress when the page was reloaded.
@@ -4805,6 +4913,9 @@ export default function AppBrandWizard() {
                               }
                             }}
                             onChangeVoice={handleChangeVoiceFromHistory}
+                            hasMore={activeHasMore}
+                            isLoadingMore={activeLoadingMore}
+                            onLoadMore={onLoadMoreSection}
                           />
                         }
                         empty={null}
