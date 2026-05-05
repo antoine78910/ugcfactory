@@ -7,14 +7,24 @@ import { serverLog } from "@/lib/serverLog";
 import { requireSupabaseUser } from "@/lib/supabase/requireUser";
 import { submitWaveSpeedHeygenVideoTranslate } from "@/lib/wavespeed";
 import { isWaveSpeedHeygenTranslateLanguage } from "@/lib/wavespeedTranslateLanguages";
+import { createSupabaseServiceClient } from "@/lib/supabase/admin";
+import { resolveAuthUserEmail } from "@/lib/sessionUserEmail";
+import { shouldChargePlatformCredits, assertSufficientCreditsResponse } from "@/lib/credits/metering";
+import { calculateWaveSpeedVideoTranslateCredits } from "@/lib/pricing";
+import { getUserPlan } from "@/lib/supabase/getUserPlan";
 
 type Body = {
   videoUrl?: string;
   outputLanguage?: string;
+  /** Detected video duration in seconds (used for pre-flight credit gate). */
+  videoDurationSeconds?: number;
 };
 
+/** Fallback duration when the client omits `videoDurationSeconds` (mirrors UI placeholder). */
+const WAVESPEED_VIDEO_TRANSLATE_FALLBACK_SECONDS = 12;
+
 export async function POST(req: Request) {
-  const { response } = await requireSupabaseUser();
+  const { user, response } = await requireSupabaseUser();
   if (response) return response;
 
   let body: Body;
@@ -32,6 +42,26 @@ export async function POST(req: Request) {
   }
   if (!isWaveSpeedHeygenTranslateLanguage(outputLanguage)) {
     return NextResponse.json({ error: "Unsupported target language." }, { status: 400 });
+  }
+
+  const usesPersonalApi = false;
+  const admin = createSupabaseServiceClient();
+  const email = await resolveAuthUserEmail(user, admin);
+  const charges = shouldChargePlatformCredits({ usesPersonalApi, email });
+  if (charges && admin) {
+    const durationSec =
+      Number(body.videoDurationSeconds) > 0
+        ? Number(body.videoDurationSeconds)
+        : WAVESPEED_VIDEO_TRANSLATE_FALLBACK_SECONDS;
+    const costDisplayCredits = calculateWaveSpeedVideoTranslateCredits(durationSec);
+    const dbPlan = await getUserPlan(user.id);
+    const gate = await assertSufficientCreditsResponse({
+      admin,
+      userId: user.id,
+      planId: dbPlan ?? "free",
+      costDisplayCredits,
+    });
+    if (gate) return gate;
   }
 
   try {
