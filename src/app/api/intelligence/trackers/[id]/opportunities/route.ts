@@ -6,6 +6,7 @@ import { requireSupabaseUser } from "@/lib/supabase/requireUser";
 import { getCached, setCached, deleteCached } from "@/lib/trendtrackCache";
 import { claudeMessagesText } from "@/lib/claudeResponses";
 import type { Angle } from "@/app/api/intelligence/trackers/[id]/angles/route";
+import { respondTrendTrackError } from "@/app/api/intelligence/_errors";
 
 export type Opportunity = { title: string; description: string; brief?: string };
 
@@ -108,7 +109,6 @@ export async function GET(
     await setCached(key, opportunities, TTL);
     return NextResponse.json(opportunities);
   } catch (err) {
-    const msg = err instanceof Error ? err.message : "Unknown error";
-    return NextResponse.json({ error: msg }, { status: 502 });
+    return respondTrendTrackError(err, key);
   }
 }

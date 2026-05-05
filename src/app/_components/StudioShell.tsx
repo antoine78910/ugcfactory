@@ -132,7 +132,7 @@ const CREATE_NAV: CreateNavEntry[] = [
     href: "/intelligence",
     label: "Intelligence",
     icon: Telescope,
-    soon: true,
+    beta: true,
   },
   { kind: "route", id: "avatar", label: "Avatar", icon: UserRound },
   { kind: "route", id: "ad_clone", label: "Translate", icon: Languages },

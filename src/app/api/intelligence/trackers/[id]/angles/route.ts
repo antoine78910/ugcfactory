@@ -5,6 +5,7 @@ import { requireSupabaseUser } from "@/lib/supabase/requireUser";
 import { ttGetTopAds, type TTAd } from "@/lib/trendtrack";
 import { getCached, setCached, deleteCached } from "@/lib/trendtrackCache";
 import { claudeMessagesText } from "@/lib/claudeResponses";
+import { respondTrendTrackError } from "@/app/api/intelligence/_errors";
 
 export type Angle = { label: string; pct: number };
 
@@ -72,8 +73,7 @@ export async function GET(
       ads = await ttGetTopAds(id, 10);
       await setCached(topAdsKey, ads, TOPADS_TTL);
     } catch (err) {
-      const msg = err instanceof Error ? err.message : "Unknown error";
-      return NextResponse.json({ error: msg }, { status: 502 });
+      return respondTrendTrackError(err, topAdsKey);
     }
   }
 
@@ -92,7 +92,6 @@ export async function GET(
     await setCached(anglesKey, angles, ANGLES_TTL);
     return NextResponse.json(angles);
   } catch (err) {
-    const msg = err instanceof Error ? err.message : "Unknown error";
-    return NextResponse.json({ error: msg }, { status: 502 });
+    return respondTrendTrackError(err, anglesKey);
   }
 }
