@@ -4,6 +4,7 @@ import { NextResponse } from "next/server";
 import { requireSupabaseUser } from "@/lib/supabase/requireUser";
 import { ttGetTopAds } from "@/lib/trendtrack";
 import { getCached, setCached, deleteCached } from "@/lib/trendtrackCache";
+import { respondTrendTrackError } from "@/app/api/intelligence/_errors";
 
 const TTL = 60 * 60;
 
@@ -27,7 +28,6 @@ export async function GET(
     await setCached(key, data, TTL);
     return NextResponse.json(data);
   } catch (err) {
-    const msg = err instanceof Error ? err.message : "Unknown error";
-    return NextResponse.json({ error: msg }, { status: 502 });
+    return respondTrendTrackError(err, key);
   }
 }
