@@ -7,7 +7,7 @@ import {
   type StudioGenerationRow,
 } from "@/lib/studioGenerationsMap";
 import { fetchStudioGenerationRows } from "@/lib/studioGenerationsListQuery";
-import { sweepStudioRefundHints } from "@/lib/studioGenerationsPoll";
+import { pollStudioGenerationRow, sweepStudioRefundHints } from "@/lib/studioGenerationsPoll";
 import { markStaleInProgressStudioGenerationsFailedForUser } from "@/lib/studioGenerationsStale";
 import { STUDIO_LIBRARY_KINDS } from "@/lib/studioGenerationKinds";
 import { filterLegacyLinkToAdFromTabRows } from "@/lib/studioGenerationsTabFilter";
@@ -27,6 +27,12 @@ function parseKindParam(kindParam: string): { mode: "all" } | { kinds: string[] 
 
 const STUDIO_GENERATIONS_DEFAULT_PAGE_LIMIT = 60;
 const STUDIO_GENERATIONS_MAX_PAGE_LIMIT = 200;
+const STUDIO_GENERATIONS_POLL_LIMIT = 12;
+
+function isInProgressStatus(status: string | null | undefined): boolean {
+  const s = String(status ?? "").toLowerCase();
+  return s === "processing" || s === "generating" || s === "pending" || s === "queued";
+}
 
 function parsePageLimit(raw: string | null): number {
   const n = Number((raw ?? "").trim());
@@ -70,7 +76,21 @@ export async function GET(req: Request) {
       ),
     ]);
 
-    let rows = rowsRaw;
+    // Opportunistic: poll in-flight rows so history doesn't get stuck on "generating"
+    // when provider has already completed (notably Topaz 4× upscale).
+    const inFlight = rowsRaw.filter((r) => isInProgressStatus(r.status)).slice(0, STUDIO_GENERATIONS_POLL_LIMIT);
+    if (inFlight.length > 0) {
+      await Promise.all(
+        inFlight.map((row) => pollStudioGenerationRow(row as StudioGenerationRow, undefined, undefined, supabase)),
+      );
+    }
+
+    // Re-fetch after polling so client receives updated result_urls/status.
+    const rowsRefreshed = inFlight.length > 0
+      ? await fetchStudioGenerationRows(supabase, user.id, fetchOptions)
+      : rowsRaw;
+
+    let rows = rowsRefreshed;
     if (!all) {
       const parsedForFilter = parseKindParam(kindRaw);
       if (!("mode" in parsedForFilter)) {
@@ -82,7 +102,7 @@ export async function GET(req: Request) {
     const items = rows.map(studioGenerationRowToHistoryItem);
     // hasMore is approximate: when DB returned exactly `limit` rows we cannot tell if more exist.
     // false negatives cause "Load more" to disappear a click early; false positives cause one empty fetch.
-    const hasMore = !all && rowsRaw.length >= limit;
+    const hasMore = !all && rowsRefreshed.length >= limit;
 
     return NextResponse.json({ data: items, refundHints, hasMore });
   } catch (err) {
