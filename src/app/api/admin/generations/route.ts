@@ -42,19 +42,40 @@ export async function GET(req: Request) {
   const status = url.searchParams.get("status") || null;
   const userId = url.searchParams.get("user_id") || null;
   const search = url.searchParams.get("q")?.trim() || null;
+  const emailFilter = url.searchParams.get("email")?.trim().toLowerCase() || null;
+  const fromDate = url.searchParams.get("from") || null;
+  const toDate = url.searchParams.get("to") || null;
+  const sort = url.searchParams.get("sort") || "when";
+  const order: "asc" | "desc" = url.searchParams.get("order") === "asc" ? "asc" : "desc";
 
   const from = (page - 1) * perPage;
   const to = from + perPage - 1;
 
+  let emailUserIds: string[] | null = null;
+  if (emailFilter) {
+    const { data: userList } = await admin.auth.admin.listUsers({ page: 1, perPage: 1000 });
+    emailUserIds = (userList?.users ?? [])
+      .filter((u) => (u.email ?? "").toLowerCase().includes(emailFilter))
+      .map((u) => u.id);
+    if (emailUserIds.length === 0) {
+      return NextResponse.json({ rows: [], emailMap: {}, total: 0, page, perPage });
+    }
+  }
+
+  const sortColumn = sort === "charged" ? "credits_charged" : sort === "balance" ? "credit_balance_after" : "created_at";
+
   let query = admin
     .from("studio_generations")
     .select("*", { count: "exact" })
-    .order("created_at", { ascending: false })
+    .order(sortColumn, { ascending: order === "asc" })
     .range(from, to);
 
   if (kind) query = query.eq("kind", kind);
   if (status) query = query.eq("status", status);
   if (userId) query = query.eq("user_id", userId);
+  if (emailUserIds) query = query.in("user_id", emailUserIds);
+  if (fromDate) query = query.gte("created_at", `${fromDate}T00:00:00.000Z`);
+  if (toDate) query = query.lte("created_at", `${toDate}T23:59:59.999Z`);
   if (search) query = query.or(`label.ilike.%${search}%,external_task_id.ilike.%${search}%`);
 
   const { data: rows, error, count } = await query;
