@@ -27,7 +27,10 @@ import {
   topazVideoUpscaleCredits,
 } from "@/lib/pricing";
 import { registerStudioGenerationClient } from "@/lib/registerStudioGenerationClient";
-import { mergeStudioHistoryWithServer } from "@/lib/mergeStudioHistoryWithLocal";
+import {
+  appendStudioHistoryNextPage,
+  mergeStudioHistoryFirstPageWithLocal,
+} from "@/lib/mergeStudioHistoryWithLocal";
 import { UploadBusyOverlay } from "@/app/_components/UploadBusyOverlay";
 import { userMessageFromCaughtError } from "@/lib/generationUserMessage";
 import { uploadFileToCdn } from "@/lib/uploadBlobUrlToCdn";
@@ -116,6 +119,9 @@ export default function StudioUpscalePanel() {
   const [serverHistory, setServerHistory] = useState<boolean | null>(null);
   type Bill = { open: false } | { open: true; required: number };
   const [billing, setBilling] = useState<Bill>({ open: false });
+  const [hasMoreHistory, setHasMoreHistory] = useState(false);
+  const [isLoadingMoreHistory, setIsLoadingMoreHistory] = useState(false);
+  const UPSCALE_PAGE_LIMIT = 60;
   const grantCreditsRef = useRef(grantCredits);
   grantCreditsRef.current = grantCredits;
 
@@ -163,20 +169,30 @@ export default function StudioUpscalePanel() {
 
   useEffect(() => {
     void (async () => {
-      const res = await fetch("/api/studio/generations?kind=studio_upscale", { cache: "no-store" });
+      const res = await fetch(
+        `/api/studio/generations?kind=studio_upscale&limit=${UPSCALE_PAGE_LIMIT}`,
+        { cache: "no-store" },
+      );
       if (res.status === 401) {
         setServerHistory(false);
         setHistoryItems([]);
+        setHasMoreHistory(false);
         return;
       }
       if (!res.ok) {
         setServerHistory(false);
         setHistoryItems([]);
+        setHasMoreHistory(false);
         return;
       }
-      const json = (await res.json()) as { data?: StudioHistoryItem[]; refundHints?: RefundHint[] };
+      const json = (await res.json()) as {
+        data?: StudioHistoryItem[];
+        refundHints?: RefundHint[];
+        hasMore?: boolean;
+      };
       setServerHistory(true);
       setHistoryItems(json.data ?? []);
+      setHasMoreHistory(Boolean(json.hasMore));
       const hints = json.refundHints ?? [];
       if (hints.length) {
         applyRefundHints(hints, grantCreditsRef.current, creditsRef);
@@ -185,8 +201,11 @@ export default function StudioUpscalePanel() {
     })();
   }, []);
 
+  const hasInFlightUpscale = historyItems.some((i) => i.status === "generating");
+
   useEffect(() => {
     if (serverHistory !== true) return;
+    if (!hasInFlightUpscale) return;
 
     const tick = () => {
       void (async () => {
@@ -202,7 +221,7 @@ export default function StudioUpscalePanel() {
         if (!res.ok) return;
         const json = (await res.json()) as { data?: StudioHistoryItem[]; refundHints?: RefundHint[] };
         if (Array.isArray(json.data)) {
-          setHistoryItems((prev) => mergeStudioHistoryWithServer(json.data ?? [], prev));
+          setHistoryItems((prev) => mergeStudioHistoryFirstPageWithLocal(json.data!, prev));
         }
         const hints = json.refundHints ?? [];
         if (hints.length) {
@@ -215,7 +234,41 @@ export default function StudioUpscalePanel() {
     tick();
     const id = window.setInterval(tick, 4000);
     return () => window.clearInterval(id);
-  }, [serverHistory]);
+  }, [serverHistory, hasInFlightUpscale]);
+
+  const onLoadMoreHistory = useCallback(async () => {
+    if (isLoadingMoreHistory || !hasMoreHistory) return;
+    setIsLoadingMoreHistory(true);
+    try {
+      const oldest = historyItems.reduce<number | null>(
+        (acc, i) => (acc === null || i.createdAt < acc ? i.createdAt : acc),
+        null,
+      );
+      if (oldest === null) {
+        setHasMoreHistory(false);
+        return;
+      }
+      const before = new Date(oldest).toISOString();
+      const res = await fetch(
+        `/api/studio/generations?kind=studio_upscale&limit=${UPSCALE_PAGE_LIMIT}&before=${encodeURIComponent(before)}`,
+        { cache: "no-store" },
+      );
+      if (!res.ok) return;
+      const json = (await res.json()) as {
+        data?: StudioHistoryItem[];
+        hasMore?: boolean;
+      };
+      const next = json.data ?? [];
+      if (next.length === 0) {
+        setHasMoreHistory(false);
+        return;
+      }
+      setHistoryItems((prev) => appendStudioHistoryNextPage(prev, next));
+      setHasMoreHistory(Boolean(json.hasMore));
+    } finally {
+      setIsLoadingMoreHistory(false);
+    }
+  }, [historyItems, hasMoreHistory, isLoadingMoreHistory]);
 
   const onVideoFileSelected = useCallback((e: ChangeEvent<HTMLInputElement>) => {
     const f = e.target.files?.[0];
@@ -669,6 +722,9 @@ export default function StudioUpscalePanel() {
                 empty={<StudioEmptyExamples variant="upscale" />}
                 mediaLabel={upscalePickerId === "upscale/image" ? "Image" : "Video"}
                 onItemDeleted={(id) => setHistoryItems((prev) => prev.filter((i) => i.id !== id))}
+                hasMore={hasMoreHistory}
+                isLoadingMore={isLoadingMoreHistory}
+                onLoadMore={onLoadMoreHistory}
               />
             }
             empty={null}
