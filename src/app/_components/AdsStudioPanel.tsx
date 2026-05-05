@@ -1695,6 +1695,8 @@ export default function AdsStudioPanel() {
     }
   }, [activeJobs, activeJobsStorageReady]);
 
+  const [templatesOpen, setTemplatesOpen] = useState(false);
+
   useEffect(() => {
     let cancelled = false;
     const loadKind = async (kind: AdsStudioTemplateGalleryKind) => {
@@ -1704,13 +1706,16 @@ export default function AdsStudioPanel() {
       const videos = Array.isArray(json?.videos) ? json.videos : [];
       setTemplateVideosByKind((prev) => ({ ...prev, [kind]: videos }));
     };
-    // Preload both lists so switching tabs is instantaneous.
-    void loadKind("product");
-    void loadKind("app");
+    // Desktop: preload both lists so switching tabs is instantaneous.
+    // Mobile: defer until the user expands the Templates section.
+    if (isMdUp || templatesOpen) {
+      void loadKind("product");
+      void loadKind("app");
+    }
     return () => {
       cancelled = true;
     };
-  }, []);
+  }, [isMdUp, templatesOpen]);
 
   useEffect(() => {
     let cancelled = false;
@@ -2851,7 +2856,6 @@ export default function AdsStudioPanel() {
           />
         </div>
 
-      {isMdUp ? (
       <section className="w-full min-w-0">
         <div className="mb-5 flex flex-col items-center gap-3 sm:mb-6">
           <h2 className="flex items-center gap-2.5 text-center text-xl font-semibold tracking-tight text-white sm:gap-3 sm:text-2xl md:text-[1.75rem] md:leading-snug">
@@ -2862,6 +2866,15 @@ export default function AdsStudioPanel() {
             />
             Generate across formats
           </h2>
+          {!isMdUp ? (
+            <button
+              type="button"
+              onClick={() => setTemplatesOpen((v) => !v)}
+              className="rounded-full border border-white/10 bg-black/25 px-3 py-1.5 text-[11px] font-semibold uppercase tracking-wide text-white/70 transition hover:bg-white/[0.06] hover:text-white"
+            >
+              {templatesOpen ? "Hide templates" : "Show all templates"}
+            </button>
+          ) : null}
           <div
             className="flex rounded-full border border-white/10 bg-black/35 p-0.5 shadow-[inset_0_1px_0_0_rgba(255,255,255,0.06)]"
             role="tablist"
@@ -2898,7 +2911,7 @@ export default function AdsStudioPanel() {
           </div>
         </div>
         <div className="grid grid-cols-2 gap-2 md:grid-cols-3 lg:grid-cols-5">
-          {templateVideos.map((tpl, idx) => {
+          {(isMdUp ? templateVideos : templatesOpen ? templateVideos : templateVideos.slice(0, 4)).map((tpl, idx) => {
             const label = tpl.label || `Template ${idx + 1}`;
             const templateUrl = tpl.url;
             const previewUrl = templateUrl ?? presetPreviewVideos[idx] ?? null;
@@ -2924,7 +2937,7 @@ export default function AdsStudioPanel() {
                     muted
                     loop
                     playsInline
-                    preload="metadata"
+                    preload="none"
                     className="h-full w-full object-cover transition duration-300 group-hover:scale-[1.02]"
                   />
                 ) : (
@@ -2938,9 +2951,10 @@ export default function AdsStudioPanel() {
                   type="button"
                   onClick={() => void recreateFromTemplate(label, tpl, adsTemplateGalleryKind)}
                   className={cn(
-                    "absolute bottom-3 left-1/2 z-20 flex h-9 -translate-x-1/2 items-center justify-center gap-1.5 rounded-full px-4 text-[13px] font-semibold text-white opacity-0 shadow-[0_4px_0_0_rgba(76,29,149,0.88)] ring-1 ring-violet-300/35 transition",
+                    "absolute bottom-3 left-1/2 z-20 flex h-9 -translate-x-1/2 items-center justify-center gap-1.5 rounded-full px-4 text-[13px] font-semibold text-white shadow-[0_4px_0_0_rgba(76,29,149,0.88)] ring-1 ring-violet-300/35 transition",
                     "border border-violet-300/45 bg-violet-500 hover:bg-violet-400 hover:shadow-[0_5px_0_0_rgba(76,29,149,0.88)] active:-translate-x-1/2 active:translate-y-px active:shadow-none",
-                    "group-hover:opacity-100 focus-visible:opacity-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-violet-400/55",
+                    // Mobile has no hover — keep CTA visible. Desktop keeps hover reveal.
+                    "opacity-100 md:opacity-0 md:group-hover:opacity-100 focus-visible:opacity-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-violet-400/55",
                   )}
                 >
                   <Sparkles className="size-3.5 shrink-0 opacity-95" aria-hidden />
@@ -2968,7 +2982,6 @@ export default function AdsStudioPanel() {
           ) : null}
         </div>
       </section>
-      ) : null}
 
       <Dialog.Root
         open={projectDetailResolved !== null}
