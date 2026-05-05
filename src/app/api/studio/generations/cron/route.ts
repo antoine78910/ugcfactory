@@ -47,17 +47,35 @@ export async function POST(req: Request) {
   }
 
   try {
-    const { data: rows, error } = await admin
-      .from("studio_generations")
-      .select("*")
-      .in("status", [...STUDIO_GENERATION_IN_PROGRESS_STATUSES])
-      .eq("uses_personal_api", false)
-      .limit(150);
+    // Prioritize upscales first (these are long-running and frequently reported as "stuck generating").
+    const cutoff2hIso = new Date(Date.now() - 2 * 60 * 60 * 1000).toISOString();
+    const [{ data: upscaleRows, error: upscaleErr }, { data: otherRows, error: otherErr }] = await Promise.all([
+      admin
+        .from("studio_generations")
+        .select("*")
+        .eq("kind", "studio_upscale")
+        .in("status", [...STUDIO_GENERATION_IN_PROGRESS_STATUSES])
+        .eq("uses_personal_api", false)
+        .gte("created_at", cutoff2hIso)
+        .order("created_at", { ascending: true })
+        .limit(120),
+      admin
+        .from("studio_generations")
+        .select("*")
+        .neq("kind", "studio_upscale")
+        .in("status", [...STUDIO_GENERATION_IN_PROGRESS_STATUSES])
+        .eq("uses_personal_api", false)
+        .order("created_at", { ascending: true })
+        .limit(80),
+    ]);
 
-    if (error) throw error;
+    if (upscaleErr) throw upscaleErr;
+    if (otherErr) throw otherErr;
+
+    const rows = [...(upscaleRows ?? []), ...(otherRows ?? [])] as StudioGenerationRow[];
 
     let pollErrors = 0;
-    for (const row of (rows ?? []) as StudioGenerationRow[]) {
+    for (const row of rows) {
       try {
         await pollStudioGenerationRow(row, undefined, undefined, admin);
       } catch {
@@ -65,7 +83,7 @@ export async function POST(req: Request) {
       }
     }
 
-    const n = (rows ?? []).length;
+    const n = rows.length;
 
     const stale = await markStaleInProgressStudioGenerationsFailedAll(admin);
     if (stale.count > 0) {

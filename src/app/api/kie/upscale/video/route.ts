@@ -114,7 +114,12 @@ export async function POST(req: Request) {
   }
 
   const callBackUrl =
-    getEnv("NANOBANANA_CALLBACK_URL") ?? `${getAppUrl()}/api/nanobanana/callback`;
+    getEnv("KIE_CALLBACK_URL") ??
+    (() => {
+      const t = getEnv("KIE_CALLBACK_SECRET")?.trim();
+      const base = `${getAppUrl()}/api/kie/callback`;
+      return t ? `${base}?t=${encodeURIComponent(t)}` : base;
+    })();
 
   try {
     const taskId = await createTopazVideoUpscaleTaskWithRetry({
