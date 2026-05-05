@@ -34,6 +34,10 @@ import {
   normalizeLegacySeedanceMarketModelId,
 } from "@/lib/studioVideoModelCapabilities";
 import { inferSeedanceReferenceKindFromUrl } from "@/lib/seedanceReferenceUrlKind";
+import { createSupabaseServiceClient } from "@/lib/supabase/admin";
+import { resolveAuthUserEmail } from "@/lib/sessionUserEmail";
+import { shouldChargePlatformCredits, assertSufficientCreditsResponse } from "@/lib/credits/metering";
+import { calculateVideoCreditsForModel } from "@/lib/pricing";
 
 type KlingAspectRatio = "16:9" | "9:16" | "1:1";
 type KlingMode = "std" | "pro";
@@ -567,9 +571,11 @@ export async function POST(req: Request) {
 
   const personalKey = hasPersonalApiKey(body.personalApiKey) ? body.personalApiKey.trim() : undefined;
   const piapiKey = hasPersonalApiKey(body.piapiApiKey) ? body.piapiApiKey.trim() : undefined;
+  let dbPlanResolved: string | null = null;
   if (!personalKey && !piapiKey) {
     // Fetch plan from DB (server-side); fall back to client claim only if table not yet available
     const dbPlan = await getUserPlan(user.id);
+    dbPlanResolved = dbPlan;
     const accountPlan = dbPlan !== "free" ? dbPlan : parseAccountPlan(body.accountPlan);
     const skipTierGate = body.linkToAd === true;
     if (!skipTierGate && !canUseStudioVideoModel(accountPlan, model)) {
@@ -581,6 +587,31 @@ export async function POST(req: Request) {
         { status: 403 },
       );
     }
+  }
+
+  const usesPersonalApi = Boolean(personalKey || piapiKey);
+  const admin = createSupabaseServiceClient();
+  const email = await resolveAuthUserEmail(user, admin);
+  const charges = shouldChargePlatformCredits({ usesPersonalApi, email });
+  if (charges && admin) {
+    // Compute cost server-side. Mirrors the client-side calc; differences would only block edge cases.
+    const costDisplayCredits = calculateVideoCreditsForModel({
+      modelId: model,
+      duration: Number(body.duration) || 5,
+      audio: body.sound ?? true,
+      quality: body.mode,
+      videoResolution: body.videoResolution,
+    });
+    // Plan id for the modal: best-effort. Use the existing accountPlan if computed, else fetch fresh.
+    const dbPlan = dbPlanResolved ?? (await getUserPlan(user.id));
+    const planForModal = dbPlan;
+    const gate = await assertSufficientCreditsResponse({
+      admin,
+      userId: user.id,
+      planId: planForModal,
+      costDisplayCredits,
+    });
+    if (gate) return gate;
   }
 
   const mode = body.mode ?? "pro";
