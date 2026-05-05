@@ -140,3 +140,13 @@ export async function ttQueryAds(body: Record<string, unknown>): Promise<TTAd[]>
   });
   return res.data ?? [];
 }
+
+export type TTUsage = {
+  remaining?: number;
+  used?: number;
+  plan?: string;
+};
+
+export async function ttGetUsage(): Promise<TTUsage> {
+  return ttFetch<TTUsage>("/v1/usage");
+}
