@@ -1959,9 +1959,20 @@ export default function AdminPage() {
                       onClick={() => setExpandedGenId(expandedGenId === row.id ? null : row.id)}
                     >
                       <td className="px-3 py-2.5">
-                        <span className="max-w-[140px] truncate block text-white/70" title={genEmailMap[row.user_id] ?? row.user_id}>
-                          {genEmailMap[row.user_id]?.split("@")[0] ?? row.user_id.slice(0, 8)}
-                        </span>
+                        <div className="flex items-center gap-1.5">
+                          <span className="max-w-[140px] truncate block text-white/70" title={genEmailMap[row.user_id] ?? row.user_id}>
+                            {genEmailMap[row.user_id]?.split("@")[0] ?? row.user_id.slice(0, 8)}
+                          </span>
+                          {activePlanByUserId[row.user_id] && (
+                            <span
+                              className="inline-flex h-4 items-center gap-0.5 rounded-sm border border-violet-500/40 bg-violet-500/15 px-1 text-[9px] font-semibold text-violet-200"
+                              title={`Partner: ${activePlanByUserId[row.user_id].plan_id} until ${new Date(activePlanByUserId[row.user_id].expires_at).toLocaleDateString()}`}
+                            >
+                              <Gift className="h-2.5 w-2.5" />
+                              partner
+                            </span>
+                          )}
+                        </div>
                       </td>
                       <td className="px-3 py-2.5">
                         <span className="rounded-md border border-white/10 bg-white/5 px-2 py-0.5 text-[10px] font-medium text-white/60">
