@@ -17,6 +17,9 @@ import { studioImageCreditsChargedTotal } from "@/lib/pricing";
 import { isStudioGptImage2PickerModelId, isStudioImageKiePickerModelId } from "@/lib/studioImageModels";
 import { getUserPlan } from "@/lib/supabase/getUserPlan";
 import { isMissingAspectRatioColumnError } from "@/lib/studioGenerationsSchemaCompat";
+import { createSupabaseServiceClient } from "@/lib/supabase/admin";
+import { resolveAuthUserEmail } from "@/lib/sessionUserEmail";
+import { shouldChargePlatformCredits, assertSufficientCreditsResponse } from "@/lib/credits/metering";
 
 /** Calculate credits server-side; never trust the client-provided value. */
 function computeImageCredits(model: string, resolution: string, numImages: number): number {
@@ -84,15 +87,27 @@ export async function POST(req: Request) {
   }
 
   const usesPersonalApi = Boolean(personalKey);
-  const shouldChargePlatformCredits = !usesPersonalApi && accountPlan === "free";
+  const admin = createSupabaseServiceClient();
+  const email = await resolveAuthUserEmail(user, admin);
+  const charges = shouldChargePlatformCredits({ usesPersonalApi, email });
   // Calculate credits server-side, never trust the client-provided value
   const numImages = Math.max(1, Math.min(Number(body.numImages) || 1, 10));
   const requestedResolution = (body.resolution as "1K" | "2K" | "4K" | undefined) ?? "1K";
   const supportsResolution = !isStudioGptImage2PickerModelId(model);
   const resolutionForTask = supportsResolution ? requestedResolution : undefined;
   const resolutionForCredits = supportsResolution ? requestedResolution : "1K";
-  const creditsDisplay = shouldChargePlatformCredits ? computeImageCredits(model, resolutionForCredits, numImages) : 0;
+  const creditsDisplay = charges ? computeImageCredits(model, resolutionForCredits, numImages) : 0;
   const totalTicks = displayCreditsToLedgerTicks(creditsDisplay);
+
+  if (charges && admin) {
+    const gate = await assertSufficientCreditsResponse({
+      admin,
+      userId: user.id,
+      planId: accountPlan,
+      costDisplayCredits: creditsDisplay,
+    });
+    if (gate) return gate;
+  }
 
   const refUrls = Array.isArray(body.imageUrls)
     ? body.imageUrls.filter((u): u is string => typeof u === "string" && u.trim().length > 0)
