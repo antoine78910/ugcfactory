@@ -597,14 +597,14 @@ export async function POST(req: Request) {
     // Compute cost server-side. Mirrors the client-side calc; differences would only block edge cases.
     const costDisplayCredits = calculateVideoCreditsForModel({
       modelId: model,
-      duration: Number(body.duration) || 5,
+      duration: Number(body.duration) || (rawModel.startsWith("bytedance/seedance") ? 10 : 5),
       audio: body.sound ?? true,
       quality: body.mode,
       videoResolution: body.videoResolution,
     });
     // Plan id for the modal: best-effort. Use the existing accountPlan if computed, else fetch fresh.
     const dbPlan = dbPlanResolved ?? (await getUserPlan(user.id));
-    const planForModal = dbPlan;
+    const planForModal = dbPlan ?? "free";
     const gate = await assertSufficientCreditsResponse({
       admin,
       userId: user.id,
