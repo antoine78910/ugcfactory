@@ -855,7 +855,7 @@ export function StudioGenerationsHistory({
                                 src={displaySrc}
                                 muted
                                 playsInline
-                                preload="none"
+                                preload="metadata"
                                 className="h-20 w-20 object-cover"
                               />
                             ) : (
