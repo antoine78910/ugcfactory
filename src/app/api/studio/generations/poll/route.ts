@@ -82,6 +82,34 @@ export async function POST(req: Request) {
   const piapiApiKey = (body.piapiApiKey ?? "").trim() || undefined;
 
   try {
+    // Fast-path: when the user has no in-progress rows, skip all of markStale +
+    // per-row provider polling + sweep. Just return the (currently materialized)
+    // list so the client can sync its state.
+    {
+      const { data: anyInFlight } = await supabase
+        .from("studio_generations")
+        .select("id")
+        .eq("user_id", user.id)
+        .in("status", [...STUDIO_GENERATION_IN_PROGRESS_STATUSES])
+        .limit(1);
+      if (!anyInFlight || anyInFlight.length === 0) {
+        const resolvedKindsFast = resolvePollKinds(kind);
+        let listRows: StudioGenerationRow[];
+        if (resolvedKindsFast === "all") {
+          listRows = await fetchStudioGenerationRows(supabase, user.id, { mode: "all" });
+        } else if (resolvedKindsFast.length === 1) {
+          listRows = await fetchStudioGenerationRows(supabase, user.id, { kinds: [resolvedKindsFast[0]!] });
+        } else {
+          listRows = await fetchStudioGenerationRows(supabase, user.id, { kinds: resolvedKindsFast });
+        }
+        if (resolvedKindsFast !== "all") {
+          listRows = filterLegacyLinkToAdFromTabRows(listRows, resolvedKindsFast);
+        }
+        const items = listRows.map(studioGenerationRowToHistoryItem);
+        return NextResponse.json({ data: items, refundHints: [] });
+      }
+    }
+
     const resolvedKinds = resolvePollKinds(kind);
 
     let procQuery = supabase
