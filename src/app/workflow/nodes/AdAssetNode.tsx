@@ -3378,10 +3378,12 @@ export function AdAssetNode({ id, data, selected }: NodeProps<AdAssetNodeType>) 
             </div>
             {assistantReferenceWireCount > 0 ? (
               <div
-                className="flex max-w-[170px] items-center gap-1.5 overflow-hidden rounded-lg bg-[#0f0f13]/90 px-1.5 py-1"
+                className="nowheel flex max-w-[260px] items-center gap-1.5 overflow-x-auto overflow-y-hidden rounded-lg bg-[#0f0f13]/90 px-1.5 py-1 studio-params-scroll"
+                onWheelCapture={keepWheelInsideScrollable}
+                onPointerDown={(e) => e.stopPropagation()}
                 title="Linked upload/reference images used as assistant context."
               >
-                {assistantLinkedReferencePreviewUrls.slice(0, 3).map((u, idx) => (
+                {assistantLinkedReferencePreviewUrls.map((u, idx) => (
                   // eslint-disable-next-line @next/next/no-img-element
                   <img
                     key={`${u}-${idx}`}
@@ -3390,11 +3392,6 @@ export function AdAssetNode({ id, data, selected }: NodeProps<AdAssetNodeType>) 
                     className="h-8 w-8 shrink-0 rounded-md object-cover"
                   />
                 ))}
-                {assistantLinkedReferencePreviewUrls.length > 3 ? (
-                  <span className="px-0.5 text-[9px] font-semibold text-white/70">
-                    +{assistantLinkedReferencePreviewUrls.length - 3}
-                  </span>
-                ) : null}
               </div>
             ) : null}
             {assistantTextInputWireCount > 0 ? (

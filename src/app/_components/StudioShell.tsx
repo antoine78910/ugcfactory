@@ -125,7 +125,14 @@ const CREATE_NAV: CreateNavEntry[] = [
     label: "Workflow",
     icon: GitBranch,
   },
-  { kind: "route", id: "intelligence", label: "Intelligence", icon: Telescope },
+  {
+    kind: "custom-link",
+    id: "intelligence",
+    href: "/intelligence",
+    label: "Intelligence",
+    icon: Telescope,
+    soon: true,
+  },
   { kind: "route", id: "avatar", label: "Avatar", icon: UserRound },
   { kind: "route", id: "ad_clone", label: "Translate", icon: Languages },
   { kind: "route", id: "voice", label: "Voice", icon: Mic },
@@ -558,7 +565,7 @@ function StudioShellInner({
                           </span>
                         ) : null}
                         {!navCollapsed && isNew ? (
-                          <span className="shrink-0 rounded-md border border-fuchsia-300/45 bg-fuchsia-500/20 px-1.5 py-0.5 text-[9px] font-bold uppercase tracking-wide text-fuchsia-100 shadow-[0_0_10px_rgba(232,121,249,0.35)]">
+                          <span className="shrink-0 rounded-md border border-violet-300/35 bg-violet-500/15 px-1.5 py-0.5 text-[9px] font-bold uppercase tracking-wide text-violet-100">
                             New
                           </span>
                         ) : null}
