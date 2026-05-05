@@ -5,15 +5,24 @@ import { getAppUrl, getEnv } from "@/lib/env";
 import { kieMarketCreateTask } from "@/lib/kieMarket";
 import { logGenerationFailure, userFacingProviderErrorOrDefault } from "@/lib/generationUserMessage";
 import { hasPersonalApiKey } from "@/lib/personalApiBypass";
-import { KIE_TOPAZ_VIDEO_UPSCALE_MODEL } from "@/lib/pricing";
+import { KIE_TOPAZ_VIDEO_UPSCALE_MODEL, topazVideoUpscaleCredits } from "@/lib/pricing";
 import { requireSupabaseUser } from "@/lib/supabase/requireUser";
+import { getUserPlan } from "@/lib/supabase/getUserPlan";
+import { createSupabaseServiceClient } from "@/lib/supabase/admin";
+import { resolveAuthUserEmail } from "@/lib/sessionUserEmail";
+import { shouldChargePlatformCredits, assertSufficientCreditsResponse } from "@/lib/credits/metering";
 
 type Body = {
   videoUrl: string;
   /** Kie expects string: "1" | "2" | "4" */
   upscaleFactor?: string;
   personalApiKey?: string;
+  /** Detected source video duration in seconds (used for pre-flight credit gate). */
+  videoDurationSeconds?: number;
 };
+
+/** Fallback duration when the client omits `videoDurationSeconds`. */
+const VIDEO_UPSCALE_FALLBACK_SECONDS = 12;
 
 function isRetryableUpscaleCreateError(message: string): boolean {
   const m = message.toLowerCase();
@@ -62,7 +71,7 @@ async function createTopazVideoUpscaleTaskWithRetry(params: {
 }
 
 export async function POST(req: Request) {
-  const { response } = await requireSupabaseUser();
+  const { user, response } = await requireSupabaseUser();
   if (response) return response;
 
   let body: Body;
@@ -82,6 +91,26 @@ export async function POST(req: Request) {
   const f = (body.upscaleFactor ?? "2").trim();
   if (!["1", "2", "4"].includes(f)) {
     return NextResponse.json({ error: "`upscaleFactor` must be 1, 2, or 4." }, { status: 400 });
+  }
+
+  const usesPersonalApi = Boolean(personalKey);
+  const admin = createSupabaseServiceClient();
+  const email = await resolveAuthUserEmail(user, admin);
+  const charges = shouldChargePlatformCredits({ usesPersonalApi, email });
+  if (charges && admin) {
+    const durationSec =
+      Number(body.videoDurationSeconds) > 0
+        ? Number(body.videoDurationSeconds)
+        : VIDEO_UPSCALE_FALLBACK_SECONDS;
+    const costDisplayCredits = topazVideoUpscaleCredits(durationSec, f);
+    const dbPlan = await getUserPlan(user.id);
+    const gate = await assertSufficientCreditsResponse({
+      admin,
+      userId: user.id,
+      planId: dbPlan ?? "free",
+      costDisplayCredits,
+    });
+    if (gate) return gate;
   }
 
   const callBackUrl =

@@ -5,8 +5,12 @@ import { getAppUrl, getEnv } from "@/lib/env";
 import { kieMarketCreateTask } from "@/lib/kieMarket";
 import { logGenerationFailure, userFacingProviderErrorOrDefault } from "@/lib/generationUserMessage";
 import { hasPersonalApiKey } from "@/lib/personalApiBypass";
-import { KIE_TOPAZ_IMAGE_UPSCALE_MODEL } from "@/lib/pricing";
+import { KIE_TOPAZ_IMAGE_UPSCALE_MODEL, topazImageUpscaleCredits } from "@/lib/pricing";
 import { requireSupabaseUser } from "@/lib/supabase/requireUser";
+import { getUserPlan } from "@/lib/supabase/getUserPlan";
+import { createSupabaseServiceClient } from "@/lib/supabase/admin";
+import { resolveAuthUserEmail } from "@/lib/sessionUserEmail";
+import { shouldChargePlatformCredits, assertSufficientCreditsResponse } from "@/lib/credits/metering";
 
 type Body = {
   imageUrl: string;
@@ -16,7 +20,7 @@ type Body = {
 };
 
 export async function POST(req: Request) {
-  const { response } = await requireSupabaseUser();
+  const { user, response } = await requireSupabaseUser();
   if (response) return response;
 
   let body: Body;
@@ -39,6 +43,22 @@ export async function POST(req: Request) {
       { error: "`upscaleFactor` must be 2, 4, or 8 (Topaz image 2K / 4K / 8K tier)." },
       { status: 400 },
     );
+  }
+
+  const usesPersonalApi = Boolean(personalKey);
+  const admin = createSupabaseServiceClient();
+  const email = await resolveAuthUserEmail(user, admin);
+  const charges = shouldChargePlatformCredits({ usesPersonalApi, email });
+  if (charges && admin) {
+    const costDisplayCredits = topazImageUpscaleCredits(f);
+    const dbPlan = await getUserPlan(user.id);
+    const gate = await assertSufficientCreditsResponse({
+      admin,
+      userId: user.id,
+      planId: dbPlan ?? "free",
+      costDisplayCredits,
+    });
+    if (gate) return gate;
   }
 
   const callBackUrl =
