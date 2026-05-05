@@ -1558,6 +1558,10 @@ export default function AdsStudioPanel() {
     product: [],
     app: [],
   });
+  const [templateVideosLoadingByKind, setTemplateVideosLoadingByKind] = useState<Record<AdsStudioTemplateGalleryKind, boolean>>({
+    product: false,
+    app: false,
+  });
   const [adsTemplateGalleryKind, setAdsTemplateGalleryKind] = useState<AdsStudioTemplateGalleryKind>("product");
   const [uploadingRefSlot, setUploadingRefSlot] = useState(false);
   const [uploadingAvatar, setUploadingAvatar] = useState(false);
@@ -1700,22 +1704,30 @@ export default function AdsStudioPanel() {
   useEffect(() => {
     let cancelled = false;
     const loadKind = async (kind: AdsStudioTemplateGalleryKind) => {
+      setTemplateVideosLoadingByKind((prev) => ({ ...prev, [kind]: true }));
       const res = await fetch(`/api/studio/template-videos?kind=${encodeURIComponent(kind)}`, { cache: "no-store" });
       const json = (await res.json().catch(() => null)) as { videos?: TemplateVideoItem[] } | null;
       if (cancelled) return;
       const videos = Array.isArray(json?.videos) ? json.videos : [];
       setTemplateVideosByKind((prev) => ({ ...prev, [kind]: videos }));
+      setTemplateVideosLoadingByKind((prev) => ({ ...prev, [kind]: false }));
     };
     // Desktop: preload both lists so switching tabs is instantaneous.
     // Mobile: defer until the user expands the Templates section.
-    if (isMdUp || templatesOpen) {
+    if (isMdUp) {
       void loadKind("product");
       void loadKind("app");
+    } else if (templatesOpen) {
+      void loadKind("product");
+      void loadKind("app");
+    } else {
+      // Mobile preview: ensure the active tab loads so templates appear.
+      void loadKind(adsTemplateGalleryKind);
     }
     return () => {
       cancelled = true;
     };
-  }, [isMdUp, templatesOpen]);
+  }, [adsTemplateGalleryKind, isMdUp, templatesOpen]);
 
   useEffect(() => {
     let cancelled = false;
@@ -1851,6 +1863,7 @@ export default function AdsStudioPanel() {
     [history],
   );
   const templateVideos = templateVideosByKind[adsTemplateGalleryKind] ?? [];
+  const templateVideosLoading = Boolean(templateVideosLoadingByKind[adsTemplateGalleryKind]);
 
   async function uploadRef(file: File, kind: "app" | "avatar") {
     if (kind === "app") setUploadingRefSlot(true);
@@ -2963,7 +2976,11 @@ export default function AdsStudioPanel() {
               </div>
             );
           })}
-          {templateVideos.length === 0 ? (
+          {templateVideos.length === 0 && templateVideosLoading ? (
+            <div className="col-span-full rounded-xl border border-white/10 bg-black/20 px-4 py-3 text-sm text-white/50">
+              Loading templates…
+            </div>
+          ) : templateVideos.length === 0 ? (
             <div className="col-span-full rounded-xl border border-white/10 bg-black/20 px-4 py-3 text-sm text-white/50">
               {adsTemplateGalleryKind === "app" ? (
                 <>

@@ -94,7 +94,9 @@ function PackCardDescription({ text }: { text: string }) {
 
 export default function CreditsPage() {
   const { planId } = useCreditsPlan();
-  const creditPacksRequirePaidPlan = planId === "free";
+  void planId;
+  // Credit packs are available to all users (no subscription gate).
+  const creditPacksRequirePaidPlan = false;
   const [checkoutLoading, setCheckoutLoading] = useState<string | null>(null);
   const [displayPrices, setDisplayPrices] = useState<StripeDisplayPricesPayload | null>(null);
 
@@ -190,7 +192,7 @@ export default function CreditsPage() {
               Top up and keep creating
             </h1>
             <p className="mt-2.5 text-[11px] text-white/38">
-              One-off packs are available once you have an active subscription. Prefer monthly credits?{" "}
+              One-off packs top up your balance instantly. Prefer monthly credits?{" "}
               <Link
                 href="/subscription"
                 className="font-medium text-violet-300/95 underline-offset-4 transition hover:text-violet-200 hover:underline"
@@ -199,16 +201,6 @@ export default function CreditsPage() {
               </Link>
             </p>
           </header>
-
-          {creditPacksRequirePaidPlan ? (
-            <p className="mx-auto max-w-xl rounded-lg border border-amber-400/25 bg-amber-500/10 px-4 py-3 text-center text-xs leading-snug text-amber-100/90">
-              Credit packs unlock after you subscribe.{" "}
-              <Link href="/subscription" className="font-semibold text-violet-200 underline-offset-4 hover:underline">
-                Choose a plan
-              </Link>{" "}
-              to top up or get included monthly credits.
-            </p>
-          ) : null}
 
           <section>
             <div className="mx-auto grid w-full max-w-6xl grid-cols-1 gap-3.5 sm:px-0 md:grid-cols-6 md:gap-4">
@@ -311,7 +303,7 @@ export default function CreditsPage() {
                                   </>
                                 ) : null}
                               </div>
-                              <p className="mt-0.5 text-[10px] leading-tight text-white/35">One-time purchase</p>
+                              <p className="mt-0.5 mb-2 text-[10px] leading-tight text-white/35">One-time purchase</p>
                             </div>
                           </>
                         ) : (
