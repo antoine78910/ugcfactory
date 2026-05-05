@@ -21,48 +21,50 @@ export function AdCard({ ad, onView }: { ad: TTAd; onView?: () => void }) {
   const label = PLATFORM_LABELS[platform.toLowerCase()] ?? platform;
   const date = ad.startDate ?? ad.firstSeen;
 
+  const Wrapper = onView ? "button" : "div";
   return (
-    <div className="group flex flex-col gap-2 rounded-2xl border border-white/10 bg-white/5 p-3 backdrop-blur-sm transition hover:border-violet-500/40 hover:bg-white/10">
-      {thumbnail ? (
-        <div className="relative aspect-video w-full overflow-hidden rounded-xl bg-white/5">
+    <Wrapper
+      onClick={onView}
+      className="group flex flex-col gap-2 rounded-2xl border border-white/10 bg-white/[0.04] p-3 text-left backdrop-blur-sm transition hover:border-violet-500/40 hover:bg-white/[0.07] hover:shadow-[0_0_22px_rgba(139,92,246,0.18)]"
+    >
+      <div className="relative aspect-video w-full overflow-hidden rounded-xl bg-white/5">
+        {thumbnail ? (
           <img
             src={thumbnail}
             alt={ad.headline ?? ad.title ?? "Ad"}
-            className="h-full w-full object-cover"
+            className="h-full w-full object-cover transition-transform duration-300 group-hover:scale-[1.02]"
           />
-        </div>
-      ) : (
-        <div className="flex aspect-video w-full items-center justify-center rounded-xl bg-white/5 text-xs text-white/30">
-          No preview
-        </div>
-      )}
-
-      <div className="flex items-center justify-between gap-2">
-        <span className="rounded-full bg-violet-500/20 px-2 py-0.5 text-[11px] font-medium text-violet-300">
+        ) : (
+          <div className="flex h-full w-full items-center justify-center text-xs text-white/30">
+            No preview
+          </div>
+        )}
+        <span className="absolute left-2 top-2 rounded-full bg-black/60 px-2 py-0.5 text-[10px] font-medium text-white/85 backdrop-blur">
           {label}
         </span>
-        <span className="text-xs text-white/40">{date ?? ""}</span>
+        <span className="absolute bottom-2 right-2 rounded-full bg-black/60 px-2 py-0.5 text-[10px] font-medium text-white/85 backdrop-blur">
+          {formatReach(ad.reach)}
+        </span>
       </div>
 
-      <p className="line-clamp-2 text-xs text-white/70">
+      <p className="line-clamp-2 text-xs text-white/75">
         {ad.headline ?? ad.title ?? ad.body ?? "—"}
       </p>
 
-      <div className="flex items-center justify-between">
-        <span className="text-xs text-white/40">
-          Reach: <span className="text-white/70">{formatReach(ad.reach)}</span>
-        </span>
+      <div className="flex items-center justify-between text-[11px] text-white/45">
+        <span>{date ?? ""}</span>
         {ad.adUrl && (
           <a
             href={ad.adUrl}
             target="_blank"
             rel="noopener noreferrer"
-            className="text-xs text-violet-400 hover:text-violet-300 hover:underline"
+            onClick={(e) => e.stopPropagation()}
+            className="text-violet-400 hover:text-violet-300 hover:underline"
           >
-            View →
+            Original →
           </a>
         )}
       </div>
-    </div>
+    </Wrapper>
   );
 }
