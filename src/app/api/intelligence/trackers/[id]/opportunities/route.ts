@@ -7,7 +7,7 @@ import { getCached, setCached, deleteCached } from "@/lib/trendtrackCache";
 import { claudeMessagesText } from "@/lib/claudeResponses";
 import type { Angle } from "@/app/api/intelligence/trackers/[id]/angles/route";
 
-export type Opportunity = { title: string; description: string };
+export type Opportunity = { title: string; description: string; brief?: string };
 
 const TTL = 60 * 60 * 12;
 
@@ -24,11 +24,12 @@ Competitor "${trackerName}" uses these angles: ${JSON.stringify(competitorAngles
 Identify 5 untapped creative opportunities — angles the competitor uses heavily that the brand doesn't, or fresh angles neither exploits yet.
 
 Return ONLY valid JSON — no markdown:
-{"opportunities":[{"title":"Leverage social proof","description":"The competitor uses customer testimonials heavily. A UGC video format showing real customer reactions could differentiate your brand."}]}
+{"opportunities":[{"title":"Leverage social proof","description":"The competitor uses customer testimonials heavily. A UGC video format showing real customer reactions could differentiate your brand.","brief":"15-second UGC clip: a real customer reacting to first use of the product. Hand-held vertical, no music, captions."}]}
 
 Rules:
 - Titles: action-oriented, max 6 words
-- Descriptions: 1-2 sentences, concrete and actionable`;
+- Descriptions: 1-2 sentences, concrete and actionable
+- Brief: optional one-sentence creative brief (≤ 25 words) suitable as an Ads Studio prompt prefill — only include when you have a specific shot/format in mind`;
 }
 
 function parseOpportunities(raw: string): Opportunity[] {
@@ -91,7 +92,7 @@ export async function GET(
     .update(JSON.stringify({ competitorAngles, ownAngles }))
     .digest("hex")
     .slice(0, 12);
-  const key = `tracker:${id}:opportunities:${cacheHash}`;
+  const key = `tracker:${id}:opportunities:v2:${cacheHash}`;
 
   if (force) await deleteCached(key);
   const cached = await getCached<Opportunity[]>(key);
