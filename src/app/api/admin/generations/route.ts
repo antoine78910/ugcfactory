@@ -58,7 +58,7 @@ export async function GET(req: Request) {
       .filter((u) => (u.email ?? "").toLowerCase().includes(emailFilter))
       .map((u) => u.id);
     if (emailUserIds.length === 0) {
-      return NextResponse.json({ rows: [], emailMap: {}, total: 0, page, perPage });
+      return NextResponse.json({ rows: [], emailMap: {}, total: 0, page, perPage, userSummary: null });
     }
   }
 
@@ -97,6 +97,50 @@ export async function GET(req: Request) {
     }
   }
 
+  let userSummary: null | {
+    user_id: string;
+    email: string;
+    plan_id: string | null;
+    current_balance_display: number;
+    spent_this_month_display: number;
+    ready: number;
+    failed: number;
+    processing: number;
+  } = null;
+
+  if (emailUserIds && emailUserIds.length === 1) {
+    const uid = emailUserIds[0]!;
+    const startOfMonth = new Date();
+    startOfMonth.setUTCDate(1);
+    startOfMonth.setUTCHours(0, 0, 0, 0);
+
+    const { getUserCreditBalance } = await import("@/lib/creditGrants");
+    const { ledgerTicksToDisplayCredits } = await import("@/lib/creditLedgerTicks");
+
+    const [userInfo, planRow, balanceRes, monthRows, statusRows] = await Promise.all([
+      admin.auth.admin.getUserById(uid),
+      admin.from("user_subscriptions").select("plan_id").eq("user_id", uid).maybeSingle(),
+      getUserCreditBalance(admin, uid),
+      admin.from("studio_generations").select("credits_charged").eq("user_id", uid).gte("created_at", startOfMonth.toISOString()),
+      admin.from("studio_generations").select("status").eq("user_id", uid),
+    ]);
+
+    const monthData = (monthRows.data ?? []) as Array<{ credits_charged: number }>;
+    const statusData = (statusRows.data ?? []) as Array<{ status: string }>;
+    const spentThisMonthTicks = monthData.reduce<number>((s, r) => s + (r.credits_charged ?? 0), 0);
+
+    userSummary = {
+      user_id: uid,
+      email: userInfo.data?.user?.email ?? uid,
+      plan_id: (planRow.data as { plan_id?: string } | null)?.plan_id ?? null,
+      current_balance_display: balanceRes.balance,
+      spent_this_month_display: ledgerTicksToDisplayCredits(spentThisMonthTicks),
+      ready: statusData.filter((r) => r.status === "ready").length,
+      failed: statusData.filter((r) => r.status === "failed").length,
+      processing: statusData.filter((r) => r.status === "processing").length,
+    };
+  }
+
   return NextResponse.json({
     rows: (rows ?? []).map((r: Record<string, unknown>) => ({
       ...r,
@@ -106,5 +150,6 @@ export async function GET(req: Request) {
     total: count ?? 0,
     page,
     perPage,
+    userSummary,
   });
 }

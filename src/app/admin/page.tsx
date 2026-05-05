@@ -166,6 +166,17 @@ type Stats = {
   kindBreakdown: Record<string, number>;
 };
 
+type GenUserSummary = {
+  user_id: string;
+  email: string;
+  plan_id: string | null;
+  current_balance_display: number;
+  spent_this_month_display: number;
+  ready: number;
+  failed: number;
+  processing: number;
+};
+
 type FeedbackRow = {
   id: string;
   user_id: string;
@@ -347,6 +358,7 @@ export default function AdminPage() {
   const [genTo, setGenTo] = useState("");
   const [genSort, setGenSort] = useState<"when" | "charged" | "balance">("when");
   const [genOrder, setGenOrder] = useState<"asc" | "desc">("desc");
+  const [genUserSummary, setGenUserSummary] = useState<GenUserSummary | null>(null);
 
   // Runs state
   const [runRows, setRunRows] = useState<RunRow[]>([]);
@@ -448,6 +460,7 @@ export default function AdminPage() {
       setGenRows(d.rows);
       setGenEmailMap(d.emailMap);
       setGenTotal(d.total);
+      setGenUserSummary(d.userSummary ?? null);
     } catch (e) {
       setError(e instanceof Error ? e.message : "Failed to load");
     } finally {
@@ -1013,6 +1026,22 @@ export default function AdminPage() {
             </button>
           )}
         </div>
+
+        {tab === "generations" && genUserSummary && (
+          <div className="mt-4 rounded-xl border border-violet-500/30 bg-violet-500/[0.06] p-4">
+            <p className="text-sm font-semibold text-violet-100">{genUserSummary.email}</p>
+            <p className="mt-1 text-xs text-white/65">
+              Plan: <span className="font-semibold capitalize">{genUserSummary.plan_id ?? "free"}</span>
+              {" • "}
+              Solde actuel: <span className="font-semibold text-amber-200/90 tabular-nums">{formatCreditBalanceSnap(genUserSummary.current_balance_display)} cr</span>
+              {" • "}
+              Sur le mois: <span className="font-semibold tabular-nums">{formatCreditBalanceSnap(genUserSummary.spent_this_month_display)} cr</span>
+            </p>
+            <p className="mt-1 text-[11px] text-white/45">
+              {genUserSummary.ready} ready • {genUserSummary.failed} failed • {genUserSummary.processing} processing
+            </p>
+          </div>
+        )}
 
         {/* Table */}
         {tab === "credits" && creditLoading && creditStats === null && !creditError ? (
