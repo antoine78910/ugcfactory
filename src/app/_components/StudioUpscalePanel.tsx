@@ -18,7 +18,12 @@ import { StudioEmptyExamples, StudioOutputPane } from "@/app/_components/StudioE
 import { StudioGenerationsHistory } from "@/app/_components/StudioGenerationsHistory";
 import type { StudioHistoryItem } from "@/app/_components/StudioGenerationsHistory";
 import { StudioBillingDialog } from "@/app/_components/StudioBillingDialog";
-import { StudioModelPicker, type StudioModelPickerItem } from "@/app/_components/StudioModelPicker";
+import {
+  StudioModelPicker,
+  studioSelectContentClass,
+  studioSelectItemClass,
+  type StudioModelPickerItem,
+} from "@/app/_components/StudioModelPicker";
 import { StudioUpscaleDiscreteSlider } from "@/app/_components/StudioUpscaleDiscreteSlider";
 import {
   KIE_TOPAZ_IMAGE_UPSCALE_MODEL,
@@ -163,8 +168,14 @@ export default function StudioUpscalePanel() {
 
   useEffect(() => {
     if (upscalePickerId !== "upscale/video") return;
-    if (!previewSrc) return;
-    setDurationSec(null);
+    if (!previewSrc) {
+      setDurationSec(null);
+      return;
+    }
+    // Don't drop a previously probed duration when previewSrc swaps from blob to
+    // hosted URL after upload — the hosted-URL probe can fail silently on CORS,
+    // which would leave the Upscale button disabled even though the same file
+    // was already measured from the blob URL.
     probeDuration(previewSrc);
   }, [upscalePickerId, previewSrc, probeDuration]);
 
@@ -585,10 +596,16 @@ export default function StudioUpscalePanel() {
                     <SelectTrigger className="mt-1.5 h-10 w-full rounded-xl border-white/15 bg-[#0a0a0d] text-white">
                       <SelectValue />
                     </SelectTrigger>
-                    <SelectContent className="border-white/10 bg-[#0c0c10] text-white">
-                      <SelectItem value="9:16">9:16 (short)</SelectItem>
-                      <SelectItem value="16:9">16:9</SelectItem>
-                      <SelectItem value="1:1">1:1</SelectItem>
+                    <SelectContent className={studioSelectContentClass}>
+                      <SelectItem value="9:16" className={studioSelectItemClass}>
+                        9:16 (short)
+                      </SelectItem>
+                      <SelectItem value="16:9" className={studioSelectItemClass}>
+                        16:9
+                      </SelectItem>
+                      <SelectItem value="1:1" className={studioSelectItemClass}>
+                        1:1
+                      </SelectItem>
                     </SelectContent>
                   </Select>
                 </div>
@@ -625,6 +642,16 @@ export default function StudioUpscalePanel() {
                           controls
                           playsInline
                           preload="metadata"
+                          onLoadedMetadata={(ev) => {
+                            // Fallback duration source — the hidden probe can fail on the
+                            // hosted CDN URL after upload (CORS / late metadata); the
+                            // visible element already has the same media loaded.
+                            const v = ev.currentTarget;
+                            const d = Number(v.duration);
+                            if (Number.isFinite(d) && d > 0) {
+                              setDurationSec(Math.min(600, Math.max(1, Math.ceil(d))));
+                            }
+                          }}
                           onLoadedData={(ev) => {
                             const v = ev.currentTarget;
                             if (!v.src.startsWith("blob:")) return;
