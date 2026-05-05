@@ -3,6 +3,7 @@ import { createSupabaseServerClient } from "@/lib/supabase/server";
 import { ttListTrackers } from "@/lib/trendtrack";
 import { getCached } from "@/lib/trendtrackCache";
 import type { TTTracker } from "@/lib/trendtrack";
+import StudioShell from "@/app/_components/StudioShell";
 import { IntelligenceClient } from "./_components/IntelligenceClient";
 
 export const dynamic = "force-dynamic";
@@ -24,5 +25,9 @@ export default async function IntelligencePage() {
     // non-fatal
   }
 
-  return <IntelligenceClient ownTrackerIds={ownTrackerIds} />;
+  return (
+    <StudioShell>
+      <IntelligenceClient ownTrackerIds={ownTrackerIds} />
+    </StudioShell>
+  );
 }
