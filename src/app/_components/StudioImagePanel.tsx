@@ -34,6 +34,10 @@ import {
 import { NANO_BANANA_2_ASPECT_RATIOS } from "@/lib/nanobanana";
 import { dedupeStudioImageHistoryByMediaUrl } from "@/lib/studioHistoryDedupe";
 import { readStudioHistoryLocal, writeStudioHistoryLocal } from "@/lib/studioHistoryLocalStorage";
+import {
+  appendStudioHistoryNextPage,
+  mergeStudioHistoryFirstPageWithLocal,
+} from "@/lib/mergeStudioHistoryWithLocal";
 import { userMessageFromCaughtError } from "@/lib/generationUserMessage";
 import { cn } from "@/lib/utils";
 import {
@@ -243,6 +247,9 @@ export default function StudioImagePanel({ onChangeVoice }: StudioImagePanelProp
   const [historySourceFilter, setHistorySourceFilter] = useState<"all" | "workflow" | "studio">("all");
   /** null = unknown; true = Supabase + server poll; false = guest / local only */
   const [serverHistory, setServerHistory] = useState<boolean | null>(null);
+  const [hasMoreHistory, setHasMoreHistory] = useState(false);
+  const [isLoadingMoreHistory, setIsLoadingMoreHistory] = useState(false);
+  const PAGE_LIMIT = 60;
   type ImageBilling =
     | { open: false }
     | { open: true; reason: "plan"; blockedId: string }
@@ -310,22 +317,29 @@ export default function StudioImagePanel({ onChangeVoice }: StudioImagePanelProp
   useEffect(() => {
     void (async () => {
       const res = await fetch(
-        `/api/studio/generations?kind=${encodeURIComponent(STUDIO_IMAGE_LIBRARY_KIND_PARAM)}`,
+        `/api/studio/generations?kind=${encodeURIComponent(STUDIO_IMAGE_LIBRARY_KIND_PARAM)}&limit=${PAGE_LIMIT}`,
         { cache: "no-store" },
       );
       if (res.status === 401) {
         setServerHistory(false);
         setHistoryItems([]);
+        setHasMoreHistory(false);
         return;
       }
       if (!res.ok) {
         setServerHistory(false);
         setHistoryItems(readStudioHistoryLocal(LS_STUDIO_IMAGE_HISTORY));
+        setHasMoreHistory(false);
         return;
       }
-      const json = (await res.json()) as { data?: StudioHistoryItem[]; refundHints?: RefundHint[] };
+      const json = (await res.json()) as {
+        data?: StudioHistoryItem[];
+        refundHints?: RefundHint[];
+        hasMore?: boolean;
+      };
       setServerHistory(true);
       setHistoryItems(json.data ?? []);
+      setHasMoreHistory(Boolean(json.hasMore));
       const hints = json.refundHints ?? [];
       if (hints.length) {
         applyRefundHints(hints, grantCreditsRef.current, creditsRef);
@@ -334,8 +348,11 @@ export default function StudioImagePanel({ onChangeVoice }: StudioImagePanelProp
     })();
   }, []);
 
+  const hasInFlightImage = historyItems.some((i) => i.status === "generating");
+
   useEffect(() => {
     if (serverHistory !== true) return;
+    if (!hasInFlightImage) return;
 
     const tick = () => {
       void (async () => {
@@ -350,7 +367,9 @@ export default function StudioImagePanel({ onChangeVoice }: StudioImagePanelProp
         });
         if (!res.ok) return;
         const json = (await res.json()) as { data?: StudioHistoryItem[]; refundHints?: RefundHint[] };
-        if (Array.isArray(json.data)) setHistoryItems(json.data);
+        if (Array.isArray(json.data)) {
+          setHistoryItems((prev) => mergeStudioHistoryFirstPageWithLocal(json.data!, prev));
+        }
         const hints = json.refundHints ?? [];
         if (hints.length) {
           applyRefundHints(hints, grantCreditsRef.current, creditsRef);
@@ -362,7 +381,7 @@ export default function StudioImagePanel({ onChangeVoice }: StudioImagePanelProp
     tick();
     const id = window.setInterval(tick, 4000);
     return () => window.clearInterval(id);
-  }, [serverHistory]);
+  }, [serverHistory, hasInFlightImage]);
 
   useEffect(() => {
     if (serverHistory === null) return;
@@ -416,6 +435,40 @@ export default function StudioImagePanel({ onChangeVoice }: StudioImagePanelProp
   const dismissFailedHistoryItem = useCallback((id: string) => {
     setHistoryItems((prev) => prev.filter((i) => i.id !== id));
   }, []);
+
+  const onLoadMoreHistory = useCallback(async () => {
+    if (isLoadingMoreHistory || !hasMoreHistory) return;
+    setIsLoadingMoreHistory(true);
+    try {
+      const oldest = historyItems.reduce<number | null>(
+        (acc, i) => (acc === null || i.createdAt < acc ? i.createdAt : acc),
+        null,
+      );
+      if (oldest === null) {
+        setHasMoreHistory(false);
+        return;
+      }
+      const before = new Date(oldest).toISOString();
+      const res = await fetch(
+        `/api/studio/generations?kind=${encodeURIComponent(STUDIO_IMAGE_LIBRARY_KIND_PARAM)}&limit=${PAGE_LIMIT}&before=${encodeURIComponent(before)}`,
+        { cache: "no-store" },
+      );
+      if (!res.ok) return;
+      const json = (await res.json()) as {
+        data?: StudioHistoryItem[];
+        hasMore?: boolean;
+      };
+      const next = json.data ?? [];
+      if (next.length === 0) {
+        setHasMoreHistory(false);
+        return;
+      }
+      setHistoryItems((prev) => appendStudioHistoryNextPage(prev, next));
+      setHasMoreHistory(Boolean(json.hasMore));
+    } finally {
+      setIsLoadingMoreHistory(false);
+    }
+  }, [historyItems, hasMoreHistory, isLoadingMoreHistory]);
 
   const proAspectOptionsFull = useMemo(() => ["auto", ...ASPECT_RATIOS_PRO] as const, []);
 
@@ -861,6 +914,9 @@ export default function StudioImagePanel({ onChangeVoice }: StudioImagePanelProp
               onDismissFailed={dismissFailedHistoryItem}
               onItemDeleted={(id) => setHistoryItems((prev) => prev.filter((i) => i.id !== id))}
               onChangeVoice={onChangeVoice}
+              hasMore={hasMoreHistory}
+              isLoadingMore={isLoadingMoreHistory}
+              onLoadMore={onLoadMoreHistory}
               imageLightboxEdit={{
                 nanoAspectOptions: NANO_BANANA_2_ASPECT_RATIOS,
                 proAspectOptions: proAspectOptionsFull,
