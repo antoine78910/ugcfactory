@@ -341,6 +341,12 @@ export default function AdminPage() {
   const [genStatus, setGenStatus] = useState("");
   const [genSearch, setGenSearch] = useState("");
   const [genSearchInput, setGenSearchInput] = useState("");
+  const [genEmail, setGenEmail] = useState("");
+  const [genEmailInput, setGenEmailInput] = useState("");
+  const [genFrom, setGenFrom] = useState("");
+  const [genTo, setGenTo] = useState("");
+  const [genSort, setGenSort] = useState<"when" | "charged" | "balance">("when");
+  const [genOrder, setGenOrder] = useState<"asc" | "desc">("desc");
 
   // Runs state
   const [runRows, setRunRows] = useState<RunRow[]>([]);
@@ -431,6 +437,11 @@ export default function AdminPage() {
       if (genKind) params.set("kind", genKind);
       if (genStatus) params.set("status", genStatus);
       if (genSearch) params.set("q", genSearch);
+      if (genEmail) params.set("email", genEmail);
+      if (genFrom) params.set("from", genFrom);
+      if (genTo) params.set("to", genTo);
+      params.set("sort", genSort);
+      params.set("order", genOrder);
       const r = await fetch(`/api/admin/generations?${params}`);
       if (!r.ok) throw new Error((await r.json().catch(() => ({}))).error ?? `HTTP ${r.status}`);
       const d = await r.json();
@@ -442,7 +453,7 @@ export default function AdminPage() {
     } finally {
       setLoading(false);
     }
-  }, [genPage, genKind, genStatus, genSearch]);
+  }, [genPage, genKind, genStatus, genSearch, genEmail, genFrom, genTo, genSort, genOrder]);
 
   const fetchRuns = useCallback(async () => {
     setLoading(true);
@@ -961,6 +972,34 @@ export default function AdminPage() {
                 <option key={k} value={k}>{kindLabel(k)}</option>
               ))}
             </select>
+          )}
+          {tab === "generations" && (
+            <input
+              type="text"
+              placeholder="Filter by email…"
+              value={genEmailInput}
+              onChange={(e) => setGenEmailInput(e.target.value)}
+              onKeyDown={(e) => { if (e.key === "Enter") { setGenEmail(genEmailInput); setGenPage(1); } }}
+              className="w-48 rounded-lg border border-white/10 bg-white/[0.03] px-3 py-2 text-xs text-white placeholder-white/30 outline-none focus:border-violet-400/40"
+            />
+          )}
+          {tab === "generations" && (
+            <input
+              type="date"
+              value={genFrom}
+              onChange={(e) => { setGenFrom(e.target.value); setGenPage(1); }}
+              className="rounded-lg border border-white/10 bg-[#0b0912] px-2 py-2 text-xs text-white/70 outline-none"
+              title="From date"
+            />
+          )}
+          {tab === "generations" && (
+            <input
+              type="date"
+              value={genTo}
+              onChange={(e) => { setGenTo(e.target.value); setGenPage(1); }}
+              className="rounded-lg border border-white/10 bg-[#0b0912] px-2 py-2 text-xs text-white/70 outline-none"
+              title="To date"
+            />
           )}
           {tab === "generations" && (
             <button
@@ -1795,15 +1834,51 @@ export default function AdminPage() {
                   <th className="px-3 py-2.5 font-semibold">Type</th>
                   <th className="px-3 py-2.5 font-semibold">Inputs</th>
                   <th className="px-3 py-2.5 font-semibold">Status</th>
-                  <th className="px-3 py-2.5 font-semibold">Charged</th>
-                  <th className="px-3 py-2.5 font-semibold">Balance after</th>
+                  <th className="px-3 py-2.5 font-semibold">
+                    <button
+                      type="button"
+                      onClick={() => {
+                        if (genSort === "charged") setGenOrder(genOrder === "desc" ? "asc" : "desc");
+                        else { setGenSort("charged"); setGenOrder("desc"); }
+                        setGenPage(1);
+                      }}
+                      className="flex items-center gap-1 hover:text-white/70"
+                    >
+                      Charged {genSort === "charged" && (genOrder === "desc" ? "↓" : "↑")}
+                    </button>
+                  </th>
+                  <th className="px-3 py-2.5 font-semibold">
+                    <button
+                      type="button"
+                      onClick={() => {
+                        if (genSort === "balance") setGenOrder(genOrder === "desc" ? "asc" : "desc");
+                        else { setGenSort("balance"); setGenOrder("desc"); }
+                        setGenPage(1);
+                      }}
+                      className="flex items-center gap-1 hover:text-white/70"
+                    >
+                      Balance after {genSort === "balance" && (genOrder === "desc" ? "↓" : "↑")}
+                    </button>
+                  </th>
                   <th className="px-3 py-2.5 font-semibold">Model</th>
                   <th className="px-3 py-2.5 font-semibold">App API</th>
                   <th className="px-3 py-2.5 font-semibold">Provider</th>
                   <th className="px-3 py-2.5 font-semibold">Label</th>
                   <th className="px-3 py-2.5 font-semibold">Media</th>
                   <th className="px-3 py-2.5 font-semibold">Duration</th>
-                  <th className="px-3 py-2.5 font-semibold">When</th>
+                  <th className="px-3 py-2.5 font-semibold">
+                    <button
+                      type="button"
+                      onClick={() => {
+                        if (genSort === "when") setGenOrder(genOrder === "desc" ? "asc" : "desc");
+                        else { setGenSort("when"); setGenOrder("desc"); }
+                        setGenPage(1);
+                      }}
+                      className="flex items-center gap-1 hover:text-white/70"
+                    >
+                      When {genSort === "when" && (genOrder === "desc" ? "↓" : "↑")}
+                    </button>
+                  </th>
                 </tr>
               </thead>
               <tbody>
