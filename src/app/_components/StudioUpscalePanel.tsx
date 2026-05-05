@@ -339,14 +339,8 @@ export default function StudioUpscalePanel() {
   }, []);
 
   const generate = () => {
-    if (serverHistory === null) {
-      toast.message("Chargement de ta bibliotheque…", { description: "Attends un instant puis reessaie." });
-      return;
-    }
-    if (serverHistory !== true) {
-      toast.error("Sync backend indisponible. Recharge la page puis reessaie.");
-      return;
-    }
+    // Do not block the Upscale CTA on the history bootstrap.
+    // If the user isn't authenticated, the API call below will return 401 anyway.
     if (upscalePickerId === "upscale/video" && durationSec == null) {
       toast.message("Loading video duration…", { description: "Please wait a moment, then try again." });
       return;
@@ -722,7 +716,7 @@ export default function StudioUpscalePanel() {
           <Button
             type="button"
             disabled={
-              busy || serverHistory !== true || (upscalePickerId === "upscale/video" && durationSec == null)
+              busy || (upscalePickerId === "upscale/video" && durationSec == null)
             }
             onClick={generate}
             className="h-14 w-full overflow-hidden rounded-2xl border border-violet-300/40 bg-violet-500 text-base font-semibold text-white shadow-[0_6px_0_0_rgba(76,29,149,0.85)] transition-all hover:-translate-y-px hover:bg-violet-400 hover:shadow-[0_8px_0_0_rgba(76,29,149,0.85)] active:translate-y-1 active:shadow-none disabled:opacity-50 sm:text-lg"
