@@ -11,14 +11,36 @@ export const STUDIO_VIDEO_PICKER_IDS = [
   "kling-2.6/video",
   "openai/sora-2",
   "openai/sora-2-pro",
-  "bytedance/seedance-2-preview",
-  "bytedance/seedance-2-fast-preview",
   "bytedance/seedance-2",
   "bytedance/seedance-2-fast",
   "veo3_lite",
   "veo3_fast",
   "veo3",
 ] as const;
+
+/**
+ * Map deprecated PiAPI Preview picker ids (and VIP aliases) to Kie Seedance 2.0 / 2.0 Fast marketplace ids.
+ * @see https://docs.kie.ai/market/bytedance/seedance-2
+ * @see https://docs.kie.ai/market/bytedance/seedance-2-fast
+ */
+export function normalizeLegacySeedanceMarketModelId(raw: string): string {
+  const id = raw.trim();
+  switch (id) {
+    case "bytedance/seedance-2-preview":
+    case "bytedance/seedance-2-preview-vip":
+      return "bytedance/seedance-2";
+    case "bytedance/seedance-2-fast-preview":
+    case "bytedance/seedance-2-fast-preview-vip":
+      return "bytedance/seedance-2-fast";
+    default:
+      return id;
+  }
+}
+
+/** Normalize persisted Studio / workflow picker ids after removing Preview SKUs. */
+export function normalizeLegacySeedanceStudioPickerId(raw: string): string {
+  return normalizeLegacySeedanceMarketModelId(raw);
+}
 
 /** KIE Veo has no `duration` field; clips are a fixed provider length (~8s). */
 export const STUDIO_VEO_DURATION_HINT = "~8s (provider default; not adjustable)";
@@ -77,9 +99,6 @@ export function studioVideoDurationSecOptions(pickerId: string): string[] {
     case "bytedance/seedance-2":
     case "bytedance/seedance-2-fast":
       return Array.from({ length: 12 }, (_, i) => String(i + 4));
-    case "bytedance/seedance-2-preview":
-    case "bytedance/seedance-2-fast-preview":
-      return ["5", "10", "15"];
     case "veo3_lite":
     case "veo3_fast":
     case "veo3":
@@ -106,9 +125,6 @@ export function studioVideoDurationRangeLabel(pickerId: string): string {
  * Returns `null` → caller keeps legacy 9:16 / 16:9 / 1:1 for other models.
  */
 export function studioVideoCreateAspectRatioOptions(pickerId: string): readonly string[] | null {
-  if (pickerId === "bytedance/seedance-2-preview" || pickerId === "bytedance/seedance-2-fast-preview") {
-    return ["16:9", "9:16", "4:3", "3:4"];
-  }
   if (pickerId === "bytedance/seedance-2" || pickerId === "bytedance/seedance-2-fast") {
     return ["21:9", "16:9", "4:3", "1:1", "3:4", "9:16", "auto"];
   }
@@ -138,17 +154,14 @@ export function studioVideoSupportsMultiShot(pickerId: string): boolean {
 }
 
 export function studioVideoRequiresStartImage(pickerId: string): boolean {
-  return (
-    pickerId === "bytedance/seedance-2-preview" || pickerId === "bytedance/seedance-2-fast-preview"
-  );
+  void pickerId;
+  return false;
 }
 
-/**
- * Studio Create tab: Seedance 2 Preview / Fast Preview use a single 1–4 image upload strip
- * (provider image refs) instead of separate start/end frame slots.
- */
+/** Legacy Preview strip removed; Seedance 2 / Fast use omni media + optional frames. */
 export function studioVideoUsesSeedanceCompactReferenceUploads(pickerId: string): boolean {
-  return pickerId === "bytedance/seedance-2-preview" || pickerId === "bytedance/seedance-2-fast-preview";
+  void pickerId;
+  return false;
 }
 
 /** Studio Create: Seedance 2 / Fast use omni_reference mixed media instead of start/end frames. */
@@ -222,17 +235,6 @@ export function validateStudioVideoJobDuration(
     const d = Number(duration);
     if (!Number.isFinite(d) || d < 4 || d > 15 || Math.round(d) !== d) {
       throw new Error("Invalid duration for Seedance 2. Must be an integer from 4 to 15 seconds.");
-    }
-    return;
-  }
-  if (
-    resolvedModel === "bytedance/seedance-2-preview" ||
-    resolvedModel === "bytedance/seedance-2-fast-preview" ||
-    resolvedModel === "bytedance/seedance-2-preview-vip" ||
-    resolvedModel === "bytedance/seedance-2-fast-preview-vip"
-  ) {
-    if (duration !== 5 && duration !== 10 && duration !== 15) {
-      throw new Error("Invalid duration for Seedance 2 Preview. Must be 5, 10, or 15.");
     }
     return;
   }

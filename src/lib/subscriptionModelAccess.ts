@@ -46,8 +46,6 @@ const VIDEO_MIN_RANK: Record<string, number> = {
   "kling-2.5-turbo/video": 1, // Starter+
   "kling-2.6/video": 1, // Starter+
   // Starter should not include Seedance 2; unlock on Growth+
-  "bytedance/seedance-2-preview": 2,
-  "bytedance/seedance-2-fast-preview": 2,
   "bytedance/seedance-2": 2,
   "bytedance/seedance-2-fast": 2,
   "kling-3.0/video": 2,
@@ -107,8 +105,12 @@ function normalizeVideoModelForGate(id: string): string {
   if (id === "kling-2.6/image-to-video" || id === "kling-2.6/text-to-video") return "kling-2.6/video";
   if (id === "sora-2-image-to-video" || id === "sora-2-text-to-video") return "openai/sora-2";
   if (id === "sora-2-pro-image-to-video" || id === "sora-2-pro-text-to-video") return "openai/sora-2-pro";
-  if (id === "bytedance/seedance-2-preview-vip") return "bytedance/seedance-2-preview";
-  if (id === "bytedance/seedance-2-fast-preview-vip") return "bytedance/seedance-2-fast-preview";
+  if (id === "bytedance/seedance-2-preview-vip" || id === "bytedance/seedance-2-preview") {
+    return "bytedance/seedance-2";
+  }
+  if (id === "bytedance/seedance-2-fast-preview-vip" || id === "bytedance/seedance-2-fast-preview") {
+    return "bytedance/seedance-2-fast";
+  }
   return id;
 }
 
@@ -202,10 +204,8 @@ const STUDIO_VIDEO_LABELS: Record<string, string> = {
   "kling-2.6/video": "Kling 2.6",
   "openai/sora-2": "Sora 2",
   "openai/sora-2-pro": "Sora 2 Pro",
-  "bytedance/seedance-2-preview": "Seedance 2 Preview",
-  "bytedance/seedance-2-fast-preview": "Seedance 2 Fast Preview",
-  "bytedance/seedance-2": "Seedance 2",
-  "bytedance/seedance-2-fast": "Seedance 2 Fast",
+  "bytedance/seedance-2": "Seedance 2.0",
+  "bytedance/seedance-2-fast": "Seedance 2.0 Fast",
   veo3_lite: "Veo 3.1 Lite",
   veo3_fast: "Veo 3.1 Fast",
   veo3: "Veo 3.1 Quality",
@@ -223,9 +223,7 @@ const STUDIO_VIDEO_EDIT_PICKER_LABELS: Record<string, string> = {
 export const STUDIO_VIDEO_IDS_ORDERED: readonly string[] = [
   "kling-2.5-turbo/video",
   "kling-2.6/video",
-  "bytedance/seedance-2-fast-preview",
   "bytedance/seedance-2-fast",
-  "bytedance/seedance-2-preview",
   "bytedance/seedance-2",
   "kling-3.0/video",
   "veo3_lite",
@@ -377,10 +375,8 @@ export const SUBSCRIPTION_MODEL_MATRIX_ROWS: SubscriptionModelMatrixRow[] = [
   },
   { label: "Kling 2.5 Turbo", tiers: tierBools(VIDEO_MIN_RANK["kling-2.5-turbo/video"]) },
   { label: "Kling 2.6", tiers: tierBools(VIDEO_MIN_RANK["kling-2.6/video"]) },
-  { label: "Seedance 2 Preview", tiers: tierBools(VIDEO_MIN_RANK["bytedance/seedance-2-preview"]) },
-  { label: "Seedance 2 Fast Preview", tiers: tierBools(VIDEO_MIN_RANK["bytedance/seedance-2-fast-preview"]) },
-  { label: "Seedance 2", tiers: tierBools(VIDEO_MIN_RANK["bytedance/seedance-2"]) },
-  { label: "Seedance 2 Fast", tiers: tierBools(VIDEO_MIN_RANK["bytedance/seedance-2-fast"]) },
+  { label: "Seedance 2.0", tiers: tierBools(VIDEO_MIN_RANK["bytedance/seedance-2"]) },
+  { label: "Seedance 2.0 Fast", tiers: tierBools(VIDEO_MIN_RANK["bytedance/seedance-2-fast"]) },
   {
     label: "Kling 3.0",
     tiers: tierBools(VIDEO_MIN_RANK["kling-3.0/video"]),

@@ -28,8 +28,12 @@ export const SEEDANCE_COMPACT_PREVIEW_MAX_IMAGE_URLS = SEEDANCE_PREVIEW_MAX_IMAG
 
 /** PiAPI rejects very long prompts on Seedance Preview; matches workflow cap. */
 export const SEEDANCE_PREVIEW_PROMPT_MAX_CHARS = 1800;
-/** Seedance 2 / 2 Fast (non-preview): practical upper bound before provider returns invalid-parameters errors. */
-export const SEEDANCE_PRO_PROMPT_MAX_CHARS = 3500;
+/**
+ * Kie Market Seedance 2.0 / 2.0 Fast `input.prompt` max length (min 3).
+ * @see https://docs.kie.ai/market/bytedance/seedance-2
+ * @see https://docs.kie.ai/market/bytedance/seedance-2-fast
+ */
+export const SEEDANCE_PRO_PROMPT_MAX_CHARS = 20000;
 
 /**
  * Exponential backoff with jitter. PiAPI 502/503 storms last 1–4s; the previous flat

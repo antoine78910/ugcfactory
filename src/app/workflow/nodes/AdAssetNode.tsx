@@ -48,7 +48,10 @@ import {
   userMessageFromCaughtError,
 } from "@/lib/generationUserMessage";
 import { refundPlatformCredits } from "@/lib/refundPlatformCredits";
-import { studioVideoDurationSecOptions } from "@/lib/studioVideoModelCapabilities";
+import {
+  studioVideoDurationSecOptions,
+  studioVideoIsSeedance2ProPickerId,
+} from "@/lib/studioVideoModelCapabilities";
 import { uploadFileToCdn } from "@/lib/uploadBlobUrlToCdn";
 
 import {
@@ -241,17 +244,15 @@ const VIDEO_MODELS: { value: string; label: string }[] = [
   { value: "kling-2.6/video", label: "Kling 2.6" },
   { value: "openai/sora-2", label: "Sora 2" },
   { value: "openai/sora-2-pro", label: "Sora 2 Pro" },
-  { value: "bytedance/seedance-2-preview", label: "Seedance 2 Preview" },
-  { value: "bytedance/seedance-2-fast-preview", label: "Seedance 2 Fast Preview" },
-  { value: "bytedance/seedance-2", label: "Seedance 2" },
-  { value: "bytedance/seedance-2-fast", label: "Seedance 2 Fast" },
+  { value: "bytedance/seedance-2", label: "Seedance 2.0" },
+  { value: "bytedance/seedance-2-fast", label: "Seedance 2.0 Fast" },
   { value: "veo3_lite", label: "Veo 3.1 Lite" },
   { value: "veo3_fast", label: "Veo 3.1 Fast" },
   { value: "veo3", label: "Veo 3.1 Quality" },
 ];
 const VIDEO_CHAIN_SEEDANCE_MODELS: { value: string; label: string }[] = [
-  { value: "bytedance/seedance-2-fast", label: "Seedance 2 Fast" },
-  { value: "bytedance/seedance-2", label: "Seedance 2" },
+  { value: "bytedance/seedance-2-fast", label: "Seedance 2.0 Fast" },
+  { value: "bytedance/seedance-2", label: "Seedance 2.0" },
 ];
 
 const MOTION_CONTROL_MODELS: { value: string; label: string }[] = [
@@ -297,8 +298,8 @@ const IMAGE_RESOLUTIONS = ["1K", "2K", "4K"] as const;
 const VIDEO_RESOLUTIONS = ["720p", "1080p"] as const;
 const VARIATION_RESOLUTIONS = ["1024", "1536", "2K"] as const;
 
-const WORKFLOW_SEEDANCE_PREVIEW_PRIORITY_INFO =
-  "VIP uses faster PiAPI queue and costs 2× credits vs Normal for Seedance Preview / Fast Preview.";
+const WORKFLOW_SEEDANCE_PRIORITY_INFO =
+  "VIP priority costs 2× credits vs Normal for Seedance 2.0 / 2.0 Fast (Kie Market).";
 const WORKFLOW_ASSISTANT_CREDITS_BY_MODEL: Record<"claude-sonnet-4-5" | "gpt-5o", number> = {
   "claude-sonnet-4-5": 2,
   "gpt-5o": 0,
@@ -1448,10 +1449,8 @@ export function AdAssetNode({ id, data, selected }: NodeProps<AdAssetNodeType>) 
     [data.kind, model],
   );
 
-  const showWorkflowSeedancePreviewPriority =
-    data.kind === "video" &&
-    (resolvedVideoModelId === "bytedance/seedance-2-preview" ||
-      resolvedVideoModelId === "bytedance/seedance-2-fast-preview");
+  const showWorkflowSeedancePriority =
+    data.kind === "video" && studioVideoIsSeedance2ProPickerId(resolvedVideoModelId);
 
   /** UI gates derived from the picker capabilities — Seedance has no first/last frame ports. */
   const videoModelHasStartFrame = useMemo(
@@ -4413,13 +4412,13 @@ export function AdAssetNode({ id, data, selected }: NodeProps<AdAssetNodeType>) 
                   Fixed
                 </span>
               ) : null}
-              {showWorkflowSeedancePreviewPriority ? (
+              {showWorkflowSeedancePriority ? (
                 <div className="flex h-6 shrink-0 items-center gap-px rounded-full border border-white/12 bg-[#1c1c1f] px-0.5">
                   {(["normal", "vip"] as const).map((tier) => (
                     <button
                       key={tier}
                       type="button"
-                      title={WORKFLOW_SEEDANCE_PREVIEW_PRIORITY_INFO}
+                      title={WORKFLOW_SEEDANCE_PRIORITY_INFO}
                       onClick={() => patch(id, { videoPriority: tier })}
                       className={cn(
                         "nodrag nopan rounded-full px-1 py-px text-[8px] font-semibold transition",

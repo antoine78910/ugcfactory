@@ -93,7 +93,6 @@ import { proxiedMediaSrc } from "@/lib/mediaProxyUrl";
 import { STUDIO_VIDEO_TAB_KINDS } from "@/lib/studioGenerationKinds";
 import {
   SEEDANCE_COMPACT_PREVIEW_MAX_IMAGE_URLS,
-  SEEDANCE_PREVIEW_MAX_IMAGE_URLS,
   SEEDANCE_PRO_MAX_AUDIO_URLS,
   SEEDANCE_PRO_MAX_IMAGE_URLS,
   SEEDANCE_PRO_MAX_VIDEO_URLS,
@@ -112,6 +111,7 @@ import {
   studioVideoUsesSeedanceCompactReferenceUploads,
   studioVideoUsesSeedanceProOmniMediaUploads,
   studioVideoSupportsReferenceElements,
+  normalizeLegacySeedanceStudioPickerId,
   STUDIO_VEO_DURATION_HINT,
 } from "@/lib/studioVideoModelCapabilities";
 import {
@@ -386,8 +386,6 @@ type VideoModelId =
   | "kling-2.6/video"
   | "openai/sora-2"
   | "openai/sora-2-pro"
-  | "bytedance/seedance-2-preview"
-  | "bytedance/seedance-2-fast-preview"
   | "bytedance/seedance-2"
   | "bytedance/seedance-2-fast"
   | "veo3_lite"
@@ -401,26 +399,14 @@ const SEEDANCE_STRICT_NO_FACE_MODELS: VideoModelId[] = [
   "bytedance/seedance-2-fast",
 ];
 
-const SEEDANCE_AI_FACE_ONLY_MODELS: VideoModelId[] = [
-  "bytedance/seedance-2-preview",
-  "bytedance/seedance-2-fast-preview",
-];
-
-const SEEDANCE_PREVIEW_MODELS: VideoModelId[] = [
-  "bytedance/seedance-2-preview",
-  "bytedance/seedance-2-fast-preview",
-];
-
 const MODEL_OPTIONS: { id: VideoModelId; label: string; family: VideoFamily }[] = [
   { id: "kling-3.0/video", label: "Kling 3.0", family: "kie" },
   { id: "kling-2.5-turbo/video", label: "Kling 2.5 Turbo", family: "kie" },
   { id: "kling-2.6/video", label: "Kling 2.6", family: "kie" },
   { id: "openai/sora-2", label: "Sora 2", family: "sora" },
   { id: "openai/sora-2-pro", label: "Sora 2 Pro", family: "sora" },
-  { id: "bytedance/seedance-2-preview", label: "Seedance 2 Preview", family: "kie" },
-  { id: "bytedance/seedance-2-fast-preview", label: "Seedance 2 Fast Preview", family: "kie" },
-  { id: "bytedance/seedance-2", label: "Seedance 2", family: "kie" },
-  { id: "bytedance/seedance-2-fast", label: "Seedance 2 Fast", family: "kie" },
+  { id: "bytedance/seedance-2", label: "Seedance 2.0", family: "kie" },
+  { id: "bytedance/seedance-2-fast", label: "Seedance 2.0 Fast", family: "kie" },
   { id: "veo3_lite", label: "Veo 3.1 Lite", family: "veo" },
   { id: "veo3_fast", label: "Veo 3.1 Fast", family: "veo" },
   { id: "veo3", label: "Veo 3.1 Quality", family: "veo" },
@@ -511,41 +497,22 @@ const VIDEO_MODEL_PICKER_ITEMS: StudioModelPickerItem[] = [
     durationRange: studioVideoDurationRangeLabel("openai/sora-2-pro"),
   },
   {
-    id: "bytedance/seedance-2-preview",
-    label: "Seedance 2 Preview",
-    subtitle: "Early access, longer wait",
-    icon: "seedance",
-    newBadge: true,
-    resolution: "480p (std); 720p / 1080p (VIP)",
-    durationRange: studioVideoDurationRangeLabel("bytedance/seedance-2-preview"),
-    searchText: "seedance preview provider bytedance",
-  },
-  {
-    id: "bytedance/seedance-2-fast-preview",
-    label: "Seedance 2 Fast Preview",
-    subtitle: "Fast, lower cost",
-    icon: "seedance",
-    resolution: "480p (std); 720p / 1080p (VIP)",
-    durationRange: studioVideoDurationRangeLabel("bytedance/seedance-2-fast-preview"),
-    searchText: "seedance fast preview provider",
-  },
-  {
     id: "bytedance/seedance-2",
-    label: "Seedance 2",
-    subtitle: "Pro, higher quality",
+    label: "Seedance 2.0",
+    subtitle: "Kie Market · quality",
     icon: "seedance",
     resolution: "480p / 720p / 1080p · 21:9–auto",
     durationRange: studioVideoDurationRangeLabel("bytedance/seedance-2"),
-    searchText: "seedance 2 pro provider",
+    searchText: "seedance 2 kie bytedance",
   },
   {
     id: "bytedance/seedance-2-fast",
-    label: "Seedance 2 Fast",
-    subtitle: "Fast, lower cost",
+    label: "Seedance 2.0 Fast",
+    subtitle: "Kie Market · faster",
     icon: "seedance",
-    resolution: "480p / 720p / 1080p · 21:9–auto",
+    resolution: "480p / 720p · 21:9–auto",
     durationRange: studioVideoDurationRangeLabel("bytedance/seedance-2-fast"),
-    searchText: "seedance 2 fast provider",
+    searchText: "seedance 2 fast kie bytedance",
   },
   {
     id: "veo3_lite",
@@ -581,9 +548,7 @@ const VIDEO_EDIT_PICKER_ACCESS_ORDER = [...STUDIO_VIDEO_EDIT_PICKER_IDS];
 const VIDEO_MODEL_ACCESS_ORDER: VideoModelId[] = [
   "kling-2.5-turbo/video",
   "kling-2.6/video",
-  "bytedance/seedance-2-fast-preview",
   "bytedance/seedance-2-fast",
-  "bytedance/seedance-2-preview",
   "bytedance/seedance-2",
   "kling-3.0/video",
   "veo3_lite",
@@ -869,14 +834,6 @@ function videoHistoryAspectLabel(family: string, aspect: string, veoAspect: stri
   return aspect;
 }
 
-/** Preview queue: VIP uses distinct `task_type` via `marketModel` on POST /api/kling/generate. */
-function seedancePreviewMarketModelForApi(pickerId: string, priority: VideoPriority): string {
-  if (priority !== "vip") return pickerId;
-  if (pickerId === "bytedance/seedance-2-preview") return "bytedance/seedance-2-preview-vip";
-  if (pickerId === "bytedance/seedance-2-fast-preview") return "bytedance/seedance-2-fast-preview-vip";
-  return pickerId;
-}
-
 async function registerStudioTask(params: {
   kind: "studio_video";
   label: string;
@@ -1081,11 +1038,11 @@ export default function StudioVideoPanel({
         if (shots.length > 0) setKlingShots(shots);
       }
       if (typeof parsed.soundOn === "boolean") setSoundOn(parsed.soundOn);
-      if (
-        typeof parsed.modelId === "string" &&
-        (VIDEO_MODEL_ACCESS_ORDER as readonly string[]).includes(parsed.modelId)
-      ) {
-        setModelId(parsed.modelId as VideoModelId);
+      if (typeof parsed.modelId === "string") {
+        const normalized = normalizeLegacySeedanceStudioPickerId(parsed.modelId.trim());
+        if ((VIDEO_MODEL_ACCESS_ORDER as readonly string[]).includes(normalized)) {
+          setModelId(normalized as VideoModelId);
+        }
       }
       if (parsed.videoPriority === "vip" || parsed.videoPriority === "normal") {
         setVideoPriority(parsed.videoPriority);
@@ -1299,15 +1256,9 @@ export default function StudioVideoPanel({
   const compactSeedanceRefUploads = studioVideoUsesSeedanceCompactReferenceUploads(modelId);
   const seedanceProOmniRefUploads = studioVideoUsesSeedanceProOmniMediaUploads(modelId);
   const isSeedanceStrictNoFaceModel = SEEDANCE_STRICT_NO_FACE_MODELS.includes(modelId);
-  const isSeedanceAiFaceOnlyModel = SEEDANCE_AI_FACE_ONLY_MODELS.includes(modelId);
-  const isSeedancePreviewModel = SEEDANCE_PREVIEW_MODELS.includes(modelId);
-  const seedanceFacePolicyHint = isSeedanceStrictNoFaceModel
-    ? "Face input not allowed, even AI"
-    : isSeedanceAiFaceOnlyModel
-      ? "Only AI faces allowed, no real faces"
-      : null;
+  const seedanceFacePolicyHint = isSeedanceStrictNoFaceModel ? "Face input not allowed, even AI" : null;
   const seedancePriorityInfoText =
-    "VIP pricing is x2 credits per generation.\n\nPeak hours: From 09:00 to 15:00 GMT, Seedance Preview experiences high traffic. During this period, queue times may extend to several hours.\n\nCurrently outside peak hours: Normal is usually 5-60 min. VIP (fast) is usually 3-5 min.";
+    "VIP pricing is ×2 credits per generation compared to Normal priority on this queue.";
   const elementsUnsupportedHint =
     !studioVideoSupportsReferenceElements(modelId) && prompt.includes("@");
   /** Prompt @mention picker: saved Elements + live Seedance upload tags (@imageN/@videoN/@audioN). */
@@ -1429,13 +1380,15 @@ export default function StudioVideoPanel({
 
   const seedanceVideoResolution = useMemo((): "480p" | "720p" | "1080p" | undefined => {
     if (!modelId.startsWith("bytedance/seedance")) return undefined;
-    return klingMode === "pro" ? "1080p" : "720p";
+    const tier = klingMode === "pro" ? "1080p" : "720p";
+    // Kie `bytedance/seedance-2-fast` has no 1080p; route maps it to 720p — align billing.
+    if (modelId === "bytedance/seedance-2-fast" && tier === "1080p") return "720p";
+    return tier;
   }, [modelId, klingMode]);
 
-  /** Preview VIP uses distinct market ids + sheet $/s; other models keep ×2 on VIP queue. */
   const pricingModelIdForCredits = useMemo(
-    () => seedancePreviewMarketModelForApi(modelId, videoPriority),
-    [modelId, videoPriority],
+    () => normalizeLegacySeedanceStudioPickerId(modelId),
+    [modelId],
   );
 
   const baseCredits = useMemo(
@@ -1450,11 +1403,8 @@ export default function StudioVideoPanel({
     [pricingModelIdForCredits, billingDurationSec, soundOn, klingMode, seedanceVideoResolution],
   );
   const credits = useMemo(() => {
-    const previewPicker =
-      modelId === "bytedance/seedance-2-preview" || modelId === "bytedance/seedance-2-fast-preview";
-    if (previewPicker) return baseCredits;
     return videoPriority === "vip" ? baseCredits * 2 : baseCredits;
-  }, [modelId, baseCredits, videoPriority]);
+  }, [baseCredits, videoPriority]);
 
   useEffect(() => {
     if (!klingCustomMulti) return;
@@ -3637,9 +3587,7 @@ export default function StudioVideoPanel({
       }
     }
     if (studioVideoIsSeedance2ProPickerId(modelId) && klingElementsPayloadEarly?.length) {
-      const maxSlots = modelId.includes("preview")
-        ? SEEDANCE_PREVIEW_MAX_IMAGE_URLS
-        : SEEDANCE_PRO_MAX_IMAGE_URLS;
+      const maxSlots = SEEDANCE_PRO_MAX_IMAGE_URLS;
       const n = countUniqueSeedanceStudioRefs({
         startUrl,
         endUrl,
@@ -3838,7 +3786,7 @@ export default function StudioVideoPanel({
         const omniSnap = snap.seedanceOmniMedia;
         const klingGenerateBody: Record<string, unknown> = {
           accountPlan: snap.planId,
-          marketModel: seedancePreviewMarketModelForApi(snap.modelId, snap.videoPriority),
+          marketModel: normalizeLegacySeedanceStudioPickerId(snap.modelId),
           prompt: snap.prompt,
           duration: klingDurationSec,
           aspectRatio:
@@ -4670,7 +4618,7 @@ export default function StudioVideoPanel({
                 </div>
               )}
 
-              {isSeedancePreviewModel ? (
+              {studioVideoIsSeedance2ProPickerId(modelId) ? (
                 <div className="space-y-1">
                   <div className="flex items-center gap-1.5">
                     <Label className="text-xs text-white/45">Priority</Label>
@@ -5111,7 +5059,7 @@ export default function StudioVideoPanel({
                       return (
                         <li
                           key={el.id}
-                          className="flex items-center justify-between gap-2 rounded-xl border border-white/10 bg-black/30 px-3 py-2.5"
+                          className="group flex items-center justify-between gap-2 rounded-xl border border-white/10 bg-black/30 px-3 py-2.5"
                         >
                           <div className="flex min-w-0 flex-1 items-center gap-2.5">
                             {headUrl ? (
@@ -5138,7 +5086,23 @@ export default function StudioVideoPanel({
                               </p>
                             </div>
                           </div>
-                          <div className="flex shrink-0 gap-1">
+                          <div className="relative flex shrink-0 items-center gap-1">
+                            <Button
+                              type="button"
+                              variant="ghost"
+                              size="sm"
+                              className={cn(
+                                "h-7 w-7 shrink-0 p-0 text-rose-300/90 opacity-0 pointer-events-none transition-opacity hover:bg-rose-500/15 hover:text-rose-200",
+                                "absolute right-full top-1/2 mr-0.5 -translate-y-1/2",
+                                "group-hover:opacity-100 group-hover:pointer-events-auto",
+                                "focus-visible:opacity-100 focus-visible:pointer-events-auto",
+                              )}
+                              title="Remove element"
+                              aria-label="Remove element"
+                              onClick={() => removeKlingElementDraft(el.id)}
+                            >
+                              <Trash2 className="h-3.5 w-3.5" aria-hidden />
+                            </Button>
                             <Button
                               type="button"
                               variant="ghost"
@@ -5161,15 +5125,6 @@ export default function StudioVideoPanel({
                               onClick={() => editKlingElementInModal(el)}
                             >
                               Edit
-                            </Button>
-                            <Button
-                              type="button"
-                              variant="ghost"
-                              size="sm"
-                              className="h-8 px-2 text-[11px] text-rose-300/90 hover:bg-white/[0.06] hover:text-rose-200"
-                              onClick={() => removeKlingElementDraft(el.id)}
-                            >
-                              Remove
                             </Button>
                           </div>
                         </li>

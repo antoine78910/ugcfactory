@@ -9,6 +9,7 @@ import {
   isStudioSeedreamImagePickerId,
   isStudioUnifiedSeedreamPickerId,
 } from "@/lib/studioImageModels";
+import { normalizeLegacySeedanceMarketModelId } from "@/lib/studioVideoModelCapabilities";
 import { normalizeUgcScriptVideoDurationSec } from "@/lib/ugcAiScriptBrief";
 
 // ---------------------------------------------------------------------------
@@ -43,15 +44,17 @@ export const STARTER_CREDIT_VALUE_USD = 29.99 / 250;
 /** Link to Ad image→video: PiAPI `task_type` maps to these ids for `/api/kling/generate`. */
 export type LinkToAdSeedanceSpeed = "normal" | "vip";
 
-export function linkToAdSeedanceMarketModel(speed: LinkToAdSeedanceSpeed): string {
-  return speed === "vip" ? "bytedance/seedance-2-fast-preview-vip" : "bytedance/seedance-2-fast-preview";
+/** Kie Market Seedance 2.0 Fast for Link to Ad (Normal and VIP use the same model; VIP bills ×2 credits in {@link linkToAdVideoCredits}). */
+export function linkToAdSeedanceMarketModel(_speed: LinkToAdSeedanceSpeed): string {
+  void _speed;
+  return "bytedance/seedance-2-fast";
 }
 
-/** Link to Ad video: Seedance 2 Preview only (Kling disabled for this flow). */
+/** Link to Ad video: Kie Seedance 2.0 Fast (@see https://docs.kie.ai/market/bytedance/seedance-2-fast). */
 export const LINK_TO_AD_VIDEO_MODELS = {
   seedance: {
-    marketModelNormal: "bytedance/seedance-2-fast-preview" as const,
-    marketModelVip: "bytedance/seedance-2-fast-preview-vip" as const,
+    marketModelNormal: "bytedance/seedance-2-fast" as const,
+    marketModelVip: "bytedance/seedance-2-fast" as const,
   },
 } as const;
 
@@ -1105,54 +1108,6 @@ export function seedanceVariantFromMarketModelId(modelId: string): "seedance-2" 
   return modelId.includes("seedance-2-fast") ? "seedance-2-fast" : "seedance-2";
 }
 
-/** True for PiAPI Preview / Fast Preview task types (distinct $/s from Seedance 2 / 2 Fast “pro”). */
-export function isSeedancePreviewMarketModel(modelId: string): boolean {
-  return (
-    modelId === "bytedance/seedance-2-preview" ||
-    modelId === "bytedance/seedance-2-preview-vip" ||
-    modelId === "bytedance/seedance-2-fast-preview" ||
-    modelId === "bytedance/seedance-2-fast-preview-vip"
-  );
-}
-
-/**
- * Provider $/s for Preview SKUs (sheet Feb 2026).
- * Fast Preview (+ VIP): 480p $0.08 · 720p $0.16 (VIP row); 1080p inferred $0.40.
- * Seedance 2 Preview (+ VIP): 480p $0.10 · 720p $0.20 · 1080p $0.50 (VIP rows at 720/1080).
- * Must match `seedance-2-fast-preview` before `seedance-2-preview` substring checks.
- */
-export function seedancePreviewProviderUsdPerSecond(
-  modelId: string,
-  resolution: SeedanceBillingResolution,
-): number {
-  if (modelId.includes("seedance-2-fast-preview")) {
-    return (
-      {
-        "480p": 0.08,
-        "720p": 0.16,
-        "1080p": 0.4,
-      } as const
-    )[resolution];
-  }
-  if (modelId.includes("seedance-2-preview")) {
-    return (
-      {
-        "480p": 0.1,
-        "720p": 0.2,
-        "1080p": 0.5,
-      } as const
-    )[resolution];
-  }
-  throw new Error(`seedancePreviewProviderUsdPerSecond: not a preview model: ${modelId}`);
-}
-
-function creditsFromProviderOurPerSecond(durationSec: number, ourPerSecond: number): number {
-  const d = Math.max(0, Number(durationSec) || 0);
-  const retailPerSec = ourPerSecond * 2;
-  const perSec = Math.max(1, Math.round(retailPerSec / VIDEO_DYNAMIC_CREDIT_USD));
-  return Math.max(1, Math.ceil(d * perSec));
-}
-
 export function seedanceCreditsPerSecond(opts: {
   variant: "seedance-2" | "seedance-2-fast";
   resolution: SeedanceBillingResolution;
@@ -1173,15 +1128,6 @@ export function calculateSeedanceVideoCredits(
   const d = Math.max(0, Number(durationSec) || 0);
   const perSec = seedanceCreditsPerSecond({ variant, resolution });
   return Math.max(1, Math.ceil(d * perSec));
-}
-
-export function calculateSeedancePreviewVideoCredits(
-  durationSec: number,
-  modelId: string,
-  resolution: SeedanceBillingResolution,
-): number {
-  const our = seedancePreviewProviderUsdPerSecond(modelId, resolution);
-  return creditsFromProviderOurPerSecond(durationSec, our);
 }
 
 function seedanceResolutionFromVideoOptions(opts: VideoCreditOptions): SeedanceBillingResolution {
@@ -1242,10 +1188,9 @@ export function calculateVideoCreditsForModel(opts: VideoCreditOptions): number 
     case "bytedance/seedance-2-fast-preview-vip":
     case "bytedance/seedance-2-fast": {
       const resolution = seedanceResolutionFromVideoOptions(opts);
-      if (isSeedancePreviewMarketModel(opts.modelId)) {
-        return calculateSeedancePreviewVideoCredits(d, opts.modelId, resolution);
-      }
-      const variant = seedanceVariantFromMarketModelId(opts.modelId);
+      const variant = seedanceVariantFromMarketModelId(
+        normalizeLegacySeedanceMarketModelId(opts.modelId),
+      );
       return calculateSeedanceVideoCredits(d, variant, resolution);
     }
 
@@ -1265,13 +1210,13 @@ export function linkToAdVideoCredits(
 ): number {
   void LINK_TO_AD_VIDEO_MODELS[model];
   const d = normalizeUgcScriptVideoDurationSec(durationSec);
-  const modelId = linkToAdSeedanceMarketModel(seedanceSpeed);
-  return calculateVideoCreditsForModel({
-    modelId,
+  const base = calculateVideoCreditsForModel({
+    modelId: "bytedance/seedance-2-fast",
     duration: d,
     audio: true,
     videoResolution: "720p",
   });
+  return seedanceSpeed === "vip" ? Math.max(1, base * 2) : base;
 }
 
 /** Reference snapshot for marketing / tests — Seedance Fast @ 720p, normal vs VIP. */

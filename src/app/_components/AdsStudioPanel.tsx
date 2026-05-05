@@ -1907,8 +1907,6 @@ export default function AdsStudioPanel() {
         const videoPayload: Record<string, unknown> = {
           accountPlan: snapPlan,
           marketModel: ADS_STUDIO_SEEDANCE_MODEL,
-          /** Kie Market Seedance 2.0 (`createTask`), not PiAPI. @see https://docs.kie.ai/market/bytedance/seedance-2 */
-          seedanceBackend: "kie",
           prompt: videoPrompt,
           duration: snapDur,
           aspectRatio: snapAspect,

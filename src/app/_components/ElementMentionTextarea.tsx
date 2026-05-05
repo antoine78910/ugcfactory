@@ -2,6 +2,7 @@
 
 import type { ReactNode } from "react";
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
+import { createPortal } from "react-dom";
 import { AtSign, Music2, VideoIcon } from "lucide-react";
 import { cn } from "@/lib/utils";
 
@@ -55,6 +56,23 @@ type Props = {
  * Avoid `md:leading-*` here so callers (e.g. Ads Studio `leading-relaxed`) stay consistent at every breakpoint.
  */
 const TEXTAREA_COPY_LAYOUT = "px-3 py-2 text-base leading-normal md:text-sm";
+
+/** Positions the hover preview so it stays on-screen (fixed coordinates). */
+function computeMentionPreviewStyle(rect: DOMRect): { left: number; top: number; maxW: number } {
+  if (typeof window === "undefined") {
+    return { left: rect.left, top: rect.bottom + 8, maxW: 360 };
+  }
+  const margin = 8;
+  const maxW = Math.min(360, window.innerWidth - 2 * margin);
+  const estH = 288;
+  let top = rect.bottom + margin;
+  if (top + estH > window.innerHeight - margin) {
+    top = Math.max(margin, rect.top - margin - estH);
+  }
+  let left = rect.left;
+  left = Math.max(margin, Math.min(left, window.innerWidth - maxW - margin));
+  return { left, top, maxW };
+}
 
 /** Vertical scrollbar consumes width inside the textarea but not in the mirror layer — line wraps drift without this. */
 function verticalScrollbarReserveX(el: HTMLTextAreaElement): number {
@@ -130,7 +148,12 @@ function buildMentionOverlayNodes(
         "inline-flex h-5 items-center gap-0.5 rounded-md bg-white/[0.06] px-0.5 align-middle";
       const labelClass = "whitespace-nowrap text-[12px] font-medium tracking-[-0.01em] text-white/92";
       nodes.push(
-        <span key={`chip-wrap-${atIndex}-${opt.id}`} className="relative inline-block align-baseline">
+        <span
+          key={`chip-wrap-${atIndex}-${opt.id}`}
+          data-mention-chip=""
+          data-mention-id={opt.id}
+          className="relative inline-block cursor-default align-baseline pointer-events-auto"
+        >
           {/* Reserve exactly the raw token width used by the real textarea caret. */}
           <span className="invisible">{full}</span>
           <span className={`pointer-events-none absolute left-0 top-1/2 flex h-5 w-full -translate-y-1/2 items-center overflow-hidden ${chipClass}`}>
@@ -206,6 +229,10 @@ export default function ElementMentionTextarea({
   const [token, setToken] = useState("");
   const [tokenStart, setTokenStart] = useState<number | null>(null);
   const [scrollbarReserveX, setScrollbarReserveX] = useState(0);
+  const [mentionHoverPreview, setMentionHoverPreview] = useState<{ id: string; rect: DOMRect } | null>(
+    null,
+  );
+  const mentionHoverProbeRafRef = useRef<number | null>(null);
 
   const measureScrollbarReserve = useCallback(() => {
     const el = textareaRef.current;
@@ -286,6 +313,49 @@ export default function ElementMentionTextarea({
     setTokenStart(null);
     setActiveIdx(0);
     setMentionTabId("");
+  }, []);
+
+  const probeMentionChipUnderCursor = useCallback(
+    (clientX: number, clientY: number) => {
+      const ta = textareaRef.current;
+      if (!ta || !value) {
+        setMentionHoverPreview(null);
+        return;
+      }
+      const prevPe = ta.style.pointerEvents;
+      ta.style.pointerEvents = "none";
+      let target: Element | null = null;
+      try {
+        target = document.elementFromPoint(clientX, clientY);
+      } finally {
+        ta.style.pointerEvents = prevPe;
+      }
+      const chip = target?.closest("[data-mention-chip]");
+      if (chip instanceof HTMLElement) {
+        const id = chip.dataset.mentionId;
+        if (id) {
+          const opt = elements.find((x) => x.id === id);
+          if (opt?.previewUrl || opt?.previewKind === "audio") {
+            setMentionHoverPreview({ id, rect: chip.getBoundingClientRect() });
+            return;
+          }
+        }
+      }
+      setMentionHoverPreview(null);
+    },
+    [elements, value],
+  );
+
+  useEffect(() => {
+    setMentionHoverPreview(null);
+  }, [value]);
+
+  useEffect(() => {
+    return () => {
+      if (mentionHoverProbeRafRef.current != null) {
+        window.cancelAnimationFrame(mentionHoverProbeRafRef.current);
+      }
+    };
   }, []);
 
   const updateMentionFromState = useCallback(
@@ -494,6 +564,15 @@ export default function ElementMentionTextarea({
           "relative min-h-16 overflow-hidden rounded-md border border-input bg-transparent shadow-xs transition-[color,box-shadow]",
           className,
         )}
+        onMouseMove={(e) => {
+          if (!value || elements.length === 0) return;
+          if (mentionHoverProbeRafRef.current != null) return;
+          mentionHoverProbeRafRef.current = window.requestAnimationFrame(() => {
+            mentionHoverProbeRafRef.current = null;
+            probeMentionChipUnderCursor(e.clientX, e.clientY);
+          });
+        }}
+        onMouseLeave={() => setMentionHoverPreview(null)}
       >
         <textarea
           ref={textareaRef}
@@ -504,6 +583,7 @@ export default function ElementMentionTextarea({
           onClick={refreshFromCaret}
           spellCheck={false}
           onScroll={(e) => {
+            setMentionHoverPreview(null);
             const t = e.currentTarget;
             syncMirrorScrollFromTextarea(t);
             measureScrollbarReserve();
@@ -625,6 +705,48 @@ export default function ElementMentionTextarea({
           )}
         </div>
       ) : null}
+
+      {mentionHoverPreview && typeof document !== "undefined"
+        ? createPortal(
+            (() => {
+              const opt = elements.find((x) => x.id === mentionHoverPreview.id);
+              if (!opt) return null;
+              const kind = opt.previewKind ?? "image";
+              const pos = computeMentionPreviewStyle(mentionHoverPreview.rect);
+              return (
+                <div
+                  className="pointer-events-none fixed z-[520] rounded-xl border border-white/15 bg-[#0f0f14]/98 p-1.5 shadow-[0_16px_50px_rgba(0,0,0,0.65)] backdrop-blur-sm"
+                  style={{ left: pos.left, top: pos.top, maxWidth: pos.maxW }}
+                >
+                  {opt.previewUrl && kind === "image" ? (
+                    // eslint-disable-next-line @next/next/no-img-element
+                    <img
+                      src={opt.previewUrl}
+                      alt=""
+                      className="max-h-[min(280px,42vh)] w-auto max-w-[min(360px,92vw)] rounded-lg object-contain"
+                    />
+                  ) : opt.previewUrl && kind === "video" ? (
+                    <video
+                      src={opt.previewUrl}
+                      className="max-h-[min(280px,42vh)] w-auto max-w-[min(360px,92vw)] rounded-lg object-contain"
+                      muted
+                      playsInline
+                      autoPlay
+                      loop
+                      preload="metadata"
+                    />
+                  ) : kind === "audio" ? (
+                    <div className="flex h-24 min-w-[12rem] items-center justify-center gap-2 px-3 text-white/75">
+                      <Music2 className="h-9 w-9 shrink-0" aria-hidden />
+                      <span className="text-xs font-medium">Audio reference</span>
+                    </div>
+                  ) : null}
+                </div>
+              );
+            })(),
+            document.body,
+          )
+        : null}
     </div>
   );
 }
