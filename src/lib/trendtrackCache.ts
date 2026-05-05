@@ -27,3 +27,22 @@ export async function deleteCached(key: string): Promise<void> {
   if (!sb) return;
   await sb.from("intelligence_cache").delete().eq("key", key);
 }
+
+export type StaleCacheHit<T> = { data: T; staleAt: string; expired: boolean };
+
+export async function getStale<T>(key: string): Promise<StaleCacheHit<T> | null> {
+  const sb = createSupabaseServiceClient();
+  if (!sb) return null;
+  const { data } = await sb
+    .from("intelligence_cache")
+    .select("data, expires_at")
+    .eq("key", key)
+    .maybeSingle();
+  if (!data) return null;
+  const expired = new Date(data.expires_at) <= new Date();
+  return {
+    data: data.data as T,
+    staleAt: data.expires_at as string,
+    expired,
+  };
+}
