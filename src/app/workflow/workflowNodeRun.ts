@@ -1658,6 +1658,7 @@ export function estimateWorkflowAdAssetRunCredits(
   const batchPromptCount = batch?.length ?? 0;
   const runCount = Math.max(1, batchPromptCount);
   const multiBatchFromList = batchPromptCount > 1;
+  // Only image jobs support quantity fan-out; video/motion always run once per prompt.
   let quantity = Math.min(10, Math.max(1, data.quantity ?? 1));
 
   if (data.kind === "image") {
@@ -1697,9 +1698,8 @@ export function estimateWorkflowAdAssetRunCredits(
     resolution,
     durationSec: data.videoDurationSec,
   });
-  if (quantity > 1 && !multiBatchFromList) {
-    return oneVideo * quantity * runCount;
-  }
+  void multiBatchFromList;
+  quantity = 1;
   return oneVideo * runCount;
 }
 

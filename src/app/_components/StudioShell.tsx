@@ -103,6 +103,8 @@ type CreateNavEntry =
       soon?: boolean;
       /** Clickable entry with a small BETA pill. */
       beta?: boolean;
+      /** Clickable entry with a small NEW pill (highlight new release). */
+      isNew?: boolean;
     };
 
 const CREATE_NAV: CreateNavEntry[] = [
@@ -113,8 +115,8 @@ const CREATE_NAV: CreateNavEntry[] = [
     href: "/ads-studio",
     label: "Ads Studio",
     icon: Sparkles,
-    /** Muted “Soon” styling in the rail; link stays usable. */
-    soon: true,
+    /** Active link with a NEW pill in the rail. */
+    isNew: true,
   },
   {
     kind: "custom-link",
@@ -496,7 +498,7 @@ function StudioShellInner({
                 {CREATE_NAV.map((entry) => {
                   const NavIcon = entry.icon;
                   if (entry.kind === "custom-link") {
-                    const { href, label, id: linkId, soon, beta } = entry;
+                    const { href, label, id: linkId, soon, beta, isNew } = entry;
                     if (soon) {
                       return (
                         <Link
@@ -553,6 +555,11 @@ function StudioShellInner({
                         {!navCollapsed && beta ? (
                           <span className="shrink-0 rounded-md border border-violet-300/35 bg-violet-500/15 px-1.5 py-0.5 text-[9px] font-bold uppercase tracking-wide text-violet-100">
                             Beta
+                          </span>
+                        ) : null}
+                        {!navCollapsed && isNew ? (
+                          <span className="shrink-0 rounded-md border border-fuchsia-300/45 bg-fuchsia-500/20 px-1.5 py-0.5 text-[9px] font-bold uppercase tracking-wide text-fuchsia-100 shadow-[0_0_10px_rgba(232,121,249,0.35)]">
+                            New
                           </span>
                         ) : null}
                       </span>

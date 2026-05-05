@@ -1573,6 +1573,19 @@ export default function AdsStudioPanel() {
   /** User removed a job from the list — ignore late poll/generation completion for that id. */
   const adsStudioDismissedJobIdsRef = useRef(new Set<string>());
   const [activeJobsStorageReady, setActiveJobsStorageReady] = useState(false);
+  /**
+   * Track md (>=768px) so the Templates gallery and Projects rail are skipped on mobile —
+   * not just hidden via CSS — to avoid loading dozens of preview videos on phones.
+   */
+  const [isMdUp, setIsMdUp] = useState(true);
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    const mql = window.matchMedia("(min-width: 768px)");
+    const apply = () => setIsMdUp(mql.matches);
+    apply();
+    mql.addEventListener("change", apply);
+    return () => mql.removeEventListener("change", apply);
+  }, []);
 
   useLayoutEffect(() => {
     if (typeof window === "undefined") return;
@@ -2402,15 +2415,15 @@ export default function AdsStudioPanel() {
               <span>App</span>
             </button>
           </div>
-          <div className="grid min-w-0 flex-1 grid-cols-[minmax(0,1fr)_auto] items-stretch gap-3">
-            <div className="grid w-full min-w-0 grid-cols-[1.75rem_minmax(0,1fr)] content-start gap-x-2 gap-y-2">
+          <div className="flex min-w-0 flex-1 flex-col items-stretch gap-3 sm:grid sm:grid-cols-[minmax(0,1fr)_auto]">
+            <div className="grid w-full min-w-0 grid-cols-[minmax(0,1fr)] content-start gap-x-2 gap-y-2 sm:grid-cols-[1.75rem_minmax(0,1fr)]">
               <button
                 type="button"
-                className="col-start-1 row-start-1 mt-1 flex size-7 shrink-0 items-center justify-center self-start rounded-lg bg-white/[0.04] text-white/85 shadow-[0_2px_1.5px_-0.5px_rgba(0,0,0,0.1)]"
+                className="col-start-1 row-start-1 mt-1 hidden size-7 shrink-0 items-center justify-center self-start rounded-lg bg-white/[0.04] text-white/85 shadow-[0_2px_1.5px_-0.5px_rgba(0,0,0,0.1)] sm:flex"
               >
                 <Plus className="size-3.5" />
               </button>
-              <div className="relative z-20 col-start-2 row-start-1 min-w-0">
+              <div className="relative z-20 col-start-1 row-start-1 min-w-0 sm:col-start-2">
                 <ElementMentionTextarea
                   value={prompt}
                   onChange={setPrompt}
@@ -2436,7 +2449,7 @@ export default function AdsStudioPanel() {
                 <PromptEnhanceCornerButton value={prompt} onApply={setPrompt} surface="ads" />
               </div>
 
-              <div className="col-start-2 row-start-2 flex min-w-0 flex-wrap items-center gap-1.5">
+              <div className="col-start-1 row-start-2 flex min-w-0 flex-wrap items-center gap-1.5 sm:col-start-2">
                 <Select value={outputAspect} onValueChange={(v) => setOutputAspect(v as AdsStudioOutputAspect)}>
                   <SelectTrigger
                     size="sm"
@@ -2485,7 +2498,7 @@ export default function AdsStudioPanel() {
               </div>
             </div>
 
-            <div className="flex shrink-0 flex-wrap items-start justify-end gap-1.5">
+            <div className="flex w-full min-w-0 shrink-0 flex-wrap items-start justify-start gap-1.5 sm:w-auto sm:justify-end">
               <div className="group relative flex h-20 w-[80px] flex-col items-start justify-between overflow-hidden rounded-xl bg-white/[0.05] p-1.5 shadow-[10px_34px_24px_0_rgba(0,0,0,0.15),1px_3px_4px_0_rgba(0,0,0,0.32),0px_1px_2px_0_rgba(0,0,0,0.32)]">
                 {uploadingRefSlot ? (
                   <div className="absolute inset-0 z-20 flex flex-col items-center justify-center gap-1.5 rounded-xl bg-black/60 backdrop-blur-[2px]">
@@ -2605,7 +2618,7 @@ export default function AdsStudioPanel() {
               <Button
                 type="button"
                 onClick={() => void runGenerate()}
-                className="flex h-[88px] w-[152px] shrink-0 items-center justify-center rounded-xl border border-violet-300/40 bg-violet-500 px-3 text-base font-semibold text-white shadow-[0_6px_0_0_rgba(76,29,149,0.85)] transition-all hover:-translate-y-px hover:bg-violet-400 hover:shadow-[0_8px_0_0_rgba(76,29,149,0.85)] active:translate-y-1 active:shadow-none"
+                className="flex h-12 w-full shrink-0 items-center justify-center rounded-xl border border-violet-300/40 bg-violet-500 px-3 text-base font-semibold text-white shadow-[0_6px_0_0_rgba(76,29,149,0.85)] transition-all hover:-translate-y-px hover:bg-violet-400 hover:shadow-[0_8px_0_0_rgba(76,29,149,0.85)] active:translate-y-1 active:shadow-none sm:h-[88px] sm:w-[152px]"
               >
                 <span className="inline-flex flex-wrap items-center justify-center gap-2">
                   Generate
@@ -2630,12 +2643,13 @@ export default function AdsStudioPanel() {
 
   return (
     <div className="relative min-w-0 pb-8 [--ads-projects-w:220px]">
+      {isMdUp ? (
       <aside
         aria-label="Projects"
         className={cn(
-          "z-[22] flex min-h-0 w-full flex-col overflow-hidden rounded-2xl border border-white/10 bg-[#09090b]/95 shadow-[inset_0_1px_0_0_rgba(255,255,255,0.06)] backdrop-blur-md",
-          "mb-3 sm:mb-4",
-          "md:fixed md:mb-0 md:left-[var(--studio-nav-w,248px)] md:top-0 md:h-dvh md:max-h-none md:w-[var(--ads-projects-w)] md:max-w-[var(--ads-projects-w)] md:rounded-none md:border-b-0 md:border-l-0 md:border-t-0 md:border-r md:border-white/10 md:shadow-none",
+          /* Hidden on mobile — rail brings little value at <md and previews/thumbs hurt perf on phones. */
+          "z-[22] hidden min-h-0 w-full flex-col overflow-hidden rounded-2xl border border-white/10 bg-[#09090b]/95 shadow-[inset_0_1px_0_0_rgba(255,255,255,0.06)] backdrop-blur-md",
+          "md:fixed md:flex md:left-[var(--studio-nav-w,248px)] md:top-0 md:h-dvh md:max-h-none md:w-[var(--ads-projects-w)] md:max-w-[var(--ads-projects-w)] md:rounded-none md:border-b-0 md:border-l-0 md:border-t-0 md:border-r md:border-white/10 md:shadow-none",
         )}
       >
           <div className="flex shrink-0 items-center gap-2 border-b border-white/[0.08] px-3 py-2.5">
@@ -2766,6 +2780,7 @@ export default function AdsStudioPanel() {
             })}
           </div>
       </aside>
+      ) : null}
 
         <div
           className={cn(
@@ -2836,6 +2851,7 @@ export default function AdsStudioPanel() {
           />
         </div>
 
+      {isMdUp ? (
       <section className="w-full min-w-0">
         <div className="mb-5 flex flex-col items-center gap-3 sm:mb-6">
           <h2 className="flex items-center gap-2.5 text-center text-xl font-semibold tracking-tight text-white sm:gap-3 sm:text-2xl md:text-[1.75rem] md:leading-snug">
@@ -2952,6 +2968,7 @@ export default function AdsStudioPanel() {
           ) : null}
         </div>
       </section>
+      ) : null}
 
       <Dialog.Root
         open={projectDetailResolved !== null}

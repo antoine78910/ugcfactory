@@ -14,10 +14,13 @@ import { getUserCreditBalance } from "@/lib/creditGrants";
 import { shouldChargePlatformCredits } from "@/lib/credits/metering";
 import { resolveAuthUserEmail } from "@/lib/sessionUserEmail";
 
-async function snapshotCreditBalanceAfterInsert(userId: string, rowIds: string[]): Promise<void> {
+async function snapshotCreditBalanceAfterInsert(
+  admin: ReturnType<typeof createSupabaseServiceClient>,
+  userId: string,
+  rowIds: string[],
+): Promise<void> {
   const uniq = [...new Set(rowIds.map((x) => x.trim()).filter(Boolean))];
   if (uniq.length === 0) return;
-  const admin = createSupabaseServiceClient();
   if (!admin) return;
   try {
     const { balance } = await getUserCreditBalance(admin, userId);
@@ -145,7 +148,7 @@ export async function POST(req: Request) {
     }
     const row = Array.isArray(data) ? data[0] : data;
     if (row?.id) {
-      await snapshotCreditBalanceAfterInsert(user.id, [String(row.id)]);
+      await snapshotCreditBalanceAfterInsert(admin, user.id, [String(row.id)]);
     }
     serverLog("studio_generations_register_ok", { kind, rows: 1, provider });
     return NextResponse.json({
@@ -226,7 +229,7 @@ export async function POST(req: Request) {
     }
     const newRowIds = inserted.map((r) => String(r.id)).filter(Boolean);
     if (newRowIds.length > 0) {
-      await snapshotCreditBalanceAfterInsert(user.id, newRowIds);
+      await snapshotCreditBalanceAfterInsert(admin, user.id, newRowIds);
     }
   }
 

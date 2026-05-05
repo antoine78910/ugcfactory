@@ -154,6 +154,12 @@ type Props = {
   onItemDeleted?: (id: string) => void;
   /** Called when the user wants to change the voice of a video item. */
   onChangeVoice?: (item: StudioHistoryItem) => void;
+  /** Pagination: when true, render a Load more button below the last group. */
+  hasMore?: boolean;
+  /** Pagination: while a load-more fetch is in flight. */
+  isLoadingMore?: boolean;
+  /** Pagination: called when the user clicks Load more. */
+  onLoadMore?: () => void;
 };
 
 export function StudioGenerationsHistory({
@@ -166,6 +172,9 @@ export function StudioGenerationsHistory({
   onDismissFailed,
   onItemDeleted,
   onChangeVoice,
+  hasMore,
+  isLoadingMore,
+  onLoadMore,
 }: Props) {
   const [view, setView] = useState<"grid" | "list">("grid");
   const [zoom, setZoom] = useState(100);
@@ -687,6 +696,22 @@ export function StudioGenerationsHistory({
               </div>
             </section>
           ))}
+          {hasMore && onLoadMore ? (
+            <div className="flex justify-center pt-2">
+              <Button
+                type="button"
+                variant="outline"
+                disabled={Boolean(isLoadingMore)}
+                onClick={onLoadMore}
+                className="border-white/15 bg-white/[0.05] text-white/80 hover:bg-white/10"
+              >
+                {isLoadingMore ? (
+                  <Loader2 className="mr-2 h-4 w-4 animate-spin" aria-hidden />
+                ) : null}
+                Load more
+              </Button>
+            </div>
+          ) : null}
           </div>
         )}
       </div>

@@ -589,8 +589,8 @@ function outputFrameDimensions(ratio: string, intrinsicAspect?: number): { width
   return { width, height };
 }
 
-const WORKFLOW_PROMPT_EDITOR_WIDTH_MIN = 300;
-const WORKFLOW_PROMPT_EDITOR_WIDTH_MAX = 920;
+const WORKFLOW_PROMPT_EDITOR_WIDTH_MIN = 360;
+const WORKFLOW_PROMPT_EDITOR_WIDTH_MAX = 1400;
 
 export function AdAssetNode({ id, data, selected }: NodeProps<AdAssetNodeType>) {
   const patch = useWorkflowNodePatch();
@@ -1591,9 +1591,6 @@ export function AdAssetNode({ id, data, selected }: NodeProps<AdAssetNodeType>) 
         resolution,
         durationSec: data.videoDurationSec,
       });
-      if (quantity > 1 && !multiBatchFromList) {
-        return oneVideo * quantity * runCount;
-      }
       return oneVideo * runCount;
     }
     if (data.kind === "motion") {
@@ -1687,10 +1684,13 @@ export function AdAssetNode({ id, data, selected }: NodeProps<AdAssetNodeType>) 
     })();
     const seed = (data.lastRunPrompt ?? composedSeed ?? prompt).trim() || prompt;
     setPromptEditorDraft(seed);
+    const viewportW =
+      typeof window !== "undefined" && Number.isFinite(window.innerWidth) ? Math.max(0, window.innerWidth) : 0;
+    const preferred = viewportW > 0 ? Math.round(viewportW - 48) : Math.round(cardWidthPx * 1.15);
     setPromptEditorWidthPx(
       Math.min(
         WORKFLOW_PROMPT_EDITOR_WIDTH_MAX,
-        Math.max(WORKFLOW_PROMPT_EDITOR_WIDTH_MIN, Math.round(cardWidthPx * 1.15)),
+        Math.max(WORKFLOW_PROMPT_EDITOR_WIDTH_MIN, preferred),
       ),
     );
     setPromptEditorOpen(true);
@@ -4452,7 +4452,7 @@ export function AdAssetNode({ id, data, selected }: NodeProps<AdAssetNodeType>) 
 
           {promptEditorOpen ? (
             <div
-              className="nodrag nopan absolute inset-0 z-[24] flex items-center justify-center p-2 sm:p-3"
+              className="nodrag nopan absolute inset-0 z-[24] flex items-stretch justify-stretch p-2 sm:p-3"
               onPointerDown={(e) => e.stopPropagation()}
             >
               <button
@@ -4462,8 +4462,8 @@ export function AdAssetNode({ id, data, selected }: NodeProps<AdAssetNodeType>) 
                 onClick={closePromptEditor}
               />
               <div
-                className="relative z-[25] flex max-h-[min(78vh,92%)] flex-col rounded-xl border border-violet-400/40 bg-[#15151a]/96 p-3 shadow-[0_18px_48px_rgba(0,0,0,0.55)] backdrop-blur-md"
-                style={{ width: promptEditorWidthPx, maxWidth: "min(920px, calc(100vw - 24px))" }}
+                className="relative z-[25] flex w-full max-h-[min(82vh,92%)] flex-col rounded-xl border border-violet-400/40 bg-[#15151a]/96 p-3 shadow-[0_18px_48px_rgba(0,0,0,0.55)] backdrop-blur-md"
+                style={{ width: promptEditorWidthPx, maxWidth: "calc(100vw - 24px)" }}
                 onPointerDown={(e) => e.stopPropagation()}
               >
                 <div
