@@ -101,6 +101,55 @@ export type TTAd = {
   adUrl?: string;
 };
 
+function numOrUndefined(v: unknown): number | undefined {
+  const n = typeof v === "number" ? v : typeof v === "string" ? Number(v) : NaN;
+  return Number.isFinite(n) ? n : undefined;
+}
+
+/**
+ * TrendTrack sometimes returns snake_case fields (e.g. `thumbnail_url`) depending on the endpoint
+ * and internal caching layer. Normalize to the camelCase `TTAd` shape used across the UI.
+ */
+function normalizeTTAd(raw: unknown): TTAd {
+  const o = (raw && typeof raw === "object" ? (raw as Record<string, unknown>) : {}) as Record<string, unknown>;
+  const id = String(o.id ?? o.ad_id ?? o.adId ?? o.creative_id ?? o.creativeId ?? "").trim();
+  const headline = (o.headline ?? o.ad_headline ?? o.adHeadline) as unknown;
+  const title = (o.title ?? o.ad_title ?? o.adTitle) as unknown;
+  const body = (o.body ?? o.primary_text ?? o.primaryText ?? o.ad_body ?? o.adBody) as unknown;
+  const text = (o.text ?? o.description ?? o.ad_text ?? o.adText) as unknown;
+
+  const thumbnailUrl =
+    (o.thumbnailUrl ?? o.thumbnail_url ?? o.thumbnail ?? o.thumb_url ?? o.thumbUrl) as unknown;
+  const previewUrl =
+    (o.previewUrl ?? o.preview_url ?? o.preview ?? o.creative_preview_url ?? o.creativePreviewUrl) as unknown;
+  const imageUrl =
+    (o.imageUrl ?? o.image_url ?? o.image ?? o.creative_image_url ?? o.creativeImageUrl) as unknown;
+
+  const platform = (o.platform ?? o.publisher_platform ?? o.publisherPlatform) as unknown;
+  const reach = numOrUndefined(o.reach ?? o.estimated_reach ?? o.estimatedReach);
+  const impressions = numOrUndefined(o.impressions ?? o.estimated_impressions ?? o.estimatedImpressions);
+  const startDate = (o.startDate ?? o.start_date ?? o.start ?? o.start_time ?? o.startTime) as unknown;
+  const firstSeen = (o.firstSeen ?? o.first_seen ?? o.first_seen_at ?? o.firstSeenAt) as unknown;
+  const adUrl = (o.adUrl ?? o.ad_url ?? o.url ?? o.share_url ?? o.shareUrl) as unknown;
+
+  return {
+    id: id || "unknown",
+    ...(typeof headline === "string" && headline.trim() ? { headline: headline.trim() } : {}),
+    ...(typeof title === "string" && title.trim() ? { title: title.trim() } : {}),
+    ...(typeof body === "string" && body.trim() ? { body: body.trim() } : {}),
+    ...(typeof text === "string" && text.trim() ? { text: text.trim() } : {}),
+    ...(typeof thumbnailUrl === "string" && thumbnailUrl.trim() ? { thumbnailUrl: thumbnailUrl.trim() } : {}),
+    ...(typeof previewUrl === "string" && previewUrl.trim() ? { previewUrl: previewUrl.trim() } : {}),
+    ...(typeof imageUrl === "string" && imageUrl.trim() ? { imageUrl: imageUrl.trim() } : {}),
+    ...(typeof platform === "string" && platform.trim() ? { platform: platform.trim() } : {}),
+    ...(reach !== undefined ? { reach } : {}),
+    ...(impressions !== undefined ? { impressions } : {}),
+    ...(typeof startDate === "string" && startDate.trim() ? { startDate: startDate.trim() } : {}),
+    ...(typeof firstSeen === "string" && firstSeen.trim() ? { firstSeen: firstSeen.trim() } : {}),
+    ...(typeof adUrl === "string" && adUrl.trim() ? { adUrl: adUrl.trim() } : {}),
+  };
+}
+
 export type TTLookupResult = {
   id: string;
   name: string;
@@ -123,7 +172,7 @@ export async function ttGetTopAds(id: string, limit = 10): Promise<TTAd[]> {
   const res = await ttFetch<{ data?: TTAd[] }>(
     `/v1/brandtrackers/${encodeURIComponent(id)}/top-ads?limit=${limit}`
   );
-  return res.data ?? [];
+  return (res.data ?? []).map((ad) => normalizeTTAd(ad));
 }
 
 export async function ttLookup(q: string): Promise<TTLookupResult[]> {
@@ -138,7 +187,7 @@ export async function ttQueryAds(body: Record<string, unknown>): Promise<TTAd[]>
     method: "POST",
     body: JSON.stringify(body),
   });
-  return res.data ?? [];
+  return (res.data ?? []).map((ad) => normalizeTTAd(ad));
 }
 
 export type TTUsage = {
