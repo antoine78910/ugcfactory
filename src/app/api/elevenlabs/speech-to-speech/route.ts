@@ -10,6 +10,9 @@ import { createSupabaseServiceClient } from "@/lib/supabase/admin";
 import { requireSupabaseUser } from "@/lib/supabase/requireUser";
 import { mergeVideoWithAudioServer } from "@/lib/mergeVideoAudio";
 import { VOICE_CHANGE_CREDITS_FLAT } from "@/lib/pricing";
+import { resolveAuthUserEmail } from "@/lib/sessionUserEmail";
+import { shouldChargePlatformCredits, assertSufficientCreditsResponse } from "@/lib/credits/metering";
+import { getUserPlan } from "@/lib/supabase/getUserPlan";
 
 const UGC_UPLOADS_BUCKET = "ugc-uploads";
 
@@ -95,6 +98,20 @@ export async function POST(req: Request) {
     return NextResponse.json({ error: "Supabase service role key missing on server." }, { status: 500 });
   }
 
+  const usesPersonalApi = Boolean(personalElevenLabsApiKey);
+  const email = await resolveAuthUserEmail(user, admin);
+  const charges = shouldChargePlatformCredits({ usesPersonalApi, email });
+  if (charges) {
+    const dbPlan = await getUserPlan(user.id);
+    const gate = await assertSufficientCreditsResponse({
+      admin,
+      userId: user.id,
+      planId: dbPlan ?? "free",
+      costDisplayCredits: VOICE_CHANGE_CREDITS_FLAT,
+    });
+    if (gate) return gate;
+  }
+
   // Download the file from Supabase Storage using the admin client (works for private buckets)
   let inputBuffer: Buffer;
   let inputContentType: string;
@@ -132,8 +149,8 @@ export async function POST(req: Request) {
     : undefined;
 
   const label = voiceName ? `Voice change (${voiceName})` : "Voice change";
-  const usesPersonalApi = Boolean(personalElevenLabsApiKey);
   const creditsCharged = usesPersonalApi ? 0 : VOICE_CHANGE_CREDITS_FLAT;
+
   const { data: inserted, error: insertError } = await supabase
     .from("studio_generations")
     .insert({
