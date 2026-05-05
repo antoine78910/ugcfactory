@@ -85,23 +85,37 @@ export function TrackerList({
   >([]);
 
   useEffect(() => {
+    let cancelled = false;
     fetch("/api/intelligence/trackers")
       .then((r) => r.json())
       .then((data) => {
+        if (cancelled) return;
         if (Array.isArray(data)) setTrackers(data as TTTracker[]);
         else setError(data.error ?? "Failed to load trackers");
       })
-      .catch(() => setError("Network error"))
-      .finally(() => setLoading(false));
+      .catch(() => {
+        if (!cancelled) setError("Network error");
+      })
+      .finally(() => {
+        if (!cancelled) setLoading(false);
+      });
+    return () => {
+      cancelled = true;
+    };
   }, []);
 
   useEffect(() => {
+    let cancelled = false;
     fetch("/api/intelligence/pinned")
       .then((r) => r.json())
       .then((data) => {
+        if (cancelled) return;
         if (Array.isArray(data)) setPinned(data);
       })
       .catch(() => {});
+    return () => {
+      cancelled = true;
+    };
   }, []);
 
   if (loading) return <Skeleton />;

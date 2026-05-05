@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { RefreshCw } from "lucide-react";
 import type { TTOverview, TTAd } from "@/lib/trendtrack";
 import type { Angle } from "@/app/api/intelligence/trackers/[id]/angles/route";
@@ -106,6 +106,11 @@ export function TrackerDetail({
 }) {
   const isOwnTracker = tracker.sourceType === "tracker";
 
+  const activeIdRef = useRef(tracker.id);
+  useEffect(() => {
+    activeIdRef.current = tracker.id;
+  }, [tracker.id]);
+
   // Block 1 — Overview
   const [overview, setOverview] = useState<TTOverview | null>(null);
   const [overviewLoading, setOverviewLoading] = useState(false);
@@ -121,6 +126,7 @@ export function TrackerDetail({
           `/api/intelligence/trackers/${tracker.id}/overview${force ? "?force=true" : ""}`
         );
         const parsed = await parseIntelResponse<TTOverview>(res);
+        if (activeIdRef.current !== tracker.id) return;
         if (!parsed.ok) {
           setOverviewError(intelErrorMessage(parsed.error));
           return;
@@ -160,6 +166,7 @@ export function TrackerDetail({
               body: JSON.stringify({ advertiser: tracker.id }),
             });
         const parsed = await parseIntelResponse<TTAd[]>(res);
+        if (activeIdRef.current !== tracker.id) return;
         if (!parsed.ok) {
           setAdsError(intelErrorMessage(parsed.error));
           return;
@@ -189,6 +196,7 @@ export function TrackerDetail({
           `/api/intelligence/trackers/${tracker.id}/angles${force ? "?force=true" : ""}`
         );
         const parsed = await parseIntelResponse<Angle[]>(res);
+        if (activeIdRef.current !== tracker.id) return;
         if (!parsed.ok) {
           setAnglesError(intelErrorMessage(parsed.error));
           return;
@@ -223,10 +231,12 @@ export function TrackerDetail({
         );
         if (res.status === 202) {
           const body = (await res.json()) as { needsAngles: boolean; message?: string };
+          if (activeIdRef.current !== tracker.id) return;
           setOppsNeedsAngles(true);
           setOppsMessage(body.message);
         } else {
           const parsed = await parseIntelResponse<Opportunity[]>(res);
+          if (activeIdRef.current !== tracker.id) return;
           if (!parsed.ok) {
             setOppsError(intelErrorMessage(parsed.error));
           } else {
@@ -286,7 +296,7 @@ export function TrackerDetail({
         overview={overview}
         isOwnTracker={isOwnTracker}
         lastRefreshIso={lastRefreshIso}
-        domain={(tracker as SelectedTracker & { domain?: string }).domain}
+        domain={tracker.domain}
         onRefreshAll={refreshAll}
         refreshing={anyLoading}
       />

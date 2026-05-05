@@ -51,19 +51,8 @@ export function AdCard({ ad, onView }: { ad: TTAd; onView?: () => void }) {
         {ad.headline ?? ad.title ?? ad.body ?? "—"}
       </p>
 
-      <div className="flex items-center justify-between text-[11px] text-white/45">
+      <div className="text-[11px] text-white/45">
         <span>{date ?? ""}</span>
-        {ad.adUrl && (
-          <a
-            href={ad.adUrl}
-            target="_blank"
-            rel="noopener noreferrer"
-            onClick={(e) => e.stopPropagation()}
-            className="text-violet-400 hover:text-violet-300 hover:underline"
-          >
-            Original →
-          </a>
-        )}
       </div>
     </Wrapper>
   );

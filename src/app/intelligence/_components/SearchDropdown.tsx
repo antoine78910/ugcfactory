@@ -25,7 +25,13 @@ export function SearchDropdown({
   useEffect(() => {
     function onDocClick(e: MouseEvent) {
       if (!ref.current) return;
-      if (!ref.current.contains(e.target as Node)) onClose();
+      const target = e.target as Node;
+      if (ref.current.contains(target)) return;
+      // Walk up: if the click landed on the sibling search input/button (parent's children),
+      // skip closing — the parent owns its own focus/keyboard cycle.
+      const parent = ref.current.parentElement;
+      if (parent && parent.contains(target)) return;
+      onClose();
     }
     document.addEventListener("mousedown", onDocClick);
     return () => document.removeEventListener("mousedown", onDocClick);
