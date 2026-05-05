@@ -18,6 +18,7 @@ import {
   Menu,
   Mic,
   Sparkles,
+  TrendingUp,
   UserRound,
   Video,
   Joystick,
@@ -104,6 +105,14 @@ type CreateNavEntry =
 
 const CREATE_NAV: CreateNavEntry[] = [
   { kind: "route", id: "link_to_ad", label: "Link to Ad", icon: Link2 },
+  {
+    kind: "custom-link",
+    id: "intelligence",
+    href: "/intelligence",
+    label: "Intelligence",
+    icon: TrendingUp,
+    soon: true,
+  },
   {
     kind: "custom-link",
     id: "ads_studio",

@@ -42,6 +42,8 @@ function isExcludedFromStudioRewrite(pathname: string): boolean {
     "setup",
     /** Clipping studio, intentionally hidden / unlisted, must stay outside the studio shell. */
     "clipping",
+    /** Intelligence dashboard — standalone page, must not rewrite to /app/intelligence or catch-all shows Link to Ad. */
+    "intelligence",
   ]).has(first);
 }
 
