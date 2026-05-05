@@ -13,6 +13,7 @@ import { parsePromptEnhanceSurface, promptEnhanceSystem } from "@/lib/promptEnha
 import { PROMPT_ENHANCE_CREDITS } from "@/lib/pricing";
 import { resolveAuthUserEmail } from "@/lib/sessionUserEmail";
 import { createSupabaseServiceClient } from "@/lib/supabase/admin";
+import { getUserPlan } from "@/lib/supabase/getUserPlan";
 import { requireSupabaseUser } from "@/lib/supabase/requireUser";
 
 const MAX_PROMPT = 12_000;
@@ -40,7 +41,12 @@ export async function POST(req: Request) {
     return NextResponse.json({ error: "Prompt too long." }, { status: 400 });
   }
 
-  const charges = shouldChargePlatformCredits({ usesPersonalApi: false, email });
+  const planId = admin ? await getUserPlan(auth.user.id) : "free";
+  // Restore prior product rule: only free users actually debit the ledger here.
+  // Paid / complimentary creators are not charged for prompt enhance to avoid
+  // trip-wiring the new pre-flight gate from a depleted comp allowance.
+  const charges =
+    shouldChargePlatformCredits({ usesPersonalApi: false, email }) && planId === "free";
 
   if (!admin && charges) {
     return NextResponse.json({ error: "Credits unavailable." }, { status: 503 });

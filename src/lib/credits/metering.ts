@@ -22,6 +22,13 @@ export function shouldChargePlatformCredits(args: {
  * Pre-flight balance gate. Returns a 402 NextResponse when the user does not
  * have enough credits to cover `costDisplayCredits`; returns `null` otherwise.
  * Caller should `if (gate) return gate;` before any external provider call.
+ *
+ * Product rule: only free/trial users are gated by the platform ledger.
+ * Paid plans (Stripe + complimentary "content creator" comps) ship with their
+ * own monthly subscription allowance and must NOT be blocked here, otherwise
+ * the new gate would lock out creators that the previous "free-only debit"
+ * rule never debited in the first place. The ledger row stays informational
+ * for /admin analytics via {@link shouldChargePlatformCredits}.
  */
 export async function assertSufficientCreditsResponse(args: {
   admin: SupabaseClient;
@@ -30,6 +37,7 @@ export async function assertSufficientCreditsResponse(args: {
   costDisplayCredits: number;
 }): Promise<NextResponse | null> {
   if (args.costDisplayCredits <= 0) return null;
+  if (args.planId && args.planId !== "free") return null;
   const { balance } = await getUserCreditBalance(args.admin, args.userId);
   if (balance >= args.costDisplayCredits) return null;
   return NextResponse.json(
