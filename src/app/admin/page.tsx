@@ -164,6 +164,9 @@ type Stats = {
   totalCreditsSpent: number;
   statusBreakdown: { ready: number; failed: number; processing: number };
   kindBreakdown: Record<string, number>;
+  creditsSpent30d?: number;
+  topUsersBySpend?: Array<{ user_id: string; email: string; total: number }>;
+  failureRatePct?: number;
 };
 
 type GenUserSummary = {
@@ -880,6 +883,41 @@ export default function AdminPage() {
             <StatCard label="Total Users" value={stats.totalUsers} icon={Users} accent="bg-blue-500/20 text-blue-300" />
             <StatCard label="Credits Spent" value={stats.totalCreditsSpent} icon={Zap} accent="bg-amber-500/20 text-amber-300" />
             <StatCard label="Link to Ad Runs" value={stats.totalRuns} icon={ExternalLink} accent="bg-emerald-500/20 text-emerald-300" />
+          </div>
+        )}
+        {tab === "generations" && stats && stats.creditsSpent30d !== undefined && (
+          <div className="mt-3 grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+            <StatCard
+              label="Credits spent (30d)"
+              value={formatCreditBalanceSnap(stats.creditsSpent30d ?? 0)}
+              icon={Zap}
+              accent="bg-amber-500/20 text-amber-300"
+            />
+            <StatCard
+              label="Failure rate (30d)"
+              value={`${stats.failureRatePct ?? 0}%`}
+              icon={Activity}
+              accent={(stats.failureRatePct ?? 0) > 5 ? "bg-red-500/20 text-red-300" : "bg-emerald-500/20 text-emerald-300"}
+            />
+            <div className="rounded-xl border border-white/10 bg-white/[0.03] p-4">
+              <p className="text-[11px] uppercase tracking-wide text-white/40 mb-2">Top consumers (30d)</p>
+              <div className="flex flex-wrap gap-1.5">
+                {(stats.topUsersBySpend ?? []).map((u) => (
+                  <button
+                    key={u.user_id}
+                    type="button"
+                    onClick={() => { setGenEmail(u.email); setGenEmailInput(u.email); setGenPage(1); }}
+                    className="rounded-full border border-violet-500/30 bg-violet-500/10 px-2.5 py-0.5 text-[11px] text-violet-200 hover:border-violet-400 hover:bg-violet-500/20"
+                    title={`${u.email} → ${u.total} credits`}
+                  >
+                    {u.email.split("@")[0]} · {u.total}
+                  </button>
+                ))}
+                {(!stats.topUsersBySpend || stats.topUsersBySpend.length === 0) && (
+                  <span className="text-[11px] text-white/30">No spend yet</span>
+                )}
+              </div>
+            </div>
           </div>
         )}
 

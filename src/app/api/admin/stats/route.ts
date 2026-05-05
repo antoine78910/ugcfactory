@@ -65,6 +65,44 @@ export async function GET() {
     }
   }
 
+  const thirtyDaysAgo = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString();
+
+  const { data: last30 } = await admin
+    .from("studio_generations")
+    .select("credits_charged,user_id,status")
+    .gte("created_at", thirtyDaysAgo);
+
+  let creditsSpent30d = 0;
+  const perUser = new Map<string, number>();
+  let total30 = 0;
+  let failed30 = 0;
+  for (const r of last30 ?? []) {
+    const ticks = (r as { credits_charged: number }).credits_charged ?? 0;
+    const display = ledgerTicksToDisplayCredits(ticks);
+    creditsSpent30d += display;
+    const uid = (r as { user_id: string }).user_id;
+    perUser.set(uid, (perUser.get(uid) ?? 0) + display);
+    total30 += 1;
+    if ((r as { status: string }).status === "failed") failed30 += 1;
+  }
+
+  const failureRatePct = total30 > 0 ? Math.round((failed30 / total30) * 1000) / 10 : 0;
+
+  const topUserIds = [...perUser.entries()].sort((a, b) => b[1] - a[1]).slice(0, 5);
+  const topUsersBySpend: Array<{ user_id: string; email: string; total: number }> = [];
+  if (topUserIds.length > 0) {
+    const { data: users } = await admin.auth.admin.listUsers({ page: 1, perPage: 1000 });
+    const emailById = new Map<string, string>();
+    for (const u of users?.users ?? []) emailById.set(u.id, u.email ?? u.id);
+    for (const [uid, totalSpent] of topUserIds) {
+      topUsersBySpend.push({
+        user_id: uid,
+        email: emailById.get(uid) ?? uid.slice(0, 8),
+        total: Math.round(totalSpent * 10) / 10,
+      });
+    }
+  }
+
   return NextResponse.json({
     totalGenerations,
     totalRuns,
@@ -72,5 +110,8 @@ export async function GET() {
     totalCreditsSpent,
     statusBreakdown: { ready: readyCount, failed: failedCount, processing: processingCount },
     kindBreakdown,
+    creditsSpent30d,
+    topUsersBySpend,
+    failureRatePct,
   });
 }
