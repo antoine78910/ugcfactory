@@ -68,7 +68,10 @@ import {
   isPersonalApiActive,
   isPlatformCreditBypassActive,
 } from "@/app/_components/CreditsPlanContext";
-import { mergeStudioHistoryWithServer } from "@/lib/mergeStudioHistoryWithLocal";
+import {
+  mergeStudioHistoryFirstPageWithLocal,
+  appendStudioHistoryNextPage,
+} from "@/lib/mergeStudioHistoryWithLocal";
 import { isKieServableReferenceImageUrl } from "@/lib/kieSoraReferenceImage";
 import { refundPlatformCredits } from "@/lib/refundPlatformCredits";
 import { calculateVideoCredits } from "@/lib/linkToAd/generationCredits";
@@ -125,6 +128,7 @@ import {
 const LS_STUDIO_VIDEO_HISTORY = "ugc_studio_video_history_v1";
 const LS_STUDIO_VIDEO_ELEMENTS_V1 = "ugc_studio_video_elements_v1";
 const LS_STUDIO_VIDEO_CREATE_DRAFT_V1 = "ugc_studio_video_create_draft_v1";
+const VIDEO_PAGE_LIMIT = 60;
 
 /** Seedance 2 Pro: reference videos must be MP4 or MOV (not WebM). */
 const SEEDANCE_PRO_OMNI_VIDEO_ACCEPT = "video/mp4,video/quicktime,.mp4,.mov";
@@ -871,6 +875,8 @@ export default function StudioVideoPanel({
 }) {
   const { planId, isTrial, current: creditsBalance, spendCredits, grantCredits } = useCreditsPlan();
   const [serverHistory, setServerHistory] = useState<boolean | null>(null);
+  const [hasMoreHistory, setHasMoreHistory] = useState(false);
+  const [isLoadingMoreHistory, setIsLoadingMoreHistory] = useState(false);
   const creditsRef = useRef(creditsBalance);
   creditsRef.current = creditsBalance;
 
@@ -1088,12 +1094,6 @@ export default function StudioVideoPanel({
     aspect,
   ]);
 
-  const mergeServerWithLocal = useCallback(
-    (serverItems: StudioHistoryItem[], prev: StudioHistoryItem[]) =>
-      mergeStudioHistoryWithServer(serverItems, prev),
-    [],
-  );
-
   const grantCreditsRef = useRef(grantCredits);
   grantCreditsRef.current = grantCredits;
 
@@ -1136,19 +1136,17 @@ export default function StudioVideoPanel({
   useEffect(() => {
     void (async () => {
       const res = await fetch(
-        `/api/studio/generations?kind=${encodeURIComponent(STUDIO_VIDEO_LIBRARY_KIND_PARAM)}`,
+        `/api/studio/generations?kind=${encodeURIComponent(STUDIO_VIDEO_LIBRARY_KIND_PARAM)}&limit=${VIDEO_PAGE_LIMIT}`,
         { cache: "no-store" },
       );
       if (res.status === 401) {
         setServerHistory(false);
-        // Do NOT wipe historyItems, keep the localStorage seed so the user's
-        // previously generated videos remain visible until they re-authenticate.
+        setHasMoreHistory(false);
         return;
       }
       if (!res.ok) {
         setServerHistory(false);
-        // On server error, merge localStorage into current state (already seeded on mount)
-        // rather than overwriting, to preserve optimistic items from this session.
+        setHasMoreHistory(false);
         setHistoryItems((prev) => {
           const local = readStudioHistoryLocal(LS_STUDIO_VIDEO_HISTORY);
           if (!local.length) return prev;
@@ -1160,10 +1158,15 @@ export default function StudioVideoPanel({
         });
         return;
       }
-      const json = (await res.json()) as { data?: StudioHistoryItem[]; refundHints?: { jobId: string; credits: number }[] };
+      const json = (await res.json()) as {
+        data?: StudioHistoryItem[];
+        refundHints?: { jobId: string; credits: number }[];
+        hasMore?: boolean;
+      };
       setServerHistory(true);
       const serverItems = json.data ?? [];
-      setHistoryItems((prev) => mergeServerWithLocal(serverItems, prev));
+      setHistoryItems((prev) => mergeStudioHistoryFirstPageWithLocal(serverItems, prev));
+      setHasMoreHistory(Boolean(json.hasMore));
       const hints = json.refundHints ?? [];
       if (hints.length) {
         for (const h of hints) {
@@ -1172,10 +1175,13 @@ export default function StudioVideoPanel({
         toast.message("Credits refunded", { description: "A studio generation failed after charge." });
       }
     })();
-  }, [mergeServerWithLocal]);
+  }, []);
+
+  const hasInFlightVideo = historyItems.some((i) => i.status === "generating");
 
   useEffect(() => {
     if (serverHistory !== true) return;
+    if (!hasInFlightVideo) return;
 
     const tick = () => {
       void (async () => {
@@ -1189,9 +1195,12 @@ export default function StudioVideoPanel({
           }),
         });
         if (!res.ok) return;
-        const json = (await res.json()) as { data?: StudioHistoryItem[]; refundHints?: { jobId: string; credits: number }[] };
+        const json = (await res.json()) as {
+          data?: StudioHistoryItem[];
+          refundHints?: { jobId: string; credits: number }[];
+        };
         if (Array.isArray(json.data)) {
-          setHistoryItems((prev) => mergeServerWithLocal(json.data!, prev));
+          setHistoryItems((prev) => mergeStudioHistoryFirstPageWithLocal(json.data!, prev));
         }
         const hints = json.refundHints ?? [];
         if (hints.length) {
@@ -1206,12 +1215,46 @@ export default function StudioVideoPanel({
     tick();
     const id = window.setInterval(tick, 4000);
     return () => window.clearInterval(id);
-  }, [serverHistory, mergeServerWithLocal]);
+  }, [serverHistory, hasInFlightVideo]);
 
   useEffect(() => {
     if (serverHistory === null) return;
     writeStudioHistoryLocal(LS_STUDIO_VIDEO_HISTORY, historyItems);
   }, [serverHistory, historyItems]);
+
+  const onLoadMoreHistory = useCallback(async () => {
+    if (isLoadingMoreHistory || !hasMoreHistory) return;
+    setIsLoadingMoreHistory(true);
+    try {
+      const oldest = historyItems.reduce<number | null>(
+        (acc, i) => (acc === null || i.createdAt < acc ? i.createdAt : acc),
+        null,
+      );
+      if (oldest === null) {
+        setHasMoreHistory(false);
+        return;
+      }
+      const before = new Date(oldest).toISOString();
+      const res = await fetch(
+        `/api/studio/generations?kind=${encodeURIComponent(STUDIO_VIDEO_LIBRARY_KIND_PARAM)}&limit=${VIDEO_PAGE_LIMIT}&before=${encodeURIComponent(before)}`,
+        { cache: "no-store" },
+      );
+      if (!res.ok) return;
+      const json = (await res.json()) as {
+        data?: StudioHistoryItem[];
+        hasMore?: boolean;
+      };
+      const next = json.data ?? [];
+      if (next.length === 0) {
+        setHasMoreHistory(false);
+        return;
+      }
+      setHistoryItems((prev) => appendStudioHistoryNextPage(prev, next));
+      setHasMoreHistory(Boolean(json.hasMore));
+    } finally {
+      setIsLoadingMoreHistory(false);
+    }
+  }, [historyItems, hasMoreHistory, isLoadingMoreHistory]);
 
   type VideoBilling =
     | { open: false }
@@ -3988,6 +4031,9 @@ export default function StudioVideoPanel({
             mediaLabel="Video"
             onItemDeleted={(id) => setHistoryItems((prev) => prev.filter((i) => i.id !== id))}
             onChangeVoice={onChangeVoice}
+            hasMore={hasMoreHistory}
+            isLoadingMore={isLoadingMoreHistory}
+            onLoadMore={onLoadMoreHistory}
           />
         }
         empty={null}
