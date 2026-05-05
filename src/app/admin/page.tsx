@@ -12,7 +12,9 @@ import {
   Gift,
   Image as ImageIcon,
   LayoutTemplate,
+  Link as LinkIcon,
   Loader2,
+  Music,
   Search,
   Trash2,
   Users,
@@ -21,6 +23,7 @@ import {
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { ledgerTicksToDisplayCredits } from "@/lib/creditLedgerTicks";
+import { detectInputMediaType, type InputMediaType } from "@/lib/admin/detectInputMediaType";
 
 type Tab = "generations" | "runs" | "credits" | "onboarding" | "feedback" | "templates";
 
@@ -240,6 +243,38 @@ function durationForRow(row: GenerationRow): string {
   const end = Date.parse(endIso);
   if (!Number.isFinite(end)) return "-";
   return formatDurationMs(end - start);
+}
+
+function inputIcon(t: InputMediaType) {
+  if (t === "image") return <ImageIcon className="h-3 w-3" />;
+  if (t === "video") return <Video className="h-3 w-3" />;
+  if (t === "audio") return <Music className="h-3 w-3" />;
+  return <LinkIcon className="h-3 w-3" />;
+}
+
+function InputsChips({ urls }: { urls: string[] | null | undefined }) {
+  if (!urls || urls.length === 0) return <span className="text-white/25">-</span>;
+  const visible = urls.slice(0, 3);
+  const extra = urls.length - visible.length;
+  return (
+    <div className="flex items-center gap-1">
+      {visible.map((u, i) => {
+        const t = detectInputMediaType(u);
+        return (
+          <span
+            key={i}
+            className="inline-flex h-5 w-5 items-center justify-center rounded border border-white/10 bg-white/5 text-violet-300"
+            title={u}
+          >
+            {inputIcon(t)}
+          </span>
+        );
+      })}
+      {extra > 0 && (
+        <span className="text-[10px] tabular-nums text-white/40">+{extra}</span>
+      )}
+    </div>
+  );
 }
 
 function MediaPreview({ urls }: { urls: string[] | null }) {
@@ -1758,7 +1793,7 @@ export default function AdminPage() {
                 <tr className="border-b border-white/10 text-[10px] uppercase tracking-wide text-white/40">
                   <th className="px-3 py-2.5 font-semibold">User</th>
                   <th className="px-3 py-2.5 font-semibold">Type</th>
-                  <th className="px-3 py-2.5 font-semibold">Link to Ad URL</th>
+                  <th className="px-3 py-2.5 font-semibold">Inputs</th>
                   <th className="px-3 py-2.5 font-semibold">Status</th>
                   <th className="px-3 py-2.5 font-semibold">Charged</th>
                   <th className="px-3 py-2.5 font-semibold">Balance after</th>
@@ -1791,21 +1826,8 @@ export default function AdminPage() {
                           {kindLabel(row.kind)}
                         </span>
                       </td>
-                      <td className="max-w-[160px] truncate px-3 py-2.5">
-                        {row.input_urls?.[0]?.trim() ? (
-                          <a
-                            href={row.input_urls[0].trim()}
-                            target="_blank"
-                            rel="noreferrer"
-                            className="text-violet-300 underline underline-offset-2 hover:text-violet-200"
-                            title={row.input_urls[0].trim()}
-                            onClick={(e) => e.stopPropagation()}
-                          >
-                            {productLinkLabel(row.input_urls[0])}
-                          </a>
-                        ) : (
-                          <span className="text-white/25">-</span>
-                        )}
+                      <td className="px-3 py-2.5">
+                        <InputsChips urls={row.input_urls} />
                       </td>
                       <td className="px-3 py-2.5">
                         <span className={cn("rounded-full border px-2 py-0.5 text-[10px] font-semibold", statusColor(row.status))}>
@@ -1910,6 +1932,54 @@ export default function AdminPage() {
                                 )}
                               </div>
                             </div>
+                            {row.input_urls && row.input_urls.length > 0 && (
+                              <div className="sm:col-span-2">
+                                <p className="text-[10px] font-semibold uppercase tracking-wide text-white/40">Input media</p>
+                                <div className="mt-1 flex flex-wrap gap-2">
+                                  {row.input_urls.map((url, i) => {
+                                    const t = detectInputMediaType(url);
+                                    if (t === "audio") {
+                                      return (
+                                        <div key={i} className="flex items-center gap-2 rounded-lg border border-white/10 bg-black px-2 py-1">
+                                          <Music className="h-3 w-3 text-violet-300" />
+                                          <audio src={url} controls className="h-7 w-48" preload="metadata" />
+                                        </div>
+                                      );
+                                    }
+                                    if (t === "video") {
+                                      return (
+                                        <a key={i} href={url} target="_blank" rel="noreferrer" className="group relative h-20 w-20 overflow-hidden rounded-lg border border-white/10 bg-black">
+                                          <video src={url} className="h-full w-full object-cover" muted preload="metadata" />
+                                          <span className="absolute inset-0 flex items-center justify-center bg-black/40 opacity-0 transition group-hover:opacity-100">
+                                            <ExternalLink className="h-4 w-4 text-white" />
+                                          </span>
+                                        </a>
+                                      );
+                                    }
+                                    if (t === "image") {
+                                      return (
+                                        <a key={i} href={url} target="_blank" rel="noreferrer" className="group relative h-20 w-20 overflow-hidden rounded-lg border border-white/10 bg-black">
+                                          {/* eslint-disable-next-line @next/next/no-img-element */}
+                                          <img src={url} alt="" className="h-full w-full object-cover" />
+                                        </a>
+                                      );
+                                    }
+                                    return (
+                                      <a
+                                        key={i}
+                                        href={url}
+                                        target="_blank"
+                                        rel="noreferrer"
+                                        className="inline-flex items-center gap-1.5 rounded-lg border border-white/10 bg-white/5 px-3 py-1.5 text-xs text-violet-300 underline underline-offset-2 hover:text-violet-200"
+                                      >
+                                        <LinkIcon className="h-3 w-3" />
+                                        {productLinkLabel(url)}
+                                      </a>
+                                    );
+                                  })}
+                                </div>
+                              </div>
+                            )}
                             {row.result_urls && row.result_urls.length > 0 && (
                               <div className="sm:col-span-2">
                                 <p className="text-[10px] font-semibold uppercase tracking-wide text-white/40">Result URLs</p>
