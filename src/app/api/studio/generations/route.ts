@@ -34,43 +34,33 @@ export async function GET(req: Request) {
   const kindRaw = (searchParams.get("kind") ?? KIND_DEFAULT).trim() || KIND_DEFAULT;
 
   try {
-    await markStaleInProgressStudioGenerationsFailedForUser(supabase, user.id);
-
-    let rows: StudioGenerationRow[];
-    if (all) {
-      rows = await fetchStudioGenerationRows(supabase, user.id, { mode: "all" });
-    } else {
+    const fetchOptions: { mode: "all" } | { kinds: string[] } = (() => {
+      if (all) return { mode: "all" } as const;
       const parsed = parseKindParam(kindRaw);
-      if ("mode" in parsed) {
-        rows = await fetchStudioGenerationRows(supabase, user.id, { mode: "all" });
-      } else {
-        rows = await fetchStudioGenerationRows(supabase, user.id, { kinds: parsed.kinds });
-      }
-    }
+      if ("mode" in parsed) return { mode: "all" } as const;
+      return { kinds: parsed.kinds };
+    })();
 
+    const kindsToSweep: string[] =
+      "mode" in fetchOptions ? [...STUDIO_LIBRARY_KINDS] : fetchOptions.kinds;
+
+    const [, rowsRaw, refundHintsChunks] = await Promise.all([
+      markStaleInProgressStudioGenerationsFailedForUser(supabase, user.id),
+      fetchStudioGenerationRows(supabase, user.id, fetchOptions),
+      Promise.all(
+        kindsToSweep.map((k) => sweepStudioRefundHints(supabase, user.id, k)),
+      ),
+    ]);
+
+    let rows = rowsRaw;
     if (!all) {
       const parsedForFilter = parseKindParam(kindRaw);
       if (!("mode" in parsedForFilter)) {
         rows = filterLegacyLinkToAdFromTabRows(rows, parsedForFilter.kinds);
       }
     }
-    let refundHints: { jobId: string; credits: number }[] = [];
-    if (all) {
-      for (const k of STUDIO_LIBRARY_KINDS) {
-        refundHints = refundHints.concat(await sweepStudioRefundHints(supabase, user.id, k));
-      }
-    } else {
-      const parsed = parseKindParam(kindRaw);
-      if ("mode" in parsed) {
-        for (const k of STUDIO_LIBRARY_KINDS) {
-          refundHints = refundHints.concat(await sweepStudioRefundHints(supabase, user.id, k));
-        }
-      } else {
-        for (const k of parsed.kinds) {
-          refundHints = refundHints.concat(await sweepStudioRefundHints(supabase, user.id, k));
-        }
-      }
-    }
+
+    const refundHints = refundHintsChunks.flat();
     const items = rows.map(studioGenerationRowToHistoryItem);
 
     return NextResponse.json({ data: items, refundHints });

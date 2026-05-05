@@ -82,8 +82,6 @@ export async function POST(req: Request) {
   const piapiApiKey = (body.piapiApiKey ?? "").trim() || undefined;
 
   try {
-    await markStaleInProgressStudioGenerationsFailedForUser(supabase, user.id);
-
     const resolvedKinds = resolvePollKinds(kind);
 
     let procQuery = supabase
@@ -112,7 +110,11 @@ export async function POST(req: Request) {
 
     procQuery = procQuery.order("created_at", { ascending: true }).limit(MAX_ROWS_TO_POLL_PER_REQUEST);
 
-    const { data: processing, error: procErr } = await procQuery;
+    const [, procResult] = await Promise.all([
+      markStaleInProgressStudioGenerationsFailedForUser(supabase, user.id),
+      procQuery,
+    ]);
+    const { data: processing, error: procErr } = procResult;
 
     if (procErr) throw procErr;
 
