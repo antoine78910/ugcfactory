@@ -108,6 +108,7 @@ import {
   studioVideoSupportsMultiShot,
   studioVideoSupportsNativeAudio,
   studioVideoSupportsQualityPicker,
+  studioVideoSupportsSeedanceResolutionPicker,
   studioVideoUsesSeedanceCompactReferenceUploads,
   studioVideoUsesSeedanceProOmniMediaUploads,
   studioVideoSupportsReferenceElements,
@@ -378,7 +379,6 @@ const STUDIO_VIDEO_LIBRARY_KIND_PARAM = STUDIO_VIDEO_TAB_KINDS.join(",");
 const STUDIO_ELEMENT_PICKER_KIND_PARAM = `${STUDIO_VIDEO_LIBRARY_KIND_PARAM},studio_image,studio_upscale`;
 
 type VideoTab = "create" | "edit";
-type VideoPriority = "normal" | "vip";
 
 type VideoModelId =
   | "kling-3.0/video"
@@ -393,11 +393,6 @@ type VideoModelId =
   | "veo3";
 
 type VideoFamily = "kie" | "veo" | "sora";
-
-const SEEDANCE_STRICT_NO_FACE_MODELS: VideoModelId[] = [
-  "bytedance/seedance-2",
-  "bytedance/seedance-2-fast",
-];
 
 const MODEL_OPTIONS: { id: VideoModelId; label: string; family: VideoFamily }[] = [
   { id: "kling-3.0/video", label: "Kling 3.0", family: "kie" },
@@ -461,7 +456,6 @@ const VIDEO_MODEL_PICKER_ITEMS: StudioModelPickerItem[] = [
     id: "kling-3.0/video",
     label: "Kling 3.0",
     icon: "kling",
-    exclusive: true,
     hasAudio: true,
     resolution: "720p / 1080p",
     durationRange: studioVideoDurationRangeLabel("kling-3.0/video"),
@@ -499,20 +493,22 @@ const VIDEO_MODEL_PICKER_ITEMS: StudioModelPickerItem[] = [
   {
     id: "bytedance/seedance-2",
     label: "Seedance 2.0",
-    subtitle: "Kie Market · quality",
+    subtitle: "Higher quality",
     icon: "seedance",
+    newBadge: true,
     resolution: "480p / 720p / 1080p · 21:9–auto",
     durationRange: studioVideoDurationRangeLabel("bytedance/seedance-2"),
-    searchText: "seedance 2 kie bytedance",
+    searchText: "seedance 2 bytedance",
   },
   {
     id: "bytedance/seedance-2-fast",
     label: "Seedance 2.0 Fast",
-    subtitle: "Kie Market · faster",
+    subtitle: "Faster generation",
     icon: "seedance",
+    newBadge: true,
     resolution: "480p / 720p · 21:9–auto",
     durationRange: studioVideoDurationRangeLabel("bytedance/seedance-2-fast"),
-    searchText: "seedance 2 fast kie bytedance",
+    searchText: "seedance 2 fast bytedance",
   },
   {
     id: "veo3_lite",
@@ -959,11 +955,10 @@ export default function StudioVideoPanel({
   const FORCED_VIDEO_MODEL_ID: VideoModelId = "openai/sora-2";
   const [modelId, setModelId] = useState<VideoModelId>(VIDEO_MODEL_ACCESS_ORDER[0]!);
   const elementPickerSupportsVideoAudio = studioVideoIsSeedance2ProPickerId(modelId);
-  const [videoPriority, setVideoPriority] = useState<VideoPriority>("normal");
-  const [seedancePriorityInfoOpen, setSeedancePriorityInfoOpen] = useState(false);
   const [duration, setDuration] = useState("10");
   const [aspect, setAspect] = useState("9:16");
   const [klingMode, setKlingMode] = useState<"std" | "pro">("std");
+  const [seedanceResolution, setSeedanceResolution] = useState<"480p" | "720p" | "1080p">("720p");
   const [veoAspect, setVeoAspect] = useState<"16:9" | "9:16" | "Auto">("9:16");
   /** Start/end frame uploads only; does not block Generate. */
   const [frameUploadBusy, setFrameUploadBusy] = useState(false);
@@ -989,7 +984,7 @@ export default function StudioVideoPanel({
         klingShots?: unknown;
         soundOn?: unknown;
         modelId?: unknown;
-        videoPriority?: unknown;
+        seedanceResolution?: unknown;
         duration?: unknown;
         aspect?: unknown;
       };
@@ -1044,8 +1039,12 @@ export default function StudioVideoPanel({
           setModelId(normalized as VideoModelId);
         }
       }
-      if (parsed.videoPriority === "vip" || parsed.videoPriority === "normal") {
-        setVideoPriority(parsed.videoPriority);
+      if (
+        parsed.seedanceResolution === "480p" ||
+        parsed.seedanceResolution === "720p" ||
+        parsed.seedanceResolution === "1080p"
+      ) {
+        setSeedanceResolution(parsed.seedanceResolution);
       }
       if (typeof parsed.duration === "string" && parsed.duration.trim()) setDuration(parsed.duration.trim());
       if (typeof parsed.aspect === "string" && parsed.aspect.trim()) setAspect(parsed.aspect.trim());
@@ -1065,7 +1064,7 @@ export default function StudioVideoPanel({
       klingShots,
       soundOn,
       modelId,
-      videoPriority,
+      seedanceResolution,
       duration,
       aspect,
     };
@@ -1084,7 +1083,7 @@ export default function StudioVideoPanel({
     klingShots,
     soundOn,
     modelId,
-    videoPriority,
+    seedanceResolution,
     duration,
     aspect,
   ]);
@@ -1255,10 +1254,6 @@ export default function StudioVideoPanel({
   const meta = MODEL_OPTIONS.find((m) => m.id === modelId)!;
   const compactSeedanceRefUploads = studioVideoUsesSeedanceCompactReferenceUploads(modelId);
   const seedanceProOmniRefUploads = studioVideoUsesSeedanceProOmniMediaUploads(modelId);
-  const isSeedanceStrictNoFaceModel = SEEDANCE_STRICT_NO_FACE_MODELS.includes(modelId);
-  const seedanceFacePolicyHint = isSeedanceStrictNoFaceModel ? "Face input not allowed, even AI" : null;
-  const seedancePriorityInfoText =
-    "VIP pricing is ×2 credits per generation compared to Normal priority on this queue.";
   const elementsUnsupportedHint =
     !studioVideoSupportsReferenceElements(modelId) && prompt.includes("@");
   /** Prompt @mention picker: saved Elements + live Seedance upload tags (@imageN/@videoN/@audioN). */
@@ -1371,6 +1366,12 @@ export default function StudioVideoPanel({
     );
   }, [modelId, createAspectRatioChoices]);
 
+  useEffect(() => {
+    if (modelId === "bytedance/seedance-2-fast" && seedanceResolution === "1080p") {
+      setSeedanceResolution("720p");
+    }
+  }, [modelId, seedanceResolution]);
+
   const klingCustomMulti = modelId === "kling-3.0/video" && multiShot;
   const klingMultiTotalSec = useMemo(
     () => klingShots.reduce((a, s) => a + s.durationSec, 0),
@@ -1379,12 +1380,10 @@ export default function StudioVideoPanel({
   const billingDurationSec = klingCustomMulti ? klingMultiTotalSec : Number(duration);
 
   const seedanceVideoResolution = useMemo((): "480p" | "720p" | "1080p" | undefined => {
-    if (!modelId.startsWith("bytedance/seedance")) return undefined;
-    const tier = klingMode === "pro" ? "1080p" : "720p";
-    // Kie `bytedance/seedance-2-fast` has no 1080p; route maps it to 720p — align billing.
-    if (modelId === "bytedance/seedance-2-fast" && tier === "1080p") return "720p";
-    return tier;
-  }, [modelId, klingMode]);
+    if (!studioVideoIsSeedance2ProPickerId(modelId)) return undefined;
+    if (modelId === "bytedance/seedance-2-fast" && seedanceResolution === "1080p") return "720p";
+    return seedanceResolution;
+  }, [modelId, seedanceResolution]);
 
   const pricingModelIdForCredits = useMemo(
     () => normalizeLegacySeedanceStudioPickerId(modelId),
@@ -1402,9 +1401,7 @@ export default function StudioVideoPanel({
       }),
     [pricingModelIdForCredits, billingDurationSec, soundOn, klingMode, seedanceVideoResolution],
   );
-  const credits = useMemo(() => {
-    return videoPriority === "vip" ? baseCredits * 2 : baseCredits;
-  }, [baseCredits, videoPriority]);
+  const credits = baseCredits;
 
   useEffect(() => {
     if (!klingCustomMulti) return;
@@ -3658,7 +3655,7 @@ export default function StudioVideoPanel({
       klingShots: klingCustom ? klingShots.map((s) => ({ ...s })) : undefined,
       klingElementsPayload,
       historyAspect,
-      videoPriority,
+      seedanceResolution: studioVideoIsSeedance2ProPickerId(modelId) ? seedanceResolution : undefined,
     };
 
     // Track the DB-registered generation id so the catch block can decide whether
@@ -3823,6 +3820,11 @@ export default function StudioVideoPanel({
           isKling30 || studioVideoIsSeedance2ProPickerId(snap.modelId);
         if (supportsKlingElementsOnApi && snap.klingElementsPayload?.length) {
           klingGenerateBody.klingElements = snap.klingElementsPayload;
+        }
+        if (studioVideoIsSeedance2ProPickerId(snap.modelId)) {
+          const r = snap.seedanceResolution ?? "720p";
+          klingGenerateBody.videoResolution =
+            snap.modelId === "bytedance/seedance-2-fast" && r === "1080p" ? "720p" : r;
         }
         const res = await fetch("/api/kling/generate", {
           method: "POST",
@@ -4524,9 +4526,6 @@ export default function StudioVideoPanel({
                   />
                 </div>
               )}
-              {seedanceFacePolicyHint ? (
-                <p className="mt-2 text-[10px] leading-snug text-white/45">{seedanceFacePolicyHint}</p>
-              ) : null}
               {klingCustomMulti ? (
                 <p className="mt-3 text-[10px] leading-snug text-white/38">
                   Multi-shot: define each scene below in Parameters. Start frame only, end frame is disabled.
@@ -4607,60 +4606,8 @@ export default function StudioVideoPanel({
                     }}
                     featuredTitle="Video models"
                   />
-                  {isSeedanceStrictNoFaceModel ? (
-                    <div className="mt-2 flex items-start gap-1.5 text-[10px] leading-snug text-white/45">
-                      <span title="Seedance blocks face inputs (including AI faces) due to anti-deepfake policy.">
-                        <HelpCircle className="mt-0.5 h-3.5 w-3.5 shrink-0" strokeWidth={2} aria-hidden />
-                      </span>
-                      <span>Face input policy (anti-deepfake): this model does not accept face input, even AI.</span>
-                    </div>
-                  ) : null}
                 </div>
               )}
-
-              {studioVideoIsSeedance2ProPickerId(modelId) ? (
-                <div className="space-y-1">
-                  <div className="flex items-center gap-1.5">
-                    <Label className="text-xs text-white/45">Priority</Label>
-                    <div className="group relative">
-                      <button
-                        type="button"
-                        aria-label="Priority info"
-                        aria-expanded={seedancePriorityInfoOpen}
-                        onClick={() => setSeedancePriorityInfoOpen((open) => !open)}
-                        className="inline-flex h-4 w-4 items-center justify-center rounded-full border border-white/20 text-[10px] font-bold text-white/55 transition hover:text-white/80 focus:outline-none focus-visible:ring-2 focus-visible:ring-violet-400/45"
-                      >
-                        ?
-                      </button>
-                      <div
-                        className={cn(
-                          "pointer-events-none absolute left-0 z-20 mt-1 w-72 whitespace-pre-line rounded-lg border border-white/15 bg-[#111118] p-2.5 text-[10px] leading-snug text-white/80 shadow-xl",
-                          seedancePriorityInfoOpen ? "block" : "hidden group-hover:block group-focus-within:block",
-                        )}
-                      >
-                        {seedancePriorityInfoText}
-                      </div>
-                    </div>
-                  </div>
-                  <div className="flex items-center gap-1 rounded-lg border border-white/10 bg-white/[0.03] p-1">
-                    {(["normal", "vip"] as const).map((tier) => (
-                      <button
-                        key={tier}
-                        type="button"
-                        onClick={() => setVideoPriority(tier)}
-                        className={cn(
-                          "rounded-md px-3 py-1.5 text-xs font-semibold transition",
-                          videoPriority === tier
-                            ? "border border-violet-400/60 bg-violet-500/15 text-white"
-                            : "border border-white/10 bg-black/20 text-white/65 hover:border-white/20",
-                        )}
-                      >
-                        {tier === "vip" ? "VIP" : "Normal"}
-                      </button>
-                    ))}
-                  </div>
-                </div>
-              ) : null}
 
               {studioVideoSupportsMultiShot(modelId) ? (
                 <div className="space-y-2">
@@ -4898,6 +4845,32 @@ export default function StudioVideoPanel({
                               {ar === "auto" ? "Auto" : ar}
                             </SelectItem>
                           ))}
+                        </SelectContent>
+                      </Select>
+                    </div>
+                  ) : null}
+                  {studioVideoSupportsSeedanceResolutionPicker(modelId) ? (
+                    <div>
+                      <Label className="text-xs text-white/45">Resolution</Label>
+                      <Select
+                        value={seedanceResolution}
+                        onValueChange={(v) => setSeedanceResolution(v as "480p" | "720p" | "1080p")}
+                      >
+                        <SelectTrigger className="mt-2 h-12 w-full rounded-xl border-white/12 bg-white/[0.04] text-white shadow-none hover:bg-white/[0.07]">
+                          <SelectValue />
+                        </SelectTrigger>
+                        <SelectContent position="popper" className={studioSelectContentClass}>
+                          <SelectItem value="480p" className={studioSelectItemClass}>
+                            480p
+                          </SelectItem>
+                          <SelectItem value="720p" className={studioSelectItemClass}>
+                            720p
+                          </SelectItem>
+                          {modelId === "bytedance/seedance-2" ? (
+                            <SelectItem value="1080p" className={studioSelectItemClass}>
+                              1080p
+                            </SelectItem>
+                          ) : null}
                         </SelectContent>
                       </Select>
                     </div>

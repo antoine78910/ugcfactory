@@ -1045,8 +1045,6 @@ export type WorkflowRunVideoParams = {
   resolution: string;
   /** Seconds; coerced per model if missing or invalid. */
   durationSec?: number;
-  /** Seedance 2 Preview / Fast Preview only, maps to PiAPI VIP task and doubles credits. */
-  seedancePriority?: "normal" | "vip";
   linkedImageUrl?: string;
   referenceImageUrl?: string;
   endImageUrl?: string;
@@ -1311,7 +1309,6 @@ export async function runWorkflowVideoJob(params: WorkflowRunVideoParams): Promi
     refUrls.push(await ensureWorkflowImageMinEdge(u));
   }
   const quality = klingQualityFromVideoResolution(params.resolution);
-  const seedancePri: "normal" | "vip" = params.seedancePriority === "vip" ? "vip" : "normal";
   const duration = coerceWorkflowVideoDurationSec(params.model, params.durationSec);
   const seedanceResolvedModel = normalizeLegacySeedanceMarketModelId(modelId);
   const marketModelForGenerate = seedanceResolvedModel;
@@ -1333,10 +1330,10 @@ export async function runWorkflowVideoJob(params: WorkflowRunVideoParams): Promi
     quality,
     videoResolution: modelId.startsWith("bytedance/seedance") ? seedanceResForCredits : undefined,
   });
-  const credits = seedancePri === "vip" ? Math.max(1, baseCredits * 2) : baseCredits;
+  const credits = baseCredits;
 
   /**
-   * Kie Seedance 2.0 / 2.0 Fast: fold wired start/end/extra refs into `seedanceOmniMedia`
+   * Seedance 2.0 / 2.0 Fast: fold wired start/end/extra refs into `seedanceOmniMedia`
    * (images + optional motion-reference videos). Legacy Preview picker ids normalize to these models.
    */
   const seedanceKie =
@@ -1507,7 +1504,7 @@ export async function runWorkflowVideoJob(params: WorkflowRunVideoParams): Promi
       klingElements,
       duration,
       aspectRatio: aspectForApi,
-      /** Kie Seedance — workflow resolution maps to provider tiers (Fast caps at 720p server-side). */
+      /** Seedance — workflow resolution maps to provider tiers (Fast caps at 720p server-side). */
       videoResolution: modelId.startsWith("bytedance/seedance")
         ? workflowVideoResolutionToPiapiSeedance(params.resolution)
         : undefined,
@@ -1625,7 +1622,6 @@ export function workflowVideoChargeCredits(params: {
   model: string;
   resolution: string;
   durationSec?: number;
-  seedancePriority?: "normal" | "vip";
 }): number {
   const modelId = resolveWorkflowVideoModelId(params.model);
   const seedanceResolved = normalizeLegacySeedanceMarketModelId(modelId);
@@ -1634,8 +1630,7 @@ export function workflowVideoChargeCredits(params: {
   const seedanceRes = workflowSeedanceVideoResolution(params.resolution);
   const seedanceResForCredits =
     seedanceResolved === "bytedance/seedance-2-fast" && seedanceRes === "1080p" ? "720p" : seedanceRes;
-  const pri = params.seedancePriority === "vip" ? "vip" : "normal";
-  const base = calculateVideoCredits({
+  return calculateVideoCredits({
     modelId: seedanceResolved,
     duration,
     audio:
@@ -1643,7 +1638,6 @@ export function workflowVideoChargeCredits(params: {
     quality,
     videoResolution: modelId.startsWith("bytedance/seedance") ? seedanceResForCredits : undefined,
   });
-  return pri === "vip" ? Math.max(1, base * 2) : base;
 }
 
 export function workflowMotionControlChargeCredits(params: { quality: string; durationSec: number }): number {
@@ -1698,12 +1692,10 @@ export function estimateWorkflowAdAssetRunCredits(
 
   const model = (data.model ?? "kling-3.0/video").trim() || "kling-3.0/video";
   const resolution = (data.resolution ?? "720p").trim() || "720p";
-  const seedancePriority: "normal" | "vip" = data.videoPriority === "vip" ? "vip" : "normal";
   const oneVideo = workflowVideoChargeCredits({
     model,
     resolution,
     durationSec: data.videoDurationSec,
-    seedancePriority,
   });
   if (quantity > 1 && !multiBatchFromList) {
     return oneVideo * quantity * runCount;

@@ -50,7 +50,7 @@ type Body = {
   accountPlan?: string;
   /** Link to Ad video: do not gate by subscription tier (credits still apply in-app). */
   linkToAd?: boolean;
-  // KIE Market model id (optional; defaults to Kling 3.0)
+  // Video market model id (optional; defaults to Kling 3.0)
   marketModel?: string;
   prompt: string;
   imageUrl?: string;
@@ -82,9 +82,9 @@ type Body = {
   seedanceOmniMedia?: { type: "image" | "video" | "audio"; url: string }[];
   personalApiKey?: string;
   piapiApiKey?: string;
-  /** Kie Seedance: 480p / 720p / 1080p (1080p is downgraded to 720p for `bytedance/seedance-2-fast`). */
+  /** Seedance 2.0 / 2.0 Fast: 480p / 720p / 1080p (1080p is downgraded to 720p for `bytedance/seedance-2-fast`). */
   videoResolution?: "480p" | "720p" | "1080p";
-  /** Kie Seedance 2.0 / 2.0 Fast: optional online search (higher cost on provider). */
+  /** Seedance 2.0 / 2.0 Fast: optional online search (higher cost on provider). */
   webSearch?: boolean;
   /** When true, enable provider content checks (if supported). */
   nsfwChecker?: boolean;
@@ -261,7 +261,7 @@ function buildSeedanceOrderedReferenceUrls(
   return out;
 }
 
-/** Kie Seedance 2.0 `input.aspect_ratio` (includes `adaptive` for “auto”). */
+/** Seedance 2.0 `input.aspect_ratio` (includes `adaptive` for “auto”). */
 function mapAspectRatioForKieSeedance2(raw: string | undefined): string {
   const a = String(raw ?? "16:9").trim();
   if (a === "auto") return "adaptive";
@@ -278,7 +278,7 @@ function mapAspectRatioForKieSeedance2(raw: string | undefined): string {
   }
 }
 
-/** Kie Market Seedance 2.0 reference caps (@see docs.kie.ai/market/bytedance/seedance-2). */
+/** Seedance 2.0 reference caps (@see docs.kie.ai/market/bytedance/seedance-2). */
 const KIE_SEEDANCE2_MAX_REF_IMAGES = 9;
 const KIE_SEEDANCE2_MAX_REF_VIDEOS = 3;
 const KIE_SEEDANCE2_MAX_REF_AUDIOS = 3;
@@ -688,7 +688,7 @@ export async function POST(req: Request) {
       if (rawModel !== "bytedance/seedance-2" && rawModel !== "bytedance/seedance-2-fast") {
         return NextResponse.json(
           {
-            error: `Unsupported Seedance model: ${rawModel}. Use bytedance/seedance-2 or bytedance/seedance-2-fast (Kie Market).`,
+            error: `Unsupported Seedance model: ${rawModel}. Use bytedance/seedance-2 or bytedance/seedance-2-fast.`,
           },
           { status: 400 },
         );
@@ -709,7 +709,7 @@ export async function POST(req: Request) {
       }
 
       const seedancePromptCharCap = SEEDANCE_PRO_PROMPT_MAX_CHARS;
-      const seedancePromptForKie =
+      const seedancePromptForApi =
         normalizedSeedancePrompt.length > seedancePromptCharCap
           ? normalizedSeedancePrompt.slice(0, seedancePromptCharCap).trim()
           : normalizedSeedancePrompt;
@@ -728,13 +728,13 @@ export async function POST(req: Request) {
       const kieDuration = Math.round(duration);
       if (!Number.isFinite(kieDuration) || kieDuration < 4 || kieDuration > 15) {
         return NextResponse.json(
-          { error: "Kie Seedance requires a clip duration between 4 and 15 seconds." },
+          { error: "Seedance requires a clip duration between 4 and 15 seconds." },
           { status: 400 },
         );
       }
 
       const kieInput: Record<string, unknown> = {
-        prompt: seedancePromptForKie,
+        prompt: seedancePromptForApi,
         aspect_ratio: mapAspectRatioForKieSeedance2(body.aspectRatio),
         resolution: kieResolution,
         duration: kieDuration,
@@ -854,7 +854,7 @@ export async function POST(req: Request) {
           if (mirroredImg.length > KIE_SEEDANCE2_MAX_REF_IMAGES) {
             return NextResponse.json(
               {
-                error: `Kie Seedance allows at most ${KIE_SEEDANCE2_MAX_REF_IMAGES} reference images (you sent ${mirroredImg.length}).`,
+                error: `Seedance allows at most ${KIE_SEEDANCE2_MAX_REF_IMAGES} reference images (you sent ${mirroredImg.length}).`,
               },
               { status: 400 },
             );
@@ -862,7 +862,7 @@ export async function POST(req: Request) {
           if (mirroredVid.length > KIE_SEEDANCE2_MAX_REF_VIDEOS) {
             return NextResponse.json(
               {
-                error: `Kie Seedance allows at most ${KIE_SEEDANCE2_MAX_REF_VIDEOS} reference videos (you sent ${mirroredVid.length}).`,
+                error: `Seedance allows at most ${KIE_SEEDANCE2_MAX_REF_VIDEOS} reference videos (you sent ${mirroredVid.length}).`,
               },
               { status: 400 },
             );
@@ -870,7 +870,7 @@ export async function POST(req: Request) {
           if (mirroredAud.length > KIE_SEEDANCE2_MAX_REF_AUDIOS) {
             return NextResponse.json(
               {
-                error: `Kie Seedance allows at most ${KIE_SEEDANCE2_MAX_REF_AUDIOS} reference audio files (you sent ${mirroredAud.length}).`,
+                error: `Seedance allows at most ${KIE_SEEDANCE2_MAX_REF_AUDIOS} reference audio files (you sent ${mirroredAud.length}).`,
               },
               { status: 400 },
             );
@@ -936,7 +936,7 @@ export async function POST(req: Request) {
             if (imgs.length > KIE_SEEDANCE2_MAX_REF_IMAGES) {
               return NextResponse.json(
                 {
-                  error: `Kie Seedance allows at most ${KIE_SEEDANCE2_MAX_REF_IMAGES} reference images (flattened list has ${imgs.length}).`,
+                  error: `Seedance allows at most ${KIE_SEEDANCE2_MAX_REF_IMAGES} reference images (flattened list has ${imgs.length}).`,
                 },
                 { status: 400 },
               );
@@ -944,7 +944,7 @@ export async function POST(req: Request) {
             if (vids.length > KIE_SEEDANCE2_MAX_REF_VIDEOS || auds.length > KIE_SEEDANCE2_MAX_REF_AUDIOS) {
               return NextResponse.json(
                 {
-                  error: `Kie Seedance allows at most ${KIE_SEEDANCE2_MAX_REF_VIDEOS} reference videos and ${KIE_SEEDANCE2_MAX_REF_AUDIOS} audio files for references.`,
+                  error: `Seedance allows at most ${KIE_SEEDANCE2_MAX_REF_VIDEOS} reference videos and ${KIE_SEEDANCE2_MAX_REF_AUDIOS} audio files for references.`,
                 },
                 { status: 400 },
               );
@@ -969,7 +969,7 @@ export async function POST(req: Request) {
           }
         }
       } catch (mirrorErr) {
-        logGenerationFailure("kling/generate/mirror-seedance-kie", mirrorErr, {
+        logGenerationFailure("kling/generate/mirror-seedance", mirrorErr, {
           model,
         });
         return NextResponse.json(

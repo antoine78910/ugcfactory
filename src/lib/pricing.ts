@@ -44,13 +44,13 @@ export const STARTER_CREDIT_VALUE_USD = 29.99 / 250;
 /** Link to Ad image→video: PiAPI `task_type` maps to these ids for `/api/kling/generate`. */
 export type LinkToAdSeedanceSpeed = "normal" | "vip";
 
-/** Kie Market Seedance 2.0 Fast for Link to Ad (Normal and VIP use the same model; VIP bills ×2 credits in {@link linkToAdVideoCredits}). */
+/** Seedance 2.0 Fast for Link to Ad (single queue / pricing tier). */
 export function linkToAdSeedanceMarketModel(_speed: LinkToAdSeedanceSpeed): string {
   void _speed;
   return "bytedance/seedance-2-fast";
 }
 
-/** Link to Ad video: Kie Seedance 2.0 Fast (@see https://docs.kie.ai/market/bytedance/seedance-2-fast). */
+/** Link to Ad video: Seedance 2.0 Fast (@see https://docs.kie.ai/market/bytedance/seedance-2-fast). */
 export const LINK_TO_AD_VIDEO_MODELS = {
   seedance: {
     marketModelNormal: "bytedance/seedance-2-fast" as const,
@@ -1206,20 +1206,20 @@ export function calculateVideoCreditsForModel(opts: VideoCreditOptions): number 
 export function linkToAdVideoCredits(
   model: LinkToAdVideoModelId,
   durationSec: number,
-  seedanceSpeed: LinkToAdSeedanceSpeed = "normal",
+  _seedanceSpeed: LinkToAdSeedanceSpeed = "normal",
 ): number {
   void LINK_TO_AD_VIDEO_MODELS[model];
+  void _seedanceSpeed;
   const d = normalizeUgcScriptVideoDurationSec(durationSec);
-  const base = calculateVideoCreditsForModel({
+  return calculateVideoCreditsForModel({
     modelId: "bytedance/seedance-2-fast",
     duration: d,
     audio: true,
     videoResolution: "720p",
   });
-  return seedanceSpeed === "vip" ? Math.max(1, base * 2) : base;
 }
 
-/** Reference snapshot for marketing / tests — Seedance Fast @ 720p, normal vs VIP. */
+/** Reference snapshot for marketing / tests — Seedance Fast @ 720p. */
 export const LINK_TO_AD_SEEDANCE_VIDEO_CREDITS_BY_DURATION_SEC: Record<5 | 10 | 15 | 30, number> = {
   5: linkToAdVideoCredits("seedance", 5, "normal"),
   10: linkToAdVideoCredits("seedance", 10, "normal"),
@@ -1227,11 +1227,12 @@ export const LINK_TO_AD_SEEDANCE_VIDEO_CREDITS_BY_DURATION_SEC: Record<5 | 10 | 
   30: linkToAdVideoCredits("seedance", 30, "normal"),
 };
 
+/** @deprecated VIP lane removed; same rates as {@link LINK_TO_AD_SEEDANCE_VIDEO_CREDITS_BY_DURATION_SEC}. */
 export const LINK_TO_AD_SEEDANCE_VIP_VIDEO_CREDITS_BY_DURATION_SEC: Record<5 | 10 | 15 | 30, number> = {
-  5: linkToAdVideoCredits("seedance", 5, "vip"),
-  10: linkToAdVideoCredits("seedance", 10, "vip"),
-  15: linkToAdVideoCredits("seedance", 15, "vip"),
-  30: linkToAdVideoCredits("seedance", 30, "vip"),
+  5: linkToAdVideoCredits("seedance", 5),
+  10: linkToAdVideoCredits("seedance", 10),
+  15: linkToAdVideoCredits("seedance", 15),
+  30: linkToAdVideoCredits("seedance", 30),
 };
 
 /**

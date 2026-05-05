@@ -112,7 +112,6 @@ import {
   LINK_TO_AD_DEFAULT_VIDEO_MODEL,
   LINK_TO_AD_DEFAULT_VIDEO_DURATION_SEC,
   linkToAdSeedanceMarketModel,
-  type LinkToAdSeedanceSpeed,
 } from "@/lib/linkToAd/generationCredits";
 import type { InternalFetch } from "@/lib/linkToAd/internalFetch";
 import { runInitialPipeline } from "@/lib/linkToAd/runInitialPipeline";
@@ -1510,13 +1509,6 @@ export default function LinkToAdUniverse({
   const scriptProvider = "claude" as const;
 
   const [videoDuration, setVideoDuration] = useState<number>(10);
-  /** Video generation speed tier (Fast vs Normal) for the Link to Ad Seedance pipeline. */
-  const [ltaSeedanceSpeed, setLtaSeedanceSpeed] = useState<LinkToAdSeedanceSpeed>("normal");
-  useEffect(() => {
-    if (linkToAdTrialEconomy && ltaSeedanceSpeed === "vip") setLtaSeedanceSpeed("normal");
-  }, [linkToAdTrialEconomy, ltaSeedanceSpeed]);
-  const seedancePriorityInfoText =
-    "VIP pricing is x2 credits per generation.\n\nPeak hours: From 09:00 to 15:00 GMT, Seedance Preview experiences high traffic. During this period, queue times may extend to several hours.\n\nCurrently outside peak hours: Normal is usually 5-60 min. VIP (fast) is usually 3-5 min.";
   const linkToAdSeedancePreviewMaxPollMs = 12 * 60 * 60 * 1000;
   /** After Generate from URL (or when a saved run is loaded), duration is fixed for this session. */
   const [ltaVideoDurationLocked, setLtaVideoDurationLocked] = useState(false);
@@ -2038,7 +2030,6 @@ export default function LinkToAdUniverse({
     setLtaFrozenCredits(null);
     setLtaVideoDurationLocked(false);
     setVideoDuration(10);
-    setLtaSeedanceSpeed("normal");
     latestSnapRef.current = null;
     prevAngleRef.current = null;
     nanoBananaPromptsSignatureRef.current = null;
@@ -2373,7 +2364,6 @@ export default function LinkToAdUniverse({
       klingTaskId: mirror?.taskId ?? undefined,
       klingVideoUrl: mirror?.videoUrl ?? undefined,
       linkToAdPipelineByAngle: triple,
-      ltaSeedanceSpeed,
       ltaVideoDurationSec: normalizeUgcScriptVideoDurationSec(videoDuration),
       videoStageMode,
     };
@@ -2406,7 +2396,6 @@ export default function LinkToAdUniverse({
     nanoBananaSelectedImageIndex,
     pipelineByAngle,
     videoStageMode,
-    ltaSeedanceSpeed,
     videoDuration,
   ]);
 
@@ -2449,7 +2438,6 @@ export default function LinkToAdUniverse({
       angleLabels,
       selectedAngleIndex,
       videoDuration,
-      ltaSeedanceSpeed,
       videoStageMode,
       nanoBananaPromptsRaw,
       nanoBananaSelectedPromptIndex,
@@ -2497,7 +2485,6 @@ export default function LinkToAdUniverse({
     angleLabels,
     selectedAngleIndex,
     videoDuration,
-    ltaSeedanceSpeed,
     videoStageMode,
     nanoBananaPromptsRaw,
     nanoBananaSelectedPromptIndex,
@@ -3067,9 +3054,6 @@ export default function LinkToAdUniverse({
       setNanoPollTaskId(null);
       setKlingPollTaskId(null);
       setKlingPollImageIndex(null);
-      if (snap.ltaSeedanceSpeed === "vip" || snap.ltaSeedanceSpeed === "normal") {
-        setLtaSeedanceSpeed(snap.ltaSeedanceSpeed);
-      }
       if (!opts?.preserveVideoDuration) {
         setVideoDuration(
           snap.ltaVideoDurationSec != null
@@ -5451,9 +5435,9 @@ export default function LinkToAdUniverse({
 
   /**
    * @param chainPart2Prompt, If set, runs the second 15s clip only (30s workflow). Do not clear 30s refs.
-   * @param opts.forceRegenerateCharge When true, bills the Seedance Preview Fast price
-   *   (VIP or Normal, per current `ltaSeedanceSpeed`) for non-trial users. Pressed on the
-   *   "Regenerate" video button so a re-render is not free after the URL bundle was paid.
+   * @param opts.forceRegenerateCharge When true, bills the Seedance Fast Link to Ad video price
+   *   for non-trial users. Pressed on the "Regenerate" video button so a re-render is not free
+   *   after the URL bundle was paid.
    */
   async function onGenerateKlingVideo(
     overrideVideoPrompt?: string,
@@ -5517,19 +5501,15 @@ export default function LinkToAdUniverse({
 
     // Billing rules:
     // - Initial generation: 0 (already covered by the URL bundle paid in `ltaInitialGenerateCharge`).
-    // - Regenerate: bill the Seedance Preview Fast tariff for the current
-    //   duration and VIP/Normal selection, so re-renders are not free.
+    // - Regenerate: bill the Seedance Fast Link to Ad tariff for the current duration,
+    //   so re-renders are not free.
     // - Part 2 of the 30s flow (auto-chained after Part 1): never re-charge — it is a
     //   continuation of the same already-billed job.
     const isPart2Chain = Boolean(chainPart2Prompt);
     const isRegenerate = Boolean(opts?.forceRegenerateCharge);
     let videoSpend = 0;
     if (isRegenerate && !isPart2Chain) {
-      videoSpend = creditsLinkToAdFullPipeline(
-        LINK_TO_AD_DEFAULT_VIDEO_MODEL,
-        videoDuration,
-        ltaSeedanceSpeed,
-      );
+      videoSpend = creditsLinkToAdFullPipeline(LINK_TO_AD_DEFAULT_VIDEO_MODEL, videoDuration);
     }
     if (videoSpend > 0) {
       const w0 = creditsBalanceRef.current;
@@ -5552,11 +5532,10 @@ export default function LinkToAdUniverse({
       klingAbortRef.current?.abort();
       const controller = new AbortController();
       klingAbortRef.current = controller;
-      const effectiveSeedanceTier: LinkToAdSeedanceSpeed = ltaSeedanceSpeed;
       const generatePayload = {
         linkToAd: true,
         accountPlan: planId,
-        marketModel: linkToAdSeedanceMarketModel(effectiveSeedanceTier),
+        marketModel: linkToAdSeedanceMarketModel("normal"),
         prompt: klingPrompt,
         imageUrl: img,
         duration: apiDuration,
@@ -6094,8 +6073,8 @@ export default function LinkToAdUniverse({
   }, [klingPollTaskId, klingQueuePosition, klingWaitEstimateSeconds]);
 
   const ltaGenerateCredits = useMemo(
-    () => creditsLinkToAdFullPipeline(LINK_TO_AD_DEFAULT_VIDEO_MODEL, videoDuration, ltaSeedanceSpeed),
-    [videoDuration, ltaSeedanceSpeed],
+    () => creditsLinkToAdFullPipeline(LINK_TO_AD_DEFAULT_VIDEO_MODEL, videoDuration),
+    [videoDuration],
   );
   const ltaInitialGenerateCharge = useMemo(
     () => ltaGenerateCredits,
@@ -6110,17 +6089,11 @@ export default function LinkToAdUniverse({
   const ltaVideoConfirmCreditsDisplay = 0;
   /**
    * "Regenerate video" pill + spend: trial keeps the flat fee, non-trial pays the
-   * dynamic Seedance Preview Fast price (VIP or Normal per `ltaSeedanceSpeed`,
-   * scaled by `videoDuration`).
+   * dynamic Seedance Fast Link to Ad price (scaled by `videoDuration`).
    */
   const ltaKlingVideoRegenCharge = useMemo(
-    () =>
-      creditsLinkToAdFullPipeline(
-        LINK_TO_AD_DEFAULT_VIDEO_MODEL,
-        videoDuration,
-        ltaSeedanceSpeed,
-      ),
-    [videoDuration, ltaSeedanceSpeed],
+    () => creditsLinkToAdFullPipeline(LINK_TO_AD_DEFAULT_VIDEO_MODEL, videoDuration),
+    [videoDuration],
   );
   /** Video-prompt step has no direct credit charge (render charge happens on video generation). */
   const ltaVideoPromptFromImageCreditsDisplay = useMemo(
@@ -6454,9 +6427,7 @@ export default function LinkToAdUniverse({
                 <ChevronRight className="h-3.5 w-3.5 transition-transform [[open]>&]:rotate-90" aria-hidden />
                 Settings
                 <span className="ml-auto text-[10px] font-normal text-white/35">
-                  {videoDuration}s · English ·{" "}
-                  {linkToAdTrialEconomy ? "Normal" : ltaSeedanceSpeed === "vip" ? "VIP" : "Normal"} ·{" "}
-                  {generationMode === "custom_ugc" ? "Custom" : "Auto"}
+                  {videoDuration}s · English · {generationMode === "custom_ugc" ? "Custom" : "Auto"}
                 </span>
               </summary>
               <div className="space-y-3 px-4 pb-3">
@@ -6495,49 +6466,6 @@ export default function LinkToAdUniverse({
                       })}
                     </div>
                   </div>
-                  {!linkToAdTrialEconomy ? (
-                    <div className="space-y-1">
-                      <div className="flex items-center gap-1.5">
-                        <p className="text-[11px] font-semibold uppercase tracking-wide text-white/50">Priority</p>
-                        <div className="group relative">
-                          <button
-                            type="button"
-                            aria-label="Priority info"
-                            className="inline-flex h-4 w-4 items-center justify-center rounded-full border border-white/20 text-[10px] font-bold text-white/55 transition hover:text-white/80 focus:outline-none focus-visible:ring-2 focus-visible:ring-violet-400/45"
-                          >
-                            ?
-                          </button>
-                          <div className="pointer-events-none absolute right-0 z-20 mt-1 hidden w-72 whitespace-pre-line rounded-lg border border-white/15 bg-[#111118] p-2.5 text-[10px] leading-snug text-white/80 shadow-xl group-hover:block group-focus-within:block">
-                            {seedancePriorityInfoText}
-                          </div>
-                        </div>
-                      </div>
-                      {ltaVideoDurationLocked ? (
-                        <p className="rounded-lg border border-white/10 bg-white/[0.03] px-3 py-2 text-xs font-semibold text-white/80">
-                          {ltaSeedanceSpeed === "vip" ? "VIP" : "Normal"}{" "}
-                          <span className="font-normal text-white/45">(locked for this run)</span>
-                        </p>
-                      ) : (
-                        <div className="flex items-center gap-1 rounded-lg border border-white/10 bg-white/[0.03] p-1">
-                          {(["normal", "vip"] as const).map((tier) => (
-                            <button
-                              key={tier}
-                              type="button"
-                              onClick={() => setLtaSeedanceSpeed(tier)}
-                              className={cn(
-                                "rounded-md px-3 py-1.5 text-xs font-semibold transition",
-                                ltaSeedanceSpeed === tier
-                                  ? "border border-violet-400/60 bg-violet-500/15 text-white"
-                                  : "border border-white/10 bg-black/20 text-white/65 hover:border-white/20",
-                              )}
-                            >
-                              {tier === "normal" ? "Normal" : "VIP"}
-                            </button>
-                          ))}
-                        </div>
-                      )}
-                    </div>
-                  ) : null}
                 </div>
                 <div>
                   <p className="text-[11px] font-semibold uppercase tracking-wide text-white/55">Mode</p>
@@ -6803,7 +6731,7 @@ export default function LinkToAdUniverse({
         ) : null}
         {/* Duration + product preview: tight vertical spacing (avoid empty flex gap when URL row is hidden). */}
         <div className="flex flex-col gap-3">
-        {/* Duration + video generation speed: locked once scripts exist or a new run pipeline starts (same flag). */}
+        {/* Duration: locked once scripts exist or a new run pipeline starts (same flag). */}
         <div className="flex flex-wrap items-center gap-4">
           <div className="space-y-1">
             <p className="text-[11px] font-semibold uppercase tracking-wide text-white/50">Duration</p>
@@ -6845,51 +6773,7 @@ export default function LinkToAdUniverse({
               </div>
             )}
           </div>
-                  {!linkToAdTrialEconomy ? (
-                    <div className="space-y-1">
-                      <div className="flex items-center gap-1.5">
-                        <p className="text-[11px] font-semibold uppercase tracking-wide text-white/50">Priority</p>
-                        <div className="group relative">
-                          <button
-                            type="button"
-                            aria-label="Priority info"
-                            className="inline-flex h-4 w-4 items-center justify-center rounded-full border border-white/20 text-[10px] font-bold text-white/55 transition hover:text-white/80 focus:outline-none focus-visible:ring-2 focus-visible:ring-violet-400/45"
-                          >
-                            ?
-                          </button>
-                          <div className="pointer-events-none absolute right-0 z-20 mt-1 hidden w-72 whitespace-pre-line rounded-lg border border-white/15 bg-[#111118] p-2.5 text-[10px] leading-snug text-white/80 shadow-xl group-hover:block group-focus-within:block">
-                            {seedancePriorityInfoText}
-                          </div>
-                        </div>
-                      </div>
-                      {ltaVideoDurationLocked ? (
-                        <p className="rounded-lg border border-white/10 bg-white/[0.03] px-3 py-2 text-xs font-semibold text-white/80">
-                          {ltaSeedanceSpeed === "vip" ? "VIP" : "Normal"}{" "}
-                          <span className="font-normal text-white/45">(locked for this run)</span>
-                        </p>
-                      ) : (
-                        <div className="flex items-center gap-1 rounded-lg border border-white/10 bg-white/[0.03] p-1">
-                          {(["normal", "vip"] as const).map((tier) => (
-                            <button
-                              key={tier}
-                              type="button"
-                              disabled={isWorking}
-                              onClick={() => setLtaSeedanceSpeed(tier)}
-                              className={cn(
-                                "rounded-md px-3 py-1.5 text-xs font-semibold transition",
-                                ltaSeedanceSpeed === tier
-                                  ? "border border-violet-400/60 bg-violet-500/15 text-white"
-                                  : "border border-white/10 bg-black/20 text-white/65 hover:border-white/20",
-                              )}
-                            >
-                              {tier === "vip" ? "VIP" : "Normal"}
-                            </button>
-                          ))}
-                        </div>
-                      )}
-                    </div>
-                  ) : null}
-          </div>
+        </div>
 
         {!showBrandHeaderInsteadOfUrl ? (
           <div className="space-y-3">

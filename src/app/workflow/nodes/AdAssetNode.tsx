@@ -48,10 +48,7 @@ import {
   userMessageFromCaughtError,
 } from "@/lib/generationUserMessage";
 import { refundPlatformCredits } from "@/lib/refundPlatformCredits";
-import {
-  studioVideoDurationSecOptions,
-  studioVideoIsSeedance2ProPickerId,
-} from "@/lib/studioVideoModelCapabilities";
+import { studioVideoDurationSecOptions } from "@/lib/studioVideoModelCapabilities";
 import { uploadFileToCdn } from "@/lib/uploadBlobUrlToCdn";
 
 import {
@@ -298,8 +295,6 @@ const IMAGE_RESOLUTIONS = ["1K", "2K", "4K"] as const;
 const VIDEO_RESOLUTIONS = ["720p", "1080p"] as const;
 const VARIATION_RESOLUTIONS = ["1024", "1536", "2K"] as const;
 
-const WORKFLOW_SEEDANCE_PRIORITY_INFO =
-  "VIP priority costs 2× credits vs Normal for Seedance 2.0 / 2.0 Fast (Kie Market).";
 const WORKFLOW_ASSISTANT_CREDITS_BY_MODEL: Record<"claude-sonnet-4-5" | "gpt-5o", number> = {
   "claude-sonnet-4-5": 2,
   "gpt-5o": 0,
@@ -1449,9 +1444,6 @@ export function AdAssetNode({ id, data, selected }: NodeProps<AdAssetNodeType>) 
     [data.kind, model],
   );
 
-  const showWorkflowSeedancePriority =
-    data.kind === "video" && studioVideoIsSeedance2ProPickerId(resolvedVideoModelId);
-
   /** UI gates derived from the picker capabilities — Seedance has no first/last frame ports. */
   const videoModelHasStartFrame = useMemo(
     () => (data.kind === "video" ? workflowVideoModelHasStartFrame(resolvedVideoModelId) : true),
@@ -1470,8 +1462,6 @@ export function AdAssetNode({ id, data, selected }: NodeProps<AdAssetNodeType>) 
     [data.kind, resolvedVideoModelId],
   );
 
-  const videoPriorityEffective: "normal" | "vip" =
-    data.kind === "video" && data.videoPriority === "vip" ? "vip" : "normal";
   const motionAutoSettings = data.motionAutoSettings ?? true;
   const motionBackgroundSource = data.motionBackgroundSource ?? "input_video";
   const assistantModel = data.assistantModel ?? "gpt-5o";
@@ -1600,7 +1590,6 @@ export function AdAssetNode({ id, data, selected }: NodeProps<AdAssetNodeType>) 
         model,
         resolution,
         durationSec: data.videoDurationSec,
-        seedancePriority: videoPriorityEffective,
       });
       if (quantity > 1 && !multiBatchFromList) {
         return oneVideo * quantity * runCount;
@@ -1622,7 +1611,6 @@ export function AdAssetNode({ id, data, selected }: NodeProps<AdAssetNodeType>) 
     model,
     quantity,
     resolution,
-    videoPriorityEffective,
     motionDetectedInputDurationSec,
   ]);
 
@@ -2601,7 +2589,6 @@ export function AdAssetNode({ id, data, selected }: NodeProps<AdAssetNodeType>) 
       model,
       resolution,
       durationSec: data.videoDurationSec,
-      seedancePriority: data.videoPriority === "vip" ? "vip" : "normal",
     });
     const runCount = Math.max(1, batchPrompts?.length ?? 1);
     const vCharge = perVideoCharge * runCount;
@@ -2857,7 +2844,6 @@ export function AdAssetNode({ id, data, selected }: NodeProps<AdAssetNodeType>) 
             aspectRatio,
             resolution,
             durationSec: data.videoDurationSec,
-            seedancePriority: data.videoPriority === "vip" ? "vip" : "normal",
             linkedImageUrl: indexedStartFrame,
             referenceImageUrl: undefined,
             endImageUrl: endFrame,
@@ -2980,7 +2966,6 @@ export function AdAssetNode({ id, data, selected }: NodeProps<AdAssetNodeType>) 
     data.referenceMediaKind,
     data.referencePreviewUrl,
     data.videoDurationSec,
-    data.videoPriority,
     data.videoStartImageUrl,
     data.videoEndImageUrl,
     generating,
@@ -4412,27 +4397,6 @@ export function AdAssetNode({ id, data, selected }: NodeProps<AdAssetNodeType>) 
                   Fixed
                 </span>
               ) : null}
-              {showWorkflowSeedancePriority ? (
-                <div className="flex h-6 shrink-0 items-center gap-px rounded-full border border-white/12 bg-[#1c1c1f] px-0.5">
-                  {(["normal", "vip"] as const).map((tier) => (
-                    <button
-                      key={tier}
-                      type="button"
-                      title={WORKFLOW_SEEDANCE_PRIORITY_INFO}
-                      onClick={() => patch(id, { videoPriority: tier })}
-                      className={cn(
-                        "nodrag nopan rounded-full px-1 py-px text-[8px] font-semibold transition",
-                        (data.videoPriority ?? "normal") === tier
-                          ? "border border-violet-400/55 bg-violet-500/15 text-white"
-                          : "border border-white/8 bg-black/20 text-white/55 hover:text-white/75",
-                      )}
-                    >
-                      {tier === "vip" ? "VIP" : "Std"}
-                    </button>
-                  ))}
-                </div>
-              ) : null}
-
               <div className="nodrag nopan group/run ml-auto inline-flex shrink-0 items-center gap-1">
                 {estimatedCredits > 0 ? (
                   <span

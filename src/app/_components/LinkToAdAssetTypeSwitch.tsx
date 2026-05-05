@@ -4,7 +4,7 @@ import { Box, Globe } from "lucide-react";
 import { cn } from "@/lib/utils";
 
 /** When true, Link to Ad allows App mode (screenshots + app-specific scripts). */
-export const LINK_TO_AD_APP_OPTION_AVAILABLE = true;
+export const LINK_TO_AD_APP_OPTION_AVAILABLE = false;
 
 export function LinkToAdAssetTypeSwitch({
   value,

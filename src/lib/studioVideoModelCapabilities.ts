@@ -19,7 +19,7 @@ export const STUDIO_VIDEO_PICKER_IDS = [
 ] as const;
 
 /**
- * Map deprecated PiAPI Preview picker ids (and VIP aliases) to Kie Seedance 2.0 / 2.0 Fast marketplace ids.
+ * Map deprecated PiAPI Preview picker ids (and VIP aliases) to Seedance 2.0 / 2.0 Fast model ids.
  * @see https://docs.kie.ai/market/bytedance/seedance-2
  * @see https://docs.kie.ai/market/bytedance/seedance-2-fast
  */
@@ -139,6 +139,11 @@ export function studioVideoSupportsQualityPicker(pickerId: string): boolean {
     pickerId === "openai/sora-2" ||
     pickerId === "openai/sora-2-pro"
   );
+}
+
+/** Seedance 2.0 / 2.0 Fast: output resolution (480p / 720p / 1080p; Fast has no true 1080p — UI caps at 720p). */
+export function studioVideoSupportsSeedanceResolutionPicker(pickerId: string): boolean {
+  return pickerId === "bytedance/seedance-2" || pickerId === "bytedance/seedance-2-fast";
 }
 
 export function studioVideoSupportsNativeAudio(pickerId: string): boolean {
