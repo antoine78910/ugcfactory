@@ -100,3 +100,49 @@ export function mergeStudioHistoryWithServer(
   if (!kept.length) return serverFilteredWithAspect;
   return [...kept, ...serverFilteredWithAspect].sort((a, b) => b.createdAt - a.createdAt);
 }
+
+/**
+ * Merge a server first-page response (newest N items) with `prev` while preserving older
+ * paginated items that the user already scrolled into via "Load more". Items in `prev` whose
+ * `createdAt` is older than the oldest item in `serverItems` are kept verbatim — the server
+ * page can't reach them anyway. Newer items go through `mergeStudioHistoryWithServer` so all
+ * existing optimistic / dedupe logic still applies.
+ */
+export function mergeStudioHistoryFirstPageWithLocal(
+  serverItems: StudioHistoryItem[],
+  prev: StudioHistoryItem[],
+): StudioHistoryItem[] {
+  if (serverItems.length === 0) {
+    // Server returned nothing for this page; keep prev untouched. (Optimistic items expire on
+    // their own through normal merges when a real first page arrives.)
+    return prev;
+  }
+  let oldestServer = serverItems[0]!.createdAt;
+  for (const s of serverItems) {
+    if (s.createdAt < oldestServer) oldestServer = s.createdAt;
+  }
+  const olderTail = prev.filter((p) => p.createdAt < oldestServer);
+  const recentPrev = prev.filter((p) => p.createdAt >= oldestServer);
+  const mergedRecent = mergeStudioHistoryWithServer(serverItems, recentPrev);
+  if (olderTail.length === 0) return mergedRecent;
+  // Filter older items that have somehow appeared in the merged set (shouldn't happen, but
+  // dedupe by id to be safe).
+  const recentIds = new Set(mergedRecent.map((i) => i.id));
+  const olderClean = olderTail.filter((i) => !recentIds.has(i.id));
+  return [...mergedRecent, ...olderClean].sort((a, b) => b.createdAt - a.createdAt);
+}
+
+/**
+ * Append the next page (older items, fetched via `?before=…`) to the existing list.
+ * De-duplicates by id (server may include the cursor row depending on inclusive/exclusive query).
+ */
+export function appendStudioHistoryNextPage(
+  prev: StudioHistoryItem[],
+  nextPage: StudioHistoryItem[],
+): StudioHistoryItem[] {
+  if (nextPage.length === 0) return prev;
+  const seen = new Set(prev.map((i) => i.id));
+  const additions = nextPage.filter((i) => !seen.has(i.id));
+  if (additions.length === 0) return prev;
+  return [...prev, ...additions].sort((a, b) => b.createdAt - a.createdAt);
+}
