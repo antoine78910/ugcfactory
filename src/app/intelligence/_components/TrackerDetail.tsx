@@ -52,6 +52,56 @@ function formatNum(n?: number): string {
   return String(n);
 }
 
+// ── Typed error helpers ────────────────────────────────────────────────────
+
+type IntelError =
+  | { code: "auth"; message: string }
+  | { code: "rate_limit"; message: string; retryAfterSec?: number }
+  | { code: "not_found"; message: string }
+  | { code: "server"; message: string }
+  | { code: "unknown"; message: string };
+
+async function parseIntelResponse<T>(res: Response): Promise<
+  | { ok: true; data: T; staleAt?: string }
+  | { ok: false; error: IntelError }
+> {
+  const body = (await res.json().catch(() => ({}))) as Record<string, unknown>;
+  if (!res.ok) {
+    const code = (body.code as IntelError["code"]) ?? "unknown";
+    return {
+      ok: false,
+      error: {
+        code,
+        message: (body.error as string) ?? `HTTP ${res.status}`,
+        ...(typeof body.retryAfterSec === "number"
+          ? { retryAfterSec: body.retryAfterSec as number }
+          : {}),
+      } as IntelError,
+    };
+  }
+  if (body && typeof body === "object" && "staleAt" in body && "data" in body) {
+    return { ok: true, data: body.data as T, staleAt: body.staleAt as string };
+  }
+  return { ok: true, data: body as unknown as T };
+}
+
+function intelErrorMessage(e: IntelError): string {
+  switch (e.code) {
+    case "auth":
+      return "TrendTrack key invalid. Contact admin.";
+    case "rate_limit":
+      return e.retryAfterSec
+        ? `Rate-limited. Retry in ${e.retryAfterSec}s.`
+        : "Rate-limited. Try again shortly.";
+    case "not_found":
+      return "No data on TrendTrack for this brand.";
+    case "server":
+      return "TrendTrack momentarily unavailable.";
+    default:
+      return e.message || "Network error";
+  }
+}
+
 export function TrackerDetail({
   tracker,
   ownTrackerIds,
@@ -75,9 +125,12 @@ export function TrackerDetail({
         const res = await fetch(
           `/api/intelligence/trackers/${tracker.id}/overview${force ? "?force=true" : ""}`
         );
-        const data = (await res.json()) as TTOverview | { error: string };
-        if ("error" in data) setOverviewError(data.error);
-        else setOverview(data);
+        const parsed = await parseIntelResponse<TTOverview>(res);
+        if (!parsed.ok) {
+          setOverviewError(intelErrorMessage(parsed.error));
+          return;
+        }
+        setOverview(parsed.data);
       } catch {
         setOverviewError("Network error");
       } finally {
@@ -107,9 +160,12 @@ export function TrackerDetail({
               headers: { "Content-Type": "application/json" },
               body: JSON.stringify({ advertiser: tracker.id }),
             });
-        const data = (await res.json()) as TTAd[] | { error: string };
-        if (!Array.isArray(data)) setAdsError(data.error ?? "Failed");
-        else setAds(data);
+        const parsed = await parseIntelResponse<TTAd[]>(res);
+        if (!parsed.ok) {
+          setAdsError(intelErrorMessage(parsed.error));
+          return;
+        }
+        setAds(parsed.data);
       } catch {
         setAdsError("Network error");
       } finally {
@@ -132,9 +188,12 @@ export function TrackerDetail({
         const res = await fetch(
           `/api/intelligence/trackers/${tracker.id}/angles${force ? "?force=true" : ""}`
         );
-        const data = (await res.json()) as Angle[] | { error: string };
-        if (!Array.isArray(data)) setAnglesError(data.error ?? "Failed");
-        else setAngles(data);
+        const parsed = await parseIntelResponse<Angle[]>(res);
+        if (!parsed.ok) {
+          setAnglesError(intelErrorMessage(parsed.error));
+          return;
+        }
+        setAngles(parsed.data);
       } catch {
         setAnglesError("Network error");
       } finally {
@@ -166,9 +225,12 @@ export function TrackerDetail({
           setOppsNeedsAngles(true);
           setOppsMessage(body.message);
         } else {
-          const data = (await res.json()) as Opportunity[] | { error: string };
-          if (!Array.isArray(data)) setOppsError(data.error ?? "Failed");
-          else setOpportunities(data);
+          const parsed = await parseIntelResponse<Opportunity[]>(res);
+          if (!parsed.ok) {
+            setOppsError(intelErrorMessage(parsed.error));
+          } else {
+            setOpportunities(parsed.data);
+          }
         }
       } catch {
         setOppsError("Network error");
