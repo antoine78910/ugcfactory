@@ -8,6 +8,7 @@ export type AppSection =
   | "image"
   | "video"
   | "upscale"
+  | "intelligence"
   | "projects";
 
 export type TranslateToolMode = "video_translate" | "voice_change";
@@ -23,6 +24,7 @@ export const SECTION_TO_SLUG: Record<AppSection, string> = {
   image: "image",
   video: "video",
   upscale: "upscale",
+  intelligence: "intelligence",
   projects: "my-projects",
 };
 
