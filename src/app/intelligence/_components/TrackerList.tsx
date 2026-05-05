@@ -31,14 +31,14 @@ function TrackerCard({
   return (
     <button
       onClick={onClick}
-      className={`flex w-full items-center gap-3 rounded-2xl border p-3 text-left transition ${
+      className={`flex w-full items-center gap-3 rounded-xl border p-3 text-left transition ${
         isSelected
-          ? "border-violet-500/60 bg-violet-500/10"
-          : "border-white/10 bg-white/5 hover:border-white/20 hover:bg-white/10"
+          ? "border-violet-400/55 bg-violet-500/12 shadow-[0_0_18px_rgba(139,92,246,0.18)]"
+          : "border-white/10 bg-white/[0.04] hover:border-violet-400/35 hover:bg-white/[0.07] hover:shadow-[0_0_14px_rgba(139,92,246,0.10)]"
       }`}
     >
       {logo ? (
-        <img src={logo} alt={name} className="h-8 w-8 rounded-lg object-contain bg-white/10 p-1" />
+        <img src={logo} alt={name} className="h-8 w-8 rounded-lg object-contain bg-white/[0.08] p-1" />
       ) : (
         <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-violet-500/20 text-xs font-bold text-violet-300">
           {name.charAt(0).toUpperCase()}
