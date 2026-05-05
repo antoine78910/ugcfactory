@@ -2146,12 +2146,13 @@ export default function AdsStudioPanel() {
       return;
     }
     if (isApp0504_1_3) {
-      // This template expects the App screen as image 2 and Avatar as image 1.
-      // In our composer, App/Product binds to @image1 and Avatar binds to @image2,
-      // so we swap the two captured frames when auto-filling.
+      // App slot → @image1, Avatar slot → @image2. Do not capture frames from the template
+      // preview video (users upload their own app UI + avatar stills).
       setAssetType("app");
       setAppRefUrl("");
       setAvatarUrl("");
+      scrollComposerIntoView();
+      return;
     }
     if (isTutorial2) {
       const avatarResolved = resolveAdsStudioPublicImage(ADS_STUDIO_TUTORIAL_2_AVATAR_PATH);
@@ -2265,13 +2266,8 @@ export default function AdsStudioPanel() {
           description: "Capturing two frames and uploading Product + Avatar.",
         });
         const { productUrl, avatarUrl } = await uploadTemplateRefsFromPreviewVideo(tplUrl);
-        if (isApp0504_1_3) {
-          setAppRefUrl(avatarUrl);
-          setAvatarUrl(productUrl);
-        } else {
-          setAppRefUrl(productUrl);
-          setAvatarUrl(avatarUrl);
-        }
+        setAppRefUrl(productUrl);
+        setAvatarUrl(avatarUrl);
         toast.success("References added", {
           description: "Two frames from the template preview were uploaded for Product and Avatar.",
         });
