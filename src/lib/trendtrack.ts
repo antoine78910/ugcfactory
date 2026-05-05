@@ -86,6 +86,8 @@ export type TTOverview = {
 
 export type TTAd = {
   id: string;
+  /** Rank in a "top performing" list (1..N). Not provided by TrendTrack; assigned client-side. */
+  rank?: number;
   headline?: string;
   title?: string;
   body?: string;

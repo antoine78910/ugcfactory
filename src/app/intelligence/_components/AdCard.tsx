@@ -20,7 +20,7 @@ export function AdCard({ ad, onView }: { ad: TTAd; onView?: () => void }) {
   const platform = ad.platform ?? "meta";
   const label = PLATFORM_LABELS[platform.toLowerCase()] ?? platform;
   const date = ad.startDate ?? ad.firstSeen;
-  const rank = (ad as TTAd & { rank?: number }).rank;
+  const rank = ad.rank;
 
   const Wrapper = onView ? "button" : "div";
   return (
