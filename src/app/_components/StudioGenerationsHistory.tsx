@@ -510,6 +510,8 @@ export function StudioGenerationsHistory({
                             <img
                               src={item.posterUrl}
                               alt=""
+                              loading="lazy"
+                              decoding="async"
                               className="absolute inset-0 h-full w-full object-cover opacity-25"
                             />
                           ) : null}
@@ -620,6 +622,8 @@ export function StudioGenerationsHistory({
                             <img
                               src={item.mediaUrl}
                               alt=""
+                              loading="lazy"
+                              decoding="async"
                               className="h-full w-full object-cover object-center"
                             />
                           </button>
@@ -639,6 +643,8 @@ export function StudioGenerationsHistory({
                         <img
                           src={item.posterUrl}
                           alt=""
+                          loading="lazy"
+                          decoding="async"
                           className="h-full w-full object-cover"
                         />
                       ) : null}
@@ -849,13 +855,15 @@ export function StudioGenerationsHistory({
                                 src={displaySrc}
                                 muted
                                 playsInline
-                                preload="metadata"
+                                preload="none"
                                 className="h-20 w-20 object-cover"
                               />
                             ) : (
                               <img
                                 src={displaySrc}
                                 alt={caption ?? `Input ${idx + 1}`}
+                                loading="lazy"
+                                decoding="async"
                                 className="h-20 w-20 object-cover"
                               />
                             )}

@@ -107,7 +107,7 @@ export default function VideoCard({
           poster={playPoster}
           muted
           playsInline
-          preload="auto"
+          preload="none"
           loop
           className="relative z-0 h-full w-full cursor-pointer object-cover"
           onClick={openFullscreen}
