@@ -18,7 +18,7 @@ import {
   Menu,
   Mic,
   Sparkles,
-  TrendingUp,
+  Telescope,
   UserRound,
   Video,
   Joystick,
@@ -52,6 +52,7 @@ export type StudioNavSection =
   | "image"
   | "video"
   | "upscale"
+  | "intelligence"
   | "projects";
 
 const SECTION_TO_SLUG: Record<StudioNavSection, string> = {
@@ -64,6 +65,7 @@ const SECTION_TO_SLUG: Record<StudioNavSection, string> = {
   image: "image",
   video: "video",
   upscale: "upscale",
+  intelligence: "intelligence",
   projects: "my-projects",
 };
 
@@ -107,14 +109,6 @@ const CREATE_NAV: CreateNavEntry[] = [
   { kind: "route", id: "link_to_ad", label: "Link to Ad", icon: Link2 },
   {
     kind: "custom-link",
-    id: "intelligence",
-    href: "/intelligence",
-    label: "Intelligence",
-    icon: TrendingUp,
-    soon: true,
-  },
-  {
-    kind: "custom-link",
     id: "ads_studio",
     href: "/ads-studio",
     label: "Ads Studio",
@@ -129,6 +123,7 @@ const CREATE_NAV: CreateNavEntry[] = [
     label: "Workflow",
     icon: GitBranch,
   },
+  { kind: "route", id: "intelligence", label: "Intelligence", icon: Telescope },
   { kind: "route", id: "avatar", label: "Avatar", icon: UserRound },
   { kind: "route", id: "ad_clone", label: "Translate", icon: Languages },
   { kind: "route", id: "voice", label: "Voice", icon: Mic },

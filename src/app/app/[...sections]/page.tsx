@@ -140,6 +140,7 @@ type AppSection =
   | "image"
   | "video"
   | "upscale"
+  | "intelligence"
   | "projects";
 
 type Extracted = {
@@ -412,6 +413,7 @@ const APP_VALID_SECTIONS: AppSection[] = [
   "image",
   "video",
   "upscale",
+  "intelligence",
   "projects",
 ];
 
@@ -426,6 +428,7 @@ const SECTION_TO_SLUG: Record<AppSection, string> = {
   image: "image",
   video: "video",
   upscale: "upscale",
+  intelligence: "intelligence",
   projects: "my-projects",
 };
 
