@@ -11,7 +11,10 @@ import {
 import { logGenerationFailure, userFacingProviderErrorOrDefault } from "@/lib/generationUserMessage";
 import { requireSupabaseUser } from "@/lib/supabase/requireUser";
 import { getUserPlan } from "@/lib/supabase/getUserPlan";
-import { normalizeMotionControlQuality } from "@/lib/pricing";
+import { calculateMotionControlCreditsFromDuration, normalizeMotionControlQuality } from "@/lib/pricing";
+import { createSupabaseServiceClient } from "@/lib/supabase/admin";
+import { resolveAuthUserEmail } from "@/lib/sessionUserEmail";
+import { shouldChargePlatformCredits, assertSufficientCreditsResponse } from "@/lib/credits/metering";
 
 /** Kling 3.0 `background_source`. For Kling 2.6 the UI uses the same labels; API maps to `character_orientation`. */
 type BackgroundSource = "input_video" | "input_image";
@@ -34,7 +37,12 @@ type Body = {
   characterOrientation?: CharacterOrientation;
   prompt?: string;
   personalApiKey?: string;
+  /** Detected motion-reference video duration in seconds (used for pre-flight credit gate). */
+  videoDurationSeconds?: number;
 };
+
+/** Fallback duration when the client omits `videoDurationSeconds` (mirrors UI placeholder). */
+const MOTION_CONTROL_FALLBACK_SECONDS = 12;
 
 function parseMotionFamily(raw: string | undefined): MotionFamily {
   const t = (raw ?? "kling-3.0").trim().toLowerCase();
@@ -72,8 +80,10 @@ export async function POST(req: Request) {
   }
 
   const personalKey = hasPersonalApiKey(body.personalApiKey) ? body.personalApiKey.trim() : undefined;
+  let dbPlanResolved: string | null = null;
   if (!personalKey) {
     const dbPlan = await getUserPlan(user.id);
+    dbPlanResolved = dbPlan;
     const accountPlan = dbPlan !== "free" ? dbPlan : parseAccountPlan(body.accountPlan);
     if (!canUseMotionControl(accountPlan)) {
       return NextResponse.json(
@@ -84,6 +94,29 @@ export async function POST(req: Request) {
         { status: 403 },
       );
     }
+  }
+
+  const usesPersonalApi = Boolean(personalKey);
+  const admin = createSupabaseServiceClient();
+  const email = await resolveAuthUserEmail(user, admin);
+  const charges = shouldChargePlatformCredits({ usesPersonalApi, email });
+  if (charges && admin) {
+    const durationSec =
+      Number(body.videoDurationSeconds) > 0
+        ? Number(body.videoDurationSeconds)
+        : MOTION_CONTROL_FALLBACK_SECONDS;
+    const costDisplayCredits = calculateMotionControlCreditsFromDuration(
+      durationSec,
+      normalizeMotionControlQuality(body.quality),
+    );
+    const dbPlan = dbPlanResolved ?? (await getUserPlan(user.id));
+    const gate = await assertSufficientCreditsResponse({
+      admin,
+      userId: user.id,
+      planId: dbPlan ?? "free",
+      costDisplayCredits,
+    });
+    if (gate) return gate;
   }
 
   const backgroundSource: BackgroundSource =

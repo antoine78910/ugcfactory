@@ -16,6 +16,10 @@ import {
 import { logGenerationFailure, userFacingProviderErrorOrDefault } from "@/lib/generationUserMessage";
 import { requireSupabaseUser } from "@/lib/supabase/requireUser";
 import { getUserPlan } from "@/lib/supabase/getUserPlan";
+import { calculateStudioVideoEditCredits } from "@/lib/pricing";
+import { createSupabaseServiceClient } from "@/lib/supabase/admin";
+import { resolveAuthUserEmail } from "@/lib/sessionUserEmail";
+import { shouldChargePlatformCredits, assertSufficientCreditsResponse } from "@/lib/credits/metering";
 
 type Body = {
   accountPlan?: string;
@@ -33,7 +37,12 @@ type Body = {
   /** O1-style APIs: preserve source audio when supported. */
   keepAudio?: boolean;
   personalApiKey?: string;
+  /** Detected source video duration in seconds (used for pre-flight credit gate). */
+  videoDurationSeconds?: number;
 };
+
+/** Fallback duration when the client omits `videoDurationSeconds` (mirrors helper default). */
+const VIDEO_EDIT_FALLBACK_SECONDS = 10;
 
 function modeFromQuality(q: string | undefined, auto: boolean | undefined): "std" | "pro" {
   if (auto) return "pro";
@@ -114,8 +123,10 @@ export async function POST(req: Request) {
   }
 
   const personalKey = hasPersonalApiKey(body.personalApiKey) ? body.personalApiKey.trim() : undefined;
+  let dbPlanResolved: string | null = null;
   if (!personalKey) {
     const dbPlan = await getUserPlan(user.id);
+    dbPlanResolved = dbPlan;
     const accountPlan = dbPlan !== "free" ? dbPlan : parseAccountPlan(body.accountPlan);
     if (!canUseStudioVideoEditPicker(accountPlan, pickerId)) {
       return NextResponse.json(
@@ -128,6 +139,32 @@ export async function POST(req: Request) {
         { status: 403 },
       );
     }
+  }
+
+  const usesPersonalApi = Boolean(personalKey);
+  const admin = createSupabaseServiceClient();
+  const email = await resolveAuthUserEmail(user, admin);
+  const charges = shouldChargePlatformCredits({ usesPersonalApi, email });
+  if (charges && admin) {
+    const durationSec =
+      Number(body.videoDurationSeconds) > 0
+        ? Number(body.videoDurationSeconds)
+        : VIDEO_EDIT_FALLBACK_SECONDS;
+    const costDisplayCredits = calculateStudioVideoEditCredits({
+      editPickerId: pickerId,
+      editDurationSec: durationSec,
+      motionDurationSec: durationSec,
+      quality: body.quality ?? "std",
+      autoSettings: body.autoSettings === true,
+    });
+    const dbPlan = dbPlanResolved ?? (await getUserPlan(user.id));
+    const gate = await assertSufficientCreditsResponse({
+      admin,
+      userId: user.id,
+      planId: dbPlan ?? "free",
+      costDisplayCredits,
+    });
+    if (gate) return gate;
   }
 
   const kieModel = resolveKieModelForEditPicker(pickerId);
