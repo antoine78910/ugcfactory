@@ -203,7 +203,7 @@ export default function StudioUpscalePanel() {
         hasMore?: boolean;
       };
       setServerHistory(true);
-      setHistoryItems(json.data ?? []);
+      setHistoryItems((prev) => mergeStudioHistoryFirstPageWithLocal(json.data ?? [], prev));
       setHasMoreHistory(Boolean(json.hasMore));
       const hints = json.refundHints ?? [];
       if (hints.length) {
