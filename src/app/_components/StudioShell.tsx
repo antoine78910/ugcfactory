@@ -204,10 +204,20 @@ function StudioShellInner({
   const wasOnFullWidthStudioRef = useRef<boolean | null>(null);
 
   useEffect(() => {
-    try {
-      setNavCollapsedPref(localStorage.getItem(SIDEBAR_COLLAPSED_LS) === "1");
-    } catch {
-      /* ignore */
+    // Default behavior: sidebar OPEN everywhere, except full-width tools.
+    // We still allow persistence, but we don't want a previously-collapsed preference
+    // to keep the rail closed on the main app entry points.
+    const stripped = pathnameWithoutLegacyAppPrefix(window.location.pathname);
+    const first = stripped.split("/").filter(Boolean)[0] ?? "";
+    const onFullWidth = first === "workflow" || first === "ads-studio";
+    if (onFullWidth) {
+      try {
+        setNavCollapsedPref(localStorage.getItem(SIDEBAR_COLLAPSED_LS) === "1");
+      } catch {
+        setNavCollapsedPref(true);
+      }
+    } else {
+      setNavCollapsedPref(false);
     }
   }, []);
 
@@ -217,6 +227,8 @@ function StudioShellInner({
     const onFullWidth =
       first === "workflow" || first === "ads-studio";
     if (!onFullWidth) {
+      // Always re-open the sidebar when leaving full-width tools.
+      setNavCollapsedPref(false);
       wasOnFullWidthStudioRef.current = false;
       return;
     }
