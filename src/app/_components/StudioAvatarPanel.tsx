@@ -21,6 +21,10 @@ import { AvatarPickerDialog } from "@/app/_components/AvatarPickerDialog";
 import { AvatarInputCornerBadge } from "@/app/_components/AvatarInputCornerBadge";
 import type { StudioHistoryItem } from "@/app/_components/StudioGenerationsHistory";
 import { studioImageCreditsPerOutput, type StudioImageOutputResolution } from "@/lib/pricing";
+import {
+  appendStudioHistoryNextPage,
+  mergeStudioHistoryFirstPageWithLocal,
+} from "@/lib/mergeStudioHistoryWithLocal";
 import { loadAvatarUrls } from "@/lib/avatarLibrary";
 import { uploadFileToCdn } from "@/lib/uploadBlobUrlToCdn";
 import { STUDIO_IMAGE_FILE_ACCEPT } from "@/lib/studioUploadValidation";
@@ -233,6 +237,9 @@ export default function StudioAvatarPanel({
   const [historyItems, setHistoryItems] = useState<StudioHistoryItem[]>([]);
   /** null = unknown; true = Supabase + server poll; false = guest / local only */
   const [serverHistory, setServerHistory] = useState<boolean | null>(null);
+  const [hasMoreHistory, setHasMoreHistory] = useState(false);
+  const [isLoadingMoreHistory, setIsLoadingMoreHistory] = useState(false);
+  const AVATAR_PAGE_LIMIT = 60;
 
   type Bill = { open: false } | { open: true; reason: "credits"; required: number };
   const [billing, setBilling] = useState<Bill>({ open: false });
@@ -249,22 +256,30 @@ export default function StudioAvatarPanel({
 
   useEffect(() => {
     void (async () => {
-      const res = await fetch("/api/studio/generations?kind=avatar", { cache: "no-store" });
+      const res = await fetch(
+        `/api/studio/generations?kind=avatar&limit=${AVATAR_PAGE_LIMIT}`,
+        { cache: "no-store" },
+      );
       if (res.status === 401) {
-        // Not authenticated, never show localStorage data that may belong to another account
         setServerHistory(false);
         setHistoryItems([]);
+        setHasMoreHistory(false);
         return;
       }
       if (!res.ok) {
-        // Server error, fall back to local only as a last resort (guest/offline mode)
         setServerHistory(false);
         setHistoryItems(readLocalAvatarHistory());
+        setHasMoreHistory(false);
         return;
       }
-      const json = (await res.json()) as { data?: StudioHistoryItem[]; refundHints?: RefundHint[] };
+      const json = (await res.json()) as {
+        data?: StudioHistoryItem[];
+        refundHints?: RefundHint[];
+        hasMore?: boolean;
+      };
       setServerHistory(true);
       setHistoryItems(json.data ?? []);
+      setHasMoreHistory(Boolean(json.hasMore));
       const hints = json.refundHints ?? [];
       if (hints.length) {
         applyRefundHints(hints, grantCreditsRef.current, creditsRef);
@@ -273,8 +288,11 @@ export default function StudioAvatarPanel({
     })();
   }, []);
 
+  const hasInFlightAvatar = historyItems.some((i) => i.status === "generating");
+
   useEffect(() => {
     if (serverHistory !== true) return;
+    if (!hasInFlightAvatar) return;
 
     const tick = () => {
       void (async () => {
@@ -288,7 +306,9 @@ export default function StudioAvatarPanel({
         });
         if (!res.ok) return;
         const json = (await res.json()) as { data?: StudioHistoryItem[]; refundHints?: RefundHint[] };
-        if (Array.isArray(json.data)) setHistoryItems(json.data);
+        if (Array.isArray(json.data)) {
+          setHistoryItems((prev) => mergeStudioHistoryFirstPageWithLocal(json.data!, prev));
+        }
         const hints = json.refundHints ?? [];
         if (hints.length) {
           applyRefundHints(hints, grantCreditsRef.current, creditsRef);
@@ -300,7 +320,7 @@ export default function StudioAvatarPanel({
     tick();
     const id = window.setInterval(tick, 4000);
     return () => window.clearInterval(id);
-  }, [serverHistory]);
+  }, [serverHistory, hasInFlightAvatar]);
 
   useEffect(() => {
     if (serverHistory !== false) return;
@@ -538,6 +558,40 @@ export default function StudioAvatarPanel({
     });
     toast.success("Avatar reference added");
   }, []);
+
+  const onLoadMoreHistory = useCallback(async () => {
+    if (isLoadingMoreHistory || !hasMoreHistory) return;
+    setIsLoadingMoreHistory(true);
+    try {
+      const oldest = historyItems.reduce<number | null>(
+        (acc, i) => (acc === null || i.createdAt < acc ? i.createdAt : acc),
+        null,
+      );
+      if (oldest === null) {
+        setHasMoreHistory(false);
+        return;
+      }
+      const before = new Date(oldest).toISOString();
+      const res = await fetch(
+        `/api/studio/generations?kind=avatar&limit=${AVATAR_PAGE_LIMIT}&before=${encodeURIComponent(before)}`,
+        { cache: "no-store" },
+      );
+      if (!res.ok) return;
+      const json = (await res.json()) as {
+        data?: StudioHistoryItem[];
+        hasMore?: boolean;
+      };
+      const next = json.data ?? [];
+      if (next.length === 0) {
+        setHasMoreHistory(false);
+        return;
+      }
+      setHistoryItems((prev) => appendStudioHistoryNextPage(prev, next));
+      setHasMoreHistory(Boolean(json.hasMore));
+    } finally {
+      setIsLoadingMoreHistory(false);
+    }
+  }, [historyItems, hasMoreHistory, isLoadingMoreHistory]);
 
   const visibleHistoryItems = historyItems.filter((item) =>
     mode === "turnaround" ? isAvatar360HistoryItem(item) : !isAvatar360HistoryItem(item),
@@ -781,6 +835,9 @@ export default function StudioAvatarPanel({
                 mediaLabel="Avatar"
                 onItemDeleted={(id) => setHistoryItems((prev) => prev.filter((i) => i.id !== id))}
                 onChangeVoice={onChangeVoice}
+                hasMore={hasMoreHistory}
+                isLoadingMore={isLoadingMoreHistory}
+                onLoadMore={onLoadMoreHistory}
               />
             }
             empty={null}
