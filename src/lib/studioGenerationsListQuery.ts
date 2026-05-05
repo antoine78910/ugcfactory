@@ -18,7 +18,9 @@ function byCreatedAtDesc(a: StudioGenerationRow, b: StudioGenerationRow): number
 export async function fetchStudioGenerationRows(
   supabase: SupabaseClient,
   userId: string,
-  opts: { mode: "all" } | { kinds: string[] },
+  opts:
+    | { mode: "all" }
+    | { kinds: string[]; limit?: number; before?: string },
 ): Promise<StudioGenerationRow[]> {
   if ("mode" in opts && opts.mode === "all") {
     const kinds = [...STUDIO_LIBRARY_KINDS];
@@ -47,13 +49,20 @@ export async function fetchStudioGenerationRows(
   if (!("kinds" in opts)) {
     return [];
   }
-  const { kinds } = opts;
+  const { kinds, limit, before } = opts;
+  const effectiveLimit = Math.max(
+    1,
+    Math.min(limit ?? STUDIO_GENERATIONS_LIST_LIMIT, STUDIO_GENERATIONS_LIST_LIMIT),
+  );
+
   let q = supabase
     .from("studio_generations")
     .select("*")
     .eq("user_id", userId)
     .order("created_at", { ascending: false })
-    .limit(STUDIO_GENERATIONS_LIST_LIMIT);
+    .limit(effectiveLimit);
+
+  if (before) q = q.lt("created_at", before);
 
   if (kinds.length === 1) {
     q = q.eq("kind", kinds[0]!);
