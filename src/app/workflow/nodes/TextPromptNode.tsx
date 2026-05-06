@@ -2,7 +2,7 @@
 
 import { Handle, Position, type Node, type NodeProps } from "@xyflow/react";
 import { FileText, Type } from "lucide-react";
-import { useCallback } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 
 import { PromptEnhanceCornerButton } from "@/app/_components/PromptEnhanceCornerButton";
 import { cn } from "@/lib/utils";
@@ -23,6 +23,15 @@ export function TextPromptNode({ id, data: rawData, selected }: NodeProps<TextPr
   const data = { ...defaultData, ...rawData };
   const patchAll = useWorkflowNodePatch();
   const patch = useCallback((p: Partial<TextPromptNodeData>) => patchAll(id, p), [id, patchAll]);
+  const [draft, setDraft] = useState(data.prompt ?? "");
+  const focusedRef = useRef(false);
+
+  useEffect(() => {
+    // Only sync external updates when not actively editing, to prevent caret jumps.
+    if (focusedRef.current) return;
+    setDraft(data.prompt ?? "");
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- sync only from incoming data
+  }, [data.prompt]);
 
   const outputBubbleShellClass =
     "workflow-port-create-cursor nodrag nopan relative h-8 w-8 shrink-0 rounded-full border border-transparent bg-transparent shadow-none";
@@ -50,16 +59,29 @@ export function TextPromptNode({ id, data: rawData, selected }: NodeProps<TextPr
           <div className="relative p-2.5">
             <div className="relative">
               <textarea
-                value={data.prompt}
-                onChange={(e) => patch({ prompt: e.target.value })}
+                value={draft}
+                onChange={(e) => {
+                  const next = e.target.value;
+                  setDraft(next);
+                  patch({ prompt: next });
+                }}
                 placeholder="Type the prompt to send into connected generators…"
                 rows={6}
                 onWheelCapture={keepWheelInsideScrollable}
+                onFocus={() => {
+                  focusedRef.current = true;
+                }}
+                onBlur={() => {
+                  focusedRef.current = false;
+                }}
                 className="nodrag nopan nowheel w-full resize-y rounded-lg border border-white/12 bg-black/50 px-2.5 pb-10 pt-2 text-[13px] leading-snug text-white/90 placeholder:text-white/28 outline-none focus:border-violet-500/35"
               />
               <PromptEnhanceCornerButton
-                value={data.prompt}
-                onApply={(next) => patch({ prompt: next })}
+                value={draft}
+                onApply={(next) => {
+                  setDraft(next);
+                  patch({ prompt: next });
+                }}
                 surface="workflow"
               />
             </div>
