@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { Loader2, Search, Star, Trash2 } from "lucide-react";
 import type { TTLookupResult, TTTracker } from "@/lib/trendtrack";
+import { proxiedMediaSrc } from "@/lib/mediaProxyUrl";
 import { cn } from "@/lib/utils";
 import type { IntelligenceCompetitor } from "@/app/api/intelligence/competitors/route";
 
@@ -11,17 +12,65 @@ export type CompetitorPick = {
   isTracked: boolean;
 };
 
-/** Clearbit logo (free); on error swap to Google favicons — zero TrendTrack credits. */
+/**
+ * Prefer TrendTrack avatar when present, else Clearbit logo from domain, then Google favicon —
+ * all free; no extra TrendTrack calls.
+ */
 function CompetitorDomainAvatar({
   domain,
+  logoUrl,
   name,
 }: {
   domain: string | undefined;
+  logoUrl: string | undefined;
   name: string;
 }) {
   const d = domain?.trim().replace(/^www\./i, "").toLowerCase() ?? "";
   const letter = (name || "?").charAt(0).toUpperCase();
   const hasDomain = Boolean(d && d.includes("."));
+  const remoteLogo = (logoUrl ?? "").trim();
+  const proxiedLogo = remoteLogo ? proxiedMediaSrc(remoteLogo) || remoteLogo : "";
+  const clearbit = hasDomain ? `https://logo.clearbit.com/${encodeURIComponent(d)}` : "";
+  const googleFb = hasDomain ? `https://www.google.com/s2/favicons?domain=${encodeURIComponent(d)}&sz=64` : "";
+
+  const chainImageError = (e: { currentTarget: HTMLImageElement }) => {
+    const el = e.currentTarget;
+    const step = el.dataset.step ?? "api";
+    if (step === "api" && clearbit) {
+      el.dataset.step = "clearbit";
+      el.src = clearbit;
+      el.className =
+        "relative z-[1] h-9 w-9 rounded-[6px] border border-white/10 bg-white/[0.06] object-contain";
+      return;
+    }
+    if (step === "clearbit" && googleFb) {
+      el.dataset.step = "google";
+      el.src = googleFb;
+      return;
+    }
+    el.onerror = null;
+    el.style.visibility = "hidden";
+  };
+
+  if (proxiedLogo) {
+    return (
+      <span className="relative inline-flex h-9 w-9 shrink-0">
+        <span className="absolute inset-0 z-0 flex items-center justify-center rounded-[6px] bg-violet-500/22 text-[10px] font-bold text-violet-200">
+          {letter}
+        </span>
+        {/* eslint-disable-next-line @next/next/no-img-element */}
+        <img
+          data-step="api"
+          src={proxiedLogo}
+          alt=""
+          loading="lazy"
+          decoding="async"
+          className="relative z-[1] h-9 w-9 rounded-[6px] border border-white/10 bg-white/[0.06] object-cover"
+          onError={chainImageError}
+        />
+      </span>
+    );
+  }
 
   if (!hasDomain) {
     return (
@@ -31,9 +80,6 @@ function CompetitorDomainAvatar({
     );
   }
 
-  const clearbit = `https://logo.clearbit.com/${encodeURIComponent(d)}`;
-  const googleFb = `https://www.google.com/s2/favicons?domain=${encodeURIComponent(d)}&sz=64`;
-
   return (
     <span className="relative inline-flex h-9 w-9 shrink-0">
       <span className="absolute inset-0 z-0 flex items-center justify-center rounded-[6px] bg-violet-500/22 text-[10px] font-bold text-violet-200">
@@ -41,19 +87,14 @@ function CompetitorDomainAvatar({
       </span>
       {/* eslint-disable-next-line @next/next/no-img-element */}
       <img
+        data-step="clearbit"
         src={clearbit}
         alt=""
         loading="lazy"
         decoding="async"
         className="relative z-[1] h-9 w-9 rounded-[6px] border border-white/10 bg-white/[0.06] object-contain"
         onError={(e) => {
-          const el = e.currentTarget;
-          if (!el.src.includes("google.com")) {
-            el.src = googleFb;
-            return;
-          }
-          el.onerror = null;
-          el.style.visibility = "hidden";
+          chainImageError(e);
         }}
       />
     </span>
@@ -292,7 +333,7 @@ export function CompetitorsPanel({
                   active ? "bg-violet-500/15 text-white" : "text-white/80 hover:bg-white/5",
                 )}
               >
-                <CompetitorDomainAvatar domain={r.domain} name={r.name} />
+                <CompetitorDomainAvatar domain={r.domain} logoUrl={r.logo ?? r.logoUrl} name={r.name} />
                 <div className="min-w-0 flex-1">
                   <div className="truncate text-sm font-medium text-white">{r.name}</div>
                   <div className="truncate text-[11px] text-white/55">{subtitleLine(r)}</div>
