@@ -1065,12 +1065,18 @@ export type WorkflowRunVideoParams = {
 
 /** True when the picker accepts a discrete first-frame image (image-to-video / first+last). */
 export function workflowVideoModelHasStartFrame(modelId: string): boolean {
+  const normalized = normalizeLegacySeedanceMarketModelId(modelId);
+  // Seedance 2 / Fast: we accept start/end frames as part of omni_reference media set.
+  if (normalized === "bytedance/seedance-2" || normalized === "bytedance/seedance-2-fast") return true;
   if (modelId.startsWith("bytedance/seedance")) return false;
   return true;
 }
 
 /** True when the picker accepts a discrete last-frame image. */
 export function workflowVideoModelHasEndFrame(modelId: string): boolean {
+  const normalized = normalizeLegacySeedanceMarketModelId(modelId);
+  // Seedance 2 / Fast: end frame is allowed as part of omni_reference media set.
+  if (normalized === "bytedance/seedance-2" || normalized === "bytedance/seedance-2-fast") return true;
   if (modelId === "kling-3.0/video") return true;
   if (modelId === "veo3" || modelId === "veo3_fast" || modelId === "veo3_lite") return true;
   return false;
