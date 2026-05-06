@@ -67,7 +67,9 @@ import {
   useState,
   type ChangeEvent,
   type CSSProperties,
+  type Dispatch,
   type DragEvent,
+  type SetStateAction,
 } from "react";
 
 import { AvatarPickerDialog } from "@/app/_components/AvatarPickerDialog";
@@ -162,12 +164,15 @@ import {
 } from "./workflowMediaAspect";
 import type { StickyNoteNodeData } from "./workflowStickyNoteTypes";
 import {
+  appendMissingWorkflowVideoElementImageTags,
   estimateWorkflowAdAssetRunCredits,
   resolveWorkflowVideoModelId,
   WORKFLOW_SEEDANCE_2_PRO_VIDEO_FILE_ACCEPT,
+  workflowVideoElementInputHandleAffectsImageMentions,
   workflowVideoGeneratorAcceptsUpstreamVideo,
   workflowVideoModelHasEndFrame,
   workflowVideoModelHasStartFrame,
+  workflowVideoOrderedElementImageRefs,
 } from "./workflowNodeRun";
 
 /** Matches `workflowNodeFactory` default for new Video Generator nodes (picker chaining eligibility). */
@@ -518,6 +523,46 @@ function workflowHandlesAllowConnect(
   const dstKind = targetKindFromNodeHandle(targetNode, targetHandle);
   if (canConnectByDataKind(srcKind, dstKind)) return true;
   return workflowVideoChainsToGeneratorFramePorts(sourceNode, sourceHandle, targetNode, targetHandle);
+}
+
+function computeVideoGeneratorElementPromptAugmentation(opts: {
+  nodes: WorkflowCanvasNode[];
+  edges: Edge[];
+  targetId: string;
+  targetHandle: string | null | undefined;
+}): { nodeId: string; prompt: string } | null {
+  const { nodes, edges, targetId, targetHandle } = opts;
+  const targetNode = nodes.find((n) => n.id === targetId);
+  if (!targetNode || targetNode.type !== "adAsset") return null;
+  const d = targetNode.data as AdAssetNodeData;
+  if (d.kind !== "video") return null;
+  if (!workflowVideoElementInputHandleAffectsImageMentions(targetHandle, d.model ?? "")) return null;
+  const ordered = workflowVideoOrderedElementImageRefs({
+    modelPickerValue: d.model ?? "",
+    nodes,
+    edges,
+    videoNodeId: targetId,
+    data: d,
+  });
+  const need = ordered.length;
+  if (need <= 0) return null;
+  const nextPrompt = appendMissingWorkflowVideoElementImageTags(d.prompt ?? "", need);
+  if (nextPrompt === (d.prompt ?? "")) return null;
+  return { nodeId: targetId, prompt: nextPrompt };
+}
+
+function patchWorkflowVideoGeneratorPromptAfterConnect(
+  setNodesFn: Dispatch<SetStateAction<WorkflowCanvasNode[]>>,
+  patch: { nodeId: string; prompt: string } | null,
+) {
+  if (!patch) return;
+  setNodesFn((prev) =>
+    prev.map((n) =>
+      n.id === patch.nodeId && n.type === "adAsset"
+        ? { ...n, data: { ...(n.data as AdAssetNodeData), prompt: patch.prompt } }
+        : n,
+    ),
+  );
 }
 
 function WorkflowAddPaletteRow({
@@ -1217,10 +1262,11 @@ function WorkflowReactFlowChrome({
             label: `${baseName} (uploading...)`,
           });
           tempNodeId = tempNode.id;
+          const nodesSnapForPrompt = [...(getNodes() as WorkflowCanvasNode[]), tempNode];
           setNodes((prev) => [...prev, tempNode]);
           if (pendingConnect) {
-            setEdges((eds) =>
-              addEdge(
+            setEdges((eds) => {
+              const next = addEdge(
                 {
                   id: `e-${tempNode.id}-${pendingConnect.targetNodeId}-${crypto.randomUUID().slice(0, 8)}`,
                   source: tempNode.id,
@@ -1230,8 +1276,18 @@ function WorkflowReactFlowChrome({
                   style: { stroke: "rgba(167, 139, 250, 0.5)", strokeWidth: 2 },
                 },
                 eds,
-              ),
-            );
+              );
+              patchWorkflowVideoGeneratorPromptAfterConnect(
+                setNodes,
+                computeVideoGeneratorElementPromptAugmentation({
+                  nodes: nodesSnapForPrompt,
+                  edges: next,
+                  targetId: pendingConnect.targetNodeId,
+                  targetHandle: pendingConnect.targetHandleId,
+                }),
+              );
+              return next;
+            });
             updatePendingImageRefConnect(null);
           }
           setAddOpen(false);
@@ -1268,7 +1324,7 @@ function WorkflowReactFlowChrome({
         }
       })();
     },
-    [screenToFlowPosition, setEdges, setNodes, setAddOpen, setFrameOpen, updatePendingImageRefConnect],
+    [screenToFlowPosition, getNodes, setEdges, setNodes, setAddOpen, setFrameOpen, updatePendingImageRefConnect],
   );
 
   const onUploadFileChange = useCallback(
@@ -1307,10 +1363,11 @@ function WorkflowReactFlowChrome({
           intrinsicAspect: ar,
           label: "Avatar",
         });
+        const nodesSnapForPrompt = [...(getNodes() as WorkflowCanvasNode[]), nextNode];
         setNodes((prev) => [...prev, nextNode]);
         if (pendingConnect) {
-          setEdges((eds) =>
-            addEdge(
+          setEdges((eds) => {
+            const next = addEdge(
               {
                 id: `e-${nextNode.id}-${pendingConnect.targetNodeId}-${crypto.randomUUID().slice(0, 8)}`,
                 source: nextNode.id,
@@ -1320,8 +1377,18 @@ function WorkflowReactFlowChrome({
                 style: { stroke: "rgba(167, 139, 250, 0.5)", strokeWidth: 2 },
               },
               eds,
-            ),
-          );
+            );
+            patchWorkflowVideoGeneratorPromptAfterConnect(
+              setNodes,
+              computeVideoGeneratorElementPromptAugmentation({
+                nodes: nodesSnapForPrompt,
+                edges: next,
+                targetId: pendingConnect.targetNodeId,
+                targetHandle: pendingConnect.targetHandleId,
+              }),
+            );
+            return next;
+          });
           updatePendingImageRefConnect(null);
         }
         setAddOpen(false);
@@ -1329,7 +1396,7 @@ function WorkflowReactFlowChrome({
         toast.success("Node added");
       })();
     },
-    [screenToFlowPosition, setEdges, setNodes, setAddOpen, setFrameOpen, updatePendingImageRefConnect],
+    [screenToFlowPosition, getNodes, setEdges, setNodes, setAddOpen, setFrameOpen, updatePendingImageRefConnect],
   );
 
   const setDragPayload = useCallback((e: DragEvent, payload: string) => {
@@ -2651,8 +2718,9 @@ function WorkflowFlowWorkspace({
           setPlacementPicker(null);
           return;
         }
-        setEdges((eds) =>
-          addEdge(
+        const nodesSnapFrom = [...(getNodes() as WorkflowCanvasNode[]), newNode];
+        setEdges((eds) => {
+          const next = addEdge(
             {
               id: `e-${from.nodeId}-${newNode.id}-${crypto.randomUUID().slice(0, 8)}`,
               source: from.nodeId,
@@ -2662,8 +2730,18 @@ function WorkflowFlowWorkspace({
               style: { stroke: "rgba(167, 139, 250, 0.5)", strokeWidth: 2 },
             },
             eds,
-          ),
-        );
+          );
+          patchWorkflowVideoGeneratorPromptAfterConnect(
+            setNodes,
+            computeVideoGeneratorElementPromptAugmentation({
+              nodes: nodesSnapFrom,
+              edges: next,
+              targetId: newNode.id,
+              targetHandle: defaultTargetHandle,
+            }),
+          );
+          return next;
+        });
       }
       if (to && connectableTo) {
         const newAd = newNode.type === "adAsset" ? (newNode.data as AdAssetNodeData) : null;
@@ -2671,8 +2749,9 @@ function WorkflowFlowWorkspace({
         if (newNode.type === "promptList" && to.handleId === "inVideo") {
           outHandle = "outVideo";
         }
-        setEdges((eds) =>
-          addEdge(
+        const nodesSnapTo = [...(getNodes() as WorkflowCanvasNode[]), newNode];
+        setEdges((eds) => {
+          const next = addEdge(
             {
               id: `e-${newNode.id}-${to.nodeId}-${crypto.randomUUID().slice(0, 8)}`,
               source: newNode.id,
@@ -2682,8 +2761,18 @@ function WorkflowFlowWorkspace({
               style: { stroke: "rgba(167, 139, 250, 0.5)", strokeWidth: 2 },
             },
             eds,
-          ),
-        );
+          );
+          patchWorkflowVideoGeneratorPromptAfterConnect(
+            setNodes,
+            computeVideoGeneratorElementPromptAugmentation({
+              nodes: nodesSnapTo,
+              edges: next,
+              targetId: to.nodeId,
+              targetHandle: to.handleId,
+            }),
+          );
+          return next;
+        });
       }
       setPlacementPicker(null);
       const linked = (from && connectableFrom) || (to && connectableTo);
@@ -2884,7 +2973,7 @@ function WorkflowFlowWorkspace({
         const base = replaceSameHandle
           ? eds.filter((e) => !(e.target === target && (e.targetHandle ?? "") === handleId))
           : eds;
-        return addEdge(
+        const next = addEdge(
           {
             ...params,
             id: `e-${source}-${target}-${crypto.randomUUID().slice(0, 8)}`,
@@ -2893,9 +2982,19 @@ function WorkflowFlowWorkspace({
           },
           base,
         );
+        patchWorkflowVideoGeneratorPromptAfterConnect(
+          setNodes,
+          computeVideoGeneratorElementPromptAugmentation({
+            nodes: allNodes,
+            edges: next,
+            targetId: target,
+            targetHandle: resolvedTargetHandle,
+          }),
+        );
+        return next;
       });
     },
-    [readOnly, setEdges, getNodes],
+    [readOnly, setEdges, setNodes, getNodes],
   );
   const isValidConnection: IsValidConnection<Edge> = useCallback(
     (params) => {
@@ -2940,10 +3039,11 @@ function WorkflowFlowWorkspace({
       const tryLink = () => {
         const pair = suggestAutoConnectAfterNodeDrag(draggedId, getNodes, getInternalNode);
         if (!pair) return;
+        const snapshot = getNodes() as WorkflowCanvasNode[];
         setEdges((eds) => {
           if (eds.some((e) => e.source === pair.source && e.target === pair.target)) return eds;
-          const srcNode = all.find((n) => n.id === pair.source);
-          const tgtNode = all.find((n) => n.id === pair.target);
+          const srcNode = snapshot.find((n) => n.id === pair.source);
+          const tgtNode = snapshot.find((n) => n.id === pair.target);
           const srcAdKind =
             srcNode?.type === "adAsset" ? (srcNode.data as AdAssetNodeData).kind : undefined;
           const srcHandle =
@@ -2959,7 +3059,7 @@ function WorkflowFlowWorkspace({
                 ? "in"
                 : null;
           if (!targetHandleResolved) return eds;
-          return addEdge(
+          const next = addEdge(
             {
               id: `e-${pair.source}-${pair.target}-${crypto.randomUUID().slice(0, 8)}`,
               source: pair.source,
@@ -2970,6 +3070,16 @@ function WorkflowFlowWorkspace({
             },
             eds,
           );
+          patchWorkflowVideoGeneratorPromptAfterConnect(
+            setNodes,
+            computeVideoGeneratorElementPromptAugmentation({
+              nodes: snapshot,
+              edges: next,
+              targetId: pair.target,
+              targetHandle: targetHandleResolved,
+            }),
+          );
+          return next;
         });
       };
       requestAnimationFrame(() => requestAnimationFrame(tryLink));

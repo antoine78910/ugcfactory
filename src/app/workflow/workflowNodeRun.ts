@@ -1118,6 +1118,122 @@ function dedupeKeepOrder(urls: string[]): string[] {
   return out;
 }
 
+/** When true, URLs from this wired input contribute to `@imageN` allowance (batch index 0). */
+export function workflowVideoElementInputHandleAffectsImageMentions(
+  targetHandle: string | null | undefined,
+  workflowModelPickerValue: string,
+): boolean {
+  const h = (targetHandle ?? "").trim();
+  if (!h) return false;
+  if (h === "startImage" || h === "references" || h === "inImage") return true;
+  if (h === "endImage") {
+    const m = normalizeLegacySeedanceMarketModelId(resolveWorkflowVideoModelId(workflowModelPickerValue));
+    return m === "bytedance/seedance-2" || m === "bytedance/seedance-2-fast";
+  }
+  return false;
+}
+
+/**
+ * Ordered reference URLs mapped to `@image1`, `@image2`, … — mirrors Video Generator batch index `0`
+ * in `AdAssetNode` / `runWorkflowVideoJob` (`seedanceMergedImageUrls` vs Kling elements pool).
+ */
+export function workflowVideoOrderedElementImageRefs(params: {
+  modelPickerValue: string;
+  nodes: Node[];
+  edges: Edge[];
+  videoNodeId: string;
+  data: Pick<
+    AdAssetNodeData,
+    "referenceMediaKind" | "referencePreviewUrl" | "videoStartImageUrl" | "videoEndImageUrl"
+  >;
+}): string[] {
+  const modelId = resolveWorkflowVideoModelId(params.modelPickerValue);
+  if (!workflowVideoModelSupportsElements(modelId)) return [];
+
+  const { nodes, edges, videoNodeId, data } = params;
+
+  const linkedFromStartPortStrict = collectLinkedImageUrlsForHandles(nodes, edges, videoNodeId, ["startImage"]);
+  const linkedFromEndPort = collectLinkedImageUrlsForHandles(nodes, edges, videoNodeId, ["endImage"]);
+  const linkedFromReferencesPortStrict = collectLinkedImageUrlsForHandles(nodes, edges, videoNodeId, [
+    "references",
+  ]);
+  const linkedFromLegacyImagePorts = collectLinkedImageUrlsForHandles(nodes, edges, videoNodeId, ["inImage"]);
+  const linkedFromStartPort =
+    linkedFromStartPortStrict.length > 0 ? linkedFromStartPortStrict : linkedFromLegacyImagePorts;
+  const linkedFromReferencesPort =
+    linkedFromReferencesPortStrict.length > 0 ? linkedFromReferencesPortStrict : linkedFromLegacyImagePorts;
+
+  const nodeRefUrl =
+    data.referenceMediaKind === "image" && data.referencePreviewUrl?.trim()
+      ? data.referencePreviewUrl.trim()
+      : "";
+
+  const startFrame =
+    (data.videoStartImageUrl?.trim() || linkedFromStartPort[0] || nodeRefUrl || "").trim() || undefined;
+
+  const endFrame = (data.videoEndImageUrl?.trim() || linkedFromEndPort[0] || "").trim() || undefined;
+
+  const referencePool = [...linkedFromReferencesPort];
+  if (nodeRefUrl && startFrame !== nodeRefUrl && !referencePool.includes(nodeRefUrl)) {
+    referencePool.push(nodeRefUrl);
+  }
+
+  const referenceOnly = Array.from(new Set(referencePool.filter(Boolean))).filter(
+    (u) => u !== startFrame && u !== endFrame,
+  );
+
+  const indexedStartImages =
+    linkedFromStartPort.length > 0
+      ? linkedFromStartPort
+      : linkedFromReferencesPort.length > 0
+        ? linkedFromReferencesPort
+        : [];
+
+  const pickByIndex = (arr: string[], idx: number, fallback: string | undefined): string | undefined => {
+    if (!arr.length) return fallback;
+    const clamped = idx >= arr.length ? arr[arr.length - 1] : arr[idx];
+    const chosen = clamped?.trim();
+    return chosen || fallback;
+  };
+
+  const batchIdx = 0;
+  const indexedStartFrame = pickByIndex(indexedStartImages, batchIdx, startFrame);
+  const indexedReferenceOnly = referenceOnly.filter((u) => u !== indexedStartFrame && u !== endFrame);
+
+  const startUrl = indexedStartFrame;
+  const seedanceNormalized = normalizeLegacySeedanceMarketModelId(modelId);
+  const seedanceKie =
+    seedanceNormalized === "bytedance/seedance-2" || seedanceNormalized === "bytedance/seedance-2-fast";
+
+  if (seedanceKie) {
+    return dedupeKeepOrder(
+      [startUrl, endFrame, ...indexedReferenceOnly].filter((u): u is string => Boolean(u && u.trim())),
+    ).slice(0, SEEDANCE_PRO_REF_LIMIT);
+  }
+
+  return dedupeKeepOrder([startUrl, ...indexedReferenceOnly].filter((u): u is string => Boolean(u && u.trim())));
+}
+
+/** Appends `@image1` … `@imageN` (only indices missing from the prompt) at the end. */
+export function appendMissingWorkflowVideoElementImageTags(prompt: string, neededSlots: number): string {
+  const nNeeds = Number(neededSlots);
+  if (!Number.isFinite(nNeeds) || nNeeds <= 0) return prompt;
+  const existing = new Set<number>();
+  const re = /@image(\d+)\b/gi;
+  let m: RegExpExecArray | null;
+  while ((m = re.exec(prompt)) !== null) {
+    const n = Number(m[1]);
+    if (Number.isFinite(n) && n > 0) existing.add(n);
+  }
+  const missing: string[] = [];
+  for (let i = 1; i <= nNeeds; i++) {
+    if (!existing.has(i)) missing.push(`@image${i}`);
+  }
+  if (!missing.length) return prompt;
+  const base = prompt.replace(/\s*$/, "");
+  return base.length ? `${base} ${missing.join(" ")}` : missing.join(" ");
+}
+
 function maxPromptImageMention(prompt: string): number {
   let max = 0;
   const re = /@image(\d+)\b/gi;
