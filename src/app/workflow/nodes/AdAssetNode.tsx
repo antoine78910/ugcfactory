@@ -1155,6 +1155,8 @@ export function AdAssetNode({ id, data, selected }: NodeProps<AdAssetNodeType>) 
     [cfg.title, data.kind, data.label, id],
   );
 
+  const pendingPollAbortRef = useRef<AbortController | null>(null);
+
   useEffect(() => {
     if (data.kind !== "image" && data.kind !== "video" && data.kind !== "motion") return;
     const pending = data.pendingWorkflowRun;
@@ -1174,9 +1176,13 @@ export function AdAssetNode({ id, data, selected }: NodeProps<AdAssetNodeType>) 
     const poll = async () => {
       let done = false;
       try {
+        pendingPollAbortRef.current?.abort();
+        const controller = new AbortController();
+        pendingPollAbortRef.current = controller;
         const res = await fetch("/api/studio/generations/poll", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
+          signal: controller.signal,
           body: JSON.stringify({
             kind: "workflow",
             personalApiKey: getPersonalApiKey()?.trim() || undefined,
@@ -1338,6 +1344,8 @@ export function AdAssetNode({ id, data, selected }: NodeProps<AdAssetNodeType>) 
     void poll();
     return () => {
       alive = false;
+      pendingPollAbortRef.current?.abort();
+      pendingPollAbortRef.current = null;
       if (timer) clearTimeout(timer);
     };
   }, [
@@ -1347,6 +1355,47 @@ export function AdAssetNode({ id, data, selected }: NodeProps<AdAssetNodeType>) 
     finalizeProgressMediaList,
     id,
     patch,
+    setPendingWorkflowRun,
+  ]);
+
+  const cancelGeneration = useCallback(() => {
+    if (!generating) return;
+    const pending = data.pendingWorkflowRun;
+    pendingPollAbortRef.current?.abort();
+    pendingPollAbortRef.current = null;
+    if (pending?.progressListId) {
+      patch(pending.progressListId, {
+        ...(pending.listLabel?.trim() ? { label: pending.listLabel.trim() } : {}),
+        lines: (pending.taskIds ?? []).map((_, idx) =>
+          workflowMediaErrorToken({
+            nodeId: id,
+            prompt: prompt ?? "",
+            kind: pending.mediaKind === "video" ? "video" : "image",
+            message: "Cancelled",
+          }),
+        ),
+        mode: "results",
+        contentKind: "media",
+      });
+      finalizeProgressMediaList(pending.progressListId, undefined, pending.listLabel);
+    }
+    setPendingWorkflowRun(null);
+    setGenerating(false);
+    setLastGenerationError("Cancelled.");
+    setLastGenerationErrorDetails(null);
+    setErrorDetailsOpen(false);
+    toast.message("Cancelled", { description: "Generation polling stopped." });
+    emitRunLog("info", "Generation cancelled by user (polling stopped).");
+    emitRunFinished(false);
+  }, [
+    data.pendingWorkflowRun,
+    emitRunFinished,
+    emitRunLog,
+    finalizeProgressMediaList,
+    generating,
+    id,
+    patch,
+    prompt,
     setPendingWorkflowRun,
   ]);
 
@@ -3575,6 +3624,21 @@ export function AdAssetNode({ id, data, selected }: NodeProps<AdAssetNodeType>) 
                   <ArrowRight className="h-3.5 w-3.5 text-zinc-900" strokeWidth={2.25} />
                 )}
               </button>
+              {generating ? (
+                <button
+                  type="button"
+                  title="Cancel generation"
+                  aria-label="Cancel generation"
+                  className="nodrag nopan ml-2 inline-flex h-7 w-7 shrink-0 items-center justify-center rounded-full border border-white/14 bg-white/[0.06] text-white/80 shadow-md transition hover:bg-white/[0.10] hover:text-white"
+                  onPointerDown={(e) => e.stopPropagation()}
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    cancelGeneration();
+                  }}
+                >
+                  <X className="h-3.5 w-3.5" strokeWidth={2.25} />
+                </button>
+              ) : null}
               {runChoiceOpen && hasDownstreamModules ? (
                 <div className="absolute bottom-[calc(100%+8px)] right-0 z-50 min-w-[170px] rounded-xl border border-white/12 bg-[#14141a]/95 p-1.5 shadow-[0_12px_36px_rgba(0,0,0,0.6)] backdrop-blur-md">
                   <button
