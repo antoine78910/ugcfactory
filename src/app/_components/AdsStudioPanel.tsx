@@ -38,6 +38,7 @@ import { STUDIO_IMAGE_FILE_ACCEPT } from "@/lib/studioUploadValidation";
 import { cn } from "@/lib/utils";
 import { calculateVideoCreditsForModel } from "@/lib/pricing";
 import { AdsStudioRefSourceDialog } from "@/app/_components/AdsStudioRefSourceDialog";
+import { AdsStudioTemplateCard } from "@/app/_components/AdsStudioTemplateCard";
 import type { AdsStudioMentionEntry } from "@/app/_components/AdsStudioMentionMenu";
 import { loadAvatarUrls } from "@/lib/avatarLibrary";
 import { logGenerationFailure, userMessageFromCaughtError } from "@/lib/generationUserMessage";
@@ -2934,51 +2935,12 @@ export default function AdsStudioPanel() {
             const templateUrl = tpl.url;
             const previewUrl = templateUrl ?? presetPreviewVideos[idx] ?? null;
             return (
-              <div
+              <AdsStudioTemplateCard
                 key={tpl.filename || templateUrl}
-                className="group relative aspect-[9/16] overflow-hidden rounded-2xl border border-white/10 bg-black/35"
-                onMouseEnter={(e) => {
-                  const video = e.currentTarget.querySelector("video");
-                  if (video) void video.play().catch(() => undefined);
-                }}
-                onMouseLeave={(e) => {
-                  const video = e.currentTarget.querySelector("video");
-                  if (video) {
-                    video.pause();
-                    video.currentTime = 0;
-                  }
-                }}
-              >
-                {previewUrl ? (
-                  <video
-                    src={previewUrl}
-                    muted
-                    loop
-                    playsInline
-                    preload="none"
-                    className="h-full w-full object-cover transition duration-300 group-hover:scale-[1.02]"
-                  />
-                ) : (
-                  <div className="flex h-full w-full items-center justify-center bg-gradient-to-b from-violet-900/35 via-[#15141f] to-[#0a0a11] text-[11px] font-semibold text-white/35">
-                    Missing preview
-                  </div>
-                )}
-                <div className="pointer-events-none absolute inset-0 bg-gradient-to-b from-black/35 via-transparent to-black/60" />
-                <p className="pointer-events-none absolute left-3 top-2 text-[11px] font-semibold text-white/90">{label}</p>
-                <button
-                  type="button"
-                  onClick={() => void recreateFromTemplate(label, tpl, adsTemplateGalleryKind)}
-                  className={cn(
-                    "absolute bottom-3 left-1/2 z-20 flex h-9 -translate-x-1/2 items-center justify-center gap-1.5 rounded-full px-4 text-[13px] font-semibold text-white shadow-[0_4px_0_0_rgba(76,29,149,0.88)] ring-1 ring-violet-300/35 transition",
-                    "border border-violet-300/45 bg-violet-500 hover:bg-violet-400 hover:shadow-[0_5px_0_0_rgba(76,29,149,0.88)] active:-translate-x-1/2 active:translate-y-px active:shadow-none",
-                    // Mobile has no hover — keep CTA visible. Desktop keeps hover reveal.
-                    "opacity-100 md:opacity-0 md:group-hover:opacity-100 focus-visible:opacity-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-violet-400/55",
-                  )}
-                >
-                  <Sparkles className="size-3.5 shrink-0 opacity-95" aria-hidden />
-                  Recreate
-                </button>
-              </div>
+                previewUrl={previewUrl ?? null}
+                label={label}
+                onRecreate={() => void recreateFromTemplate(label, tpl, adsTemplateGalleryKind)}
+              />
             );
           })}
           {templateVideos.length === 0 && templateVideosLoading ? (

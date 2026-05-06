@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useRef, useState } from "react";
-import { Sparkles } from "lucide-react";
+import { Maximize2, Sparkles } from "lucide-react";
 import type { TTAd } from "@/lib/trendtrack";
 import { AdRecreateDialog } from "./AdRecreateDialog";
 import { cn } from "@/lib/utils";
@@ -147,6 +147,26 @@ export function AdCard({
               #{rank}
             </span>
           ) : null}
+
+          {clickable && videoSrc ? (
+            <button
+              type="button"
+              onClick={(e) => {
+                e.preventDefault();
+                e.stopPropagation();
+                onView?.();
+              }}
+              className={cn(
+                "absolute top-2 z-20 inline-flex h-7 w-7 items-center justify-center rounded-md border border-white/15 bg-black/65 text-white/80 opacity-0 shadow-sm backdrop-blur-sm transition hover:bg-black/80 hover:text-white group-hover:opacity-100",
+                typeof rank === "number" && Number.isFinite(rank) && rank > 0 ? "right-10" : "right-2",
+              )}
+              aria-label="Fullscreen video"
+              title="Fullscreen video"
+            >
+              <Maximize2 className="h-3.5 w-3.5" aria-hidden />
+            </button>
+          ) : null}
+
           <span className="pointer-events-none absolute left-2 top-2 rounded-full bg-black/60 px-2 py-0.5 text-[10px] font-medium text-white/85 backdrop-blur">
             {label}
           </span>

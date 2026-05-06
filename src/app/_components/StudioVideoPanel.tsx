@@ -91,7 +91,7 @@ import { AvatarPickerDialog } from "@/app/_components/AvatarPickerDialog";
 import { clipboardImageFiles } from "@/lib/clipboardImage";
 import { UploadBusyOverlay } from "@/app/_components/UploadBusyOverlay";
 import { readStudioHistoryLocal, writeStudioHistoryLocal } from "@/lib/studioHistoryLocalStorage";
-import { uploadFileToCdn, type UploadFileKind } from "@/lib/uploadBlobUrlToCdn";
+import { uploadBlobUrlToCdn, uploadFileToCdn, type UploadFileKind } from "@/lib/uploadBlobUrlToCdn";
 import { cn } from "@/lib/utils";
 import { proxiedMediaSrc } from "@/lib/mediaProxyUrl";
 import { STUDIO_VIDEO_TAB_KINDS } from "@/lib/studioGenerationKinds";
@@ -976,6 +976,162 @@ export default function StudioVideoPanel({
   const [wideVideoPreview, setWideVideoPreview] = useState(false);
   const [historyItems, setHistoryItems] = useState<StudioHistoryItem[]>([]);
   const [historySourceFilter, setHistorySourceFilter] = useState<"all" | "workflow" | "studio">("all");
+
+  const extractLastFrameDataUrl = useCallback(async (videoUrl: string): Promise<string> => {
+    const trimmed = (videoUrl ?? "").trim();
+    if (!trimmed) throw new Error("Missing video URL");
+
+    let blob: Blob | null = null;
+    if (/^blob:|^data:/i.test(trimmed)) {
+      const r = await fetch(trimmed, { cache: "no-store" });
+      if (!r.ok) throw new Error(`Could not read video (${r.status})`);
+      blob = await r.blob();
+    } else {
+      try {
+        const r = await fetch(`/api/download?url=${encodeURIComponent(trimmed)}`, { cache: "no-store" });
+        if (r.ok) blob = await r.blob();
+      } catch {
+        // ignore; fall back to direct
+      }
+      if (!blob) {
+        const r = await fetch(trimmed, { mode: "cors", cache: "no-store" });
+        if (!r.ok) throw new Error(`Could not download video (${r.status})`);
+        blob = await r.blob();
+      }
+    }
+
+    const objectUrl = URL.createObjectURL(blob);
+    const v = document.createElement("video");
+    v.preload = "auto";
+    v.muted = true;
+    v.playsInline = true;
+    v.src = objectUrl;
+
+    const waitReady = () =>
+      new Promise<void>((resolve) => {
+        if (v.readyState >= 2) return resolve();
+        let settled = false;
+        const cleanup = () => {
+          v.removeEventListener("loadeddata", onLoaded);
+          v.removeEventListener("canplay", onLoaded);
+          v.removeEventListener("error", onLoaded);
+          window.clearTimeout(timer);
+        };
+        const onLoaded = () => {
+          if (settled) return;
+          settled = true;
+          cleanup();
+          resolve();
+        };
+        const timer = window.setTimeout(onLoaded, 2500);
+        v.addEventListener("loadeddata", onLoaded);
+        v.addEventListener("canplay", onLoaded);
+        v.addEventListener("error", onLoaded);
+      });
+
+    const seekTo = (t: number) =>
+      new Promise<void>((resolve) => {
+        let settled = false;
+        const cleanup = () => {
+          v.removeEventListener("seeked", onSeeked);
+          v.removeEventListener("error", onSeeked);
+          window.clearTimeout(timer);
+        };
+        const onSeeked = () => {
+          if (settled) return;
+          settled = true;
+          cleanup();
+          resolve();
+        };
+        const timer = window.setTimeout(onSeeked, 900);
+        v.addEventListener("seeked", onSeeked);
+        v.addEventListener("error", onSeeked);
+        try {
+          v.currentTime = t;
+        } catch {
+          onSeeked();
+        }
+      });
+
+    try {
+      await waitReady();
+      const dur = Number(v.duration) || 0;
+      const t = dur > 0 ? Math.max(0, dur - 0.08) : 0.001;
+      await seekTo(t);
+      await new Promise<void>((r) => requestAnimationFrame(() => r()));
+
+      const vw = v.videoWidth;
+      const vh = v.videoHeight;
+      if (!vw || !vh) throw new Error("Video has no frame size");
+
+      const maxLong = 960;
+      const long = Math.max(vw, vh);
+      const scale = long > maxLong ? maxLong / long : 1;
+      const tw = Math.max(2, Math.round(vw * scale));
+      const th = Math.max(2, Math.round(vh * scale));
+
+      const canvas = document.createElement("canvas");
+      canvas.width = tw;
+      canvas.height = th;
+      const ctx = canvas.getContext("2d");
+      if (!ctx) throw new Error("Could not read frame");
+      ctx.drawImage(v, 0, 0, tw, th);
+      return canvas.toDataURL("image/jpeg", 0.88);
+    } finally {
+      v.pause();
+      v.removeAttribute("src");
+      v.load();
+      URL.revokeObjectURL(objectUrl);
+    }
+  }, []);
+
+  const handleExtendVideo = useCallback(
+    async (payload: { sourceUrl: string; model: string }) => {
+      const model = (payload.model ?? "").trim() as VideoModelId;
+      const allow = new Set<VideoModelId>([
+        "veo3",
+        "veo3_fast",
+        "veo3_lite",
+        "kling-2.6/video",
+        "kling-3.0/video",
+        "openai/sora-2-pro",
+        "bytedance/seedance-2",
+        "bytedance/seedance-2-fast",
+      ]);
+      if (!allow.has(model)) {
+        toast.error("Extend is not available for this model.");
+        return;
+      }
+
+      setTab("create");
+      setModelId(model);
+      setPrompt("");
+      setEndUrl(null);
+      setSeedanceCompactRefUrls([]);
+      setSeedanceProOmniItems([]);
+
+      setFrameUploadSlot("start");
+      setFrameUploadBusy(true);
+      try {
+        const dataUrl = await extractLastFrameDataUrl(payload.sourceUrl);
+        setStartFramePreviewBlob((prev) => {
+          if (prev?.startsWith("blob:")) URL.revokeObjectURL(prev);
+          return dataUrl;
+        });
+        const hosted = await uploadBlobUrlToCdn(dataUrl, `extend_start_${Date.now()}.jpg`, "image/jpeg", {
+          kind: "image",
+        });
+        setStartUrl(hosted);
+        toast.success("Start frame ready. Write a prompt to extend the video.");
+      } catch (e) {
+        toast.error(e instanceof Error ? e.message : "Could not extend video");
+      } finally {
+        setFrameUploadBusy(false);
+        setFrameUploadSlot(null);
+      }
+    },
+    [extractLastFrameDataUrl],
+  );
 
   useEffect(() => {
     try {
@@ -4062,6 +4218,7 @@ export default function StudioVideoPanel({
             mediaLabel="Video"
             onItemDeleted={(id) => setHistoryItems((prev) => prev.filter((i) => i.id !== id))}
             onChangeVoice={onChangeVoice}
+            onExtendVideo={handleExtendVideo}
             hasMore={hasMoreHistory}
             isLoadingMore={isLoadingMoreHistory}
             onLoadMore={onLoadMoreHistory}

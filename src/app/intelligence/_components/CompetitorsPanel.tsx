@@ -403,7 +403,7 @@ export function CompetitorsPanel({
             {saved.slice(0, 12).map((c) => (
               <div
                 key={c.id}
-                className="flex items-center gap-2 rounded-xl border border-white/10 bg-white/[0.03] px-2.5 py-2"
+                className="group flex items-center gap-2 rounded-xl border border-white/10 bg-white/[0.03] px-2.5 py-2"
               >
                 <button
                   type="button"
@@ -424,7 +424,7 @@ export function CompetitorsPanel({
                 <button
                   type="button"
                   onClick={() => void deleteSaved(c.id)}
-                  className="rounded-lg border border-white/10 bg-black/20 p-2 text-white/55 transition hover:bg-white/[0.06] hover:text-white/80"
+                  className="rounded-lg border border-white/10 bg-black/20 p-2 text-white/55 opacity-0 transition hover:bg-white/[0.06] hover:text-white/80 group-hover:opacity-100"
                   title="Remove"
                 >
                   <Trash2 className="h-3.5 w-3.5" />

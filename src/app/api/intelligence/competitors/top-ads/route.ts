@@ -9,7 +9,7 @@ import { getCached, setCached, deleteCached } from "@/lib/trendtrackCache";
 import { respondTrendTrackError } from "@/app/api/intelligence/_errors";
 
 const TTL = 60 * 60;
-const TRACKERS_KEY = "trackers:list";
+const TRACKERS_KEY = "trackers:workspace:list";
 
 const SORT_BY_SET = new Set([
   "currentRank",

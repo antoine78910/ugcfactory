@@ -1,14 +1,17 @@
 "use client";
 
 import { NodeToolbar, Position, useReactFlow, useStore } from "@xyflow/react";
-import { ChevronDown, Copy, MoreHorizontal, Play, Spline, Trash2, Ungroup } from "lucide-react";
+import { ChevronDown, Copy, HelpCircle, MoreHorizontal, Play, Spline, Trash2, Ungroup } from "lucide-react";
 import { useCallback, useMemo, useState } from "react";
 import { toast } from "sonner";
+import { HoverCard } from "radix-ui";
 
 import { cn } from "@/lib/utils";
 
 import { cloneWorkflowSelection } from "../workflowClone";
 import type { WorkflowCanvasNode } from "../workflowFlowTypes";
+import type { AdAssetNodeData } from "./AdAssetNode";
+import { estimateWorkflowAdAssetRunCredits } from "../workflowNodeRun";
 
 const btn =
   "flex h-8 items-center justify-center rounded-lg text-white transition hover:bg-white/[0.08] active:bg-white/[0.06]";
@@ -27,6 +30,10 @@ type WorkflowNodeContextToolbarProps = {
 
 function ToolbarDivider() {
   return <div className="mx-0.5 h-5 w-px shrink-0 bg-white/[0.12]" aria-hidden />;
+}
+
+function isRunnableWorkflowAdAssetKind(kind: AdAssetNodeData["kind"]): boolean {
+  return kind === "image" || kind === "video" || kind === "motion" || kind === "assistant" || kind === "website";
 }
 
 export function WorkflowNodeContextToolbar({
@@ -93,6 +100,84 @@ export function WorkflowNodeContextToolbar({
     return edges.some((e) => e.source === nodeId);
   }, [getEdges, nodeId]);
 
+  const runFromHerePlan = useMemo(() => {
+    if (!hasDownstream) return null;
+    const nodes = getNodes() as WorkflowCanvasNode[];
+    const edges = getEdges();
+
+    const byId = new Map(nodes.map((n) => [n.id, n]));
+    if (!byId.has(nodeId)) return null;
+
+    const outgoing = new Map<string, string[]>();
+    for (const e of edges) {
+      if (!outgoing.has(e.source)) outgoing.set(e.source, []);
+      outgoing.get(e.source)!.push(e.target);
+    }
+
+    const seen = new Set<string>();
+    const queue = [nodeId];
+    const reachable: string[] = [];
+    while (queue.length) {
+      const cur = queue.shift()!;
+      if (seen.has(cur)) continue;
+      seen.add(cur);
+      reachable.push(cur);
+      for (const nxt of outgoing.get(cur) ?? []) {
+        if (!seen.has(nxt)) queue.push(nxt);
+      }
+    }
+
+    const runIds = reachable.filter((nid) => {
+      const n = byId.get(nid);
+      if (!n || n.type !== "adAsset") return false;
+      const d = n.data as AdAssetNodeData;
+      return isRunnableWorkflowAdAssetKind(d.kind);
+    });
+    if (!runIds.length) return { orderedRunIds: [], estimatedCredits: 0, byId };
+
+    // Order runnable nodes topologically within the reachable subgraph.
+    const runSet = new Set(runIds);
+    const indegree = new Map<string, number>();
+    const children = new Map<string, string[]>();
+    const reachOrder = new Map<string, number>(reachable.map((nid, idx) => [nid, idx]));
+    for (const rid of runIds) {
+      indegree.set(rid, 0);
+      children.set(rid, []);
+    }
+    for (const e of edges) {
+      if (!runSet.has(e.source) || !runSet.has(e.target)) continue;
+      children.get(e.source)!.push(e.target);
+      indegree.set(e.target, (indegree.get(e.target) ?? 0) + 1);
+    }
+    const ready: string[] = runIds.filter((rid) => (indegree.get(rid) ?? 0) === 0);
+    ready.sort((a, b) => (reachOrder.get(a) ?? 0) - (reachOrder.get(b) ?? 0));
+    const orderedRunIds: string[] = [];
+    while (ready.length) {
+      const cur = ready.shift()!;
+      orderedRunIds.push(cur);
+      for (const nxt of children.get(cur) ?? []) {
+        const nextDeg = (indegree.get(nxt) ?? 0) - 1;
+        indegree.set(nxt, nextDeg);
+        if (nextDeg === 0) {
+          ready.push(nxt);
+          ready.sort((a, b) => (reachOrder.get(a) ?? 0) - (reachOrder.get(b) ?? 0));
+        }
+      }
+    }
+    if (orderedRunIds.length !== runIds.length) {
+      for (const rid of runIds) if (!orderedRunIds.includes(rid)) orderedRunIds.push(rid);
+    }
+
+    const estimatedCredits = orderedRunIds.reduce((sum, nid) => {
+      const n = byId.get(nid);
+      if (!n || n.type !== "adAsset") return sum;
+      const d = n.data as AdAssetNodeData;
+      return sum + estimateWorkflowAdAssetRunCredits(d, nid, nodes, edges);
+    }, 0);
+
+    return { orderedRunIds, estimatedCredits, byId };
+  }, [getEdges, getNodes, hasDownstream, nodeId]);
+
   const triggerRunMain = useCallback(() => {
     if (!hasDownstream) {
       onRun();
@@ -149,13 +234,85 @@ export function WorkflowNodeContextToolbar({
                   >
                     This node only
                   </button>
-                  <button
-                    type="button"
-                    className="flex w-full items-center rounded-lg px-2.5 py-2 text-left text-[12px] font-medium text-white/90 transition hover:bg-white/[0.08]"
-                    onClick={triggerRunFromHere}
-                  >
-                    Run from here
-                  </button>
+                  <div className="flex w-full items-center gap-1 rounded-lg px-2.5 py-1.5 transition hover:bg-white/[0.08]">
+                    <button
+                      type="button"
+                      className="flex flex-1 items-center py-0.5 text-left text-[12px] font-medium text-white/90"
+                      onClick={triggerRunFromHere}
+                    >
+                      Run from here
+                    </button>
+                    {runFromHerePlan ? (
+                      <HoverCard.Root openDelay={220} closeDelay={90}>
+                        <HoverCard.Trigger asChild>
+                          <button
+                            type="button"
+                            className="inline-flex h-7 w-7 items-center justify-center rounded-md border border-white/10 bg-black/20 text-white/70 transition hover:bg-black/35 hover:text-white"
+                            aria-label="Show run plan"
+                            title="Show run plan"
+                            onClick={(e) => e.preventDefault()}
+                            onPointerDown={(e) => e.stopPropagation()}
+                          >
+                            <HelpCircle className="h-3.5 w-3.5" strokeWidth={2.2} aria-hidden />
+                          </button>
+                        </HoverCard.Trigger>
+                        <HoverCard.Portal>
+                          <HoverCard.Content
+                            side="right"
+                            align="start"
+                            sideOffset={10}
+                            className="z-[200] w-[340px] rounded-xl border border-white/12 bg-[#101018]/95 p-3 shadow-[0_18px_55px_rgba(0,0,0,0.65)] backdrop-blur-md"
+                            onPointerDown={(e) => e.stopPropagation()}
+                          >
+                            <div className="flex items-start justify-between gap-3">
+                              <div className="min-w-0">
+                                <div className="text-[12px] font-semibold text-white/90">Run from here</div>
+                                <div className="mt-0.5 text-[11px] text-white/60">
+                                  {runFromHerePlan.orderedRunIds.length
+                                    ? `${runFromHerePlan.orderedRunIds.length} node(s) • ~${Math.round(
+                                        runFromHerePlan.estimatedCredits,
+                                      )} credits`
+                                    : "No runnable nodes downstream"}
+                                </div>
+                              </div>
+                            </div>
+                            {runFromHerePlan.orderedRunIds.length ? (
+                              <div className="mt-2 max-h-[240px] overflow-y-auto pr-1">
+                                <div className="space-y-1.5">
+                                  {runFromHerePlan.orderedRunIds.map((rid, idx) => {
+                                    const n = runFromHerePlan.byId.get(rid) as WorkflowCanvasNode | undefined;
+                                    const label =
+                                      n?.type === "adAsset"
+                                        ? (((n.data as AdAssetNodeData).label ?? "").trim() ||
+                                          (n.data as AdAssetNodeData).kind)
+                                        : n?.type ?? "node";
+                                    const kind =
+                                      n?.type === "adAsset" ? (n.data as AdAssetNodeData).kind : (n?.type ?? "node");
+                                    return (
+                                      <div
+                                        key={rid}
+                                        className="flex items-start gap-2 rounded-lg border border-white/10 bg-white/[0.03] px-2 py-1.5"
+                                      >
+                                        <div className="mt-[1px] w-5 shrink-0 text-right text-[10px] font-semibold text-white/35">
+                                          {idx + 1}
+                                        </div>
+                                        <div className="min-w-0 flex-1">
+                                          <div className="truncate text-[11px] font-semibold text-white/80">{label}</div>
+                                          <div className="truncate text-[10px] text-white/45">
+                                            {kind} · {rid}
+                                          </div>
+                                        </div>
+                                      </div>
+                                    );
+                                  })}
+                                </div>
+                              </div>
+                            ) : null}
+                          </HoverCard.Content>
+                        </HoverCard.Portal>
+                      </HoverCard.Root>
+                    ) : null}
+                  </div>
                 </div>
               ) : null}
             </div>

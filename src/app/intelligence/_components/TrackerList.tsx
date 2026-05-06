@@ -147,30 +147,57 @@ export function TrackerList({
               })
             }
           />
-          <PinButton
-            advertiser={{
-              advertiser_id: searchResult.id,
-              name: searchResult.name,
-              logo: searchResult.logo ?? searchResult.logoUrl ?? null,
-              domain: searchResult.domain ?? null,
-            }}
-            isPinned={pinned.some((p) => p.advertiser_id === searchResult.id)}
-            onChange={(next) =>
-              setPinned((prev) =>
-                next
-                  ? [
-                      {
-                        advertiser_id: searchResult.id,
-                        name: searchResult.name,
-                        logo: searchResult.logo ?? searchResult.logoUrl ?? null,
-                        domain: searchResult.domain ?? null,
-                      },
-                      ...prev,
-                    ]
-                  : prev.filter((p) => p.advertiser_id !== searchResult.id)
-              )
-            }
-          />
+          {searchResult.type === "brandtracker" ? (
+            <TrackerSaveButton
+              tracker={{
+                tracker_id: searchResult.id,
+                name: searchResult.name,
+                logo: searchResult.logo ?? searchResult.logoUrl ?? null,
+                domain: searchResult.domain ?? null,
+              }}
+              isSaved={trackers.some((t) => t.id === searchResult.id)}
+              onChange={(next) =>
+                setTrackers((prev) =>
+                  next
+                    ? [
+                        {
+                          id: searchResult.id,
+                          name: searchResult.name,
+                          domain: searchResult.domain ?? undefined,
+                          logo: searchResult.logo ?? searchResult.logoUrl ?? undefined,
+                        },
+                        ...prev.filter((t) => t.id !== searchResult.id),
+                      ]
+                    : prev.filter((t) => t.id !== searchResult.id)
+                )
+              }
+            />
+          ) : (
+            <PinButton
+              advertiser={{
+                advertiser_id: searchResult.id,
+                name: searchResult.name,
+                logo: searchResult.logo ?? searchResult.logoUrl ?? null,
+                domain: searchResult.domain ?? null,
+              }}
+              isPinned={pinned.some((p) => p.advertiser_id === searchResult.id)}
+              onChange={(next) =>
+                setPinned((prev) =>
+                  next
+                    ? [
+                        {
+                          advertiser_id: searchResult.id,
+                          name: searchResult.name,
+                          logo: searchResult.logo ?? searchResult.logoUrl ?? null,
+                          domain: searchResult.domain ?? null,
+                        },
+                        ...prev,
+                      ]
+                    : prev.filter((p) => p.advertiser_id !== searchResult.id)
+                )
+              }
+            />
+          )}
         </div>
       )}
       {pinned.length > 0 && (
@@ -198,26 +225,31 @@ export function TrackerList({
         </>
       )}
       {trackers.map((t) => (
-        <TrackerCard
-          key={t.id}
-          name={t.name}
-          logo={t.logo ?? t.logoUrl ?? t.favicon}
-          activeAds={t.activeAds}
-          newAdsLast7Days={t.newAdsLast7Days}
-          isSelected={selectedId === t.id}
-          onClick={() =>
-            onSelect({
-              id: t.id,
-              name: t.name,
-              logo: t.logo ?? t.logoUrl ?? t.favicon,
-              sourceType: "tracker",
-              domain: t.domain,
-              activeAds: t.activeAds,
-              totalTraffic: t.totalTraffic,
-              rank: t.rank,
-            })
-          }
-        />
+        <div key={t.id} className="group relative">
+          <TrackerCard
+            name={t.name}
+            logo={t.logo ?? t.logoUrl ?? t.favicon}
+            activeAds={t.activeAds}
+            newAdsLast7Days={t.newAdsLast7Days}
+            isSelected={selectedId === t.id}
+            onClick={() =>
+              onSelect({
+                id: t.id,
+                name: t.name,
+                logo: t.logo ?? t.logoUrl ?? t.favicon,
+                sourceType: "tracker",
+                domain: t.domain,
+                activeAds: t.activeAds,
+                totalTraffic: t.totalTraffic,
+                rank: t.rank,
+              })
+            }
+          />
+          <TrackerRemoveButton
+            trackerId={t.id}
+            onRemoved={() => setTrackers((prev) => prev.filter((x) => x.id !== t.id))}
+          />
+        </div>
       ))}
       {trackers.length === 0 && !searchResult && (
         <p className="text-xs text-white/40 px-2">No trackers yet. Search for a brand above.</p>
@@ -264,6 +296,80 @@ function PinButton({
       title={isPinned ? "Unpin brand" : "Pin brand to revisit later"}
     >
       {isPinned ? "Pinned" : "+ Pin"}
+    </button>
+  );
+}
+
+function TrackerSaveButton({
+  tracker,
+  isSaved,
+  onChange,
+}: {
+  tracker: { tracker_id: string; name: string; logo: string | null; domain: string | null };
+  isSaved: boolean;
+  onChange: (next: boolean) => void;
+}) {
+  const [busy, setBusy] = useState(false);
+  return (
+    <button
+      onClick={async () => {
+        setBusy(true);
+        try {
+          if (isSaved) {
+            await fetch(
+              `/api/intelligence/trackers?tracker_id=${encodeURIComponent(tracker.tracker_id)}`,
+              { method: "DELETE" }
+            );
+            onChange(false);
+          } else {
+            await fetch("/api/intelligence/trackers", {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify(tracker),
+            });
+            onChange(true);
+          }
+        } finally {
+          setBusy(false);
+        }
+      }}
+      disabled={busy}
+      className="absolute right-2 top-2 rounded-md border border-white/10 bg-white/5 px-1.5 py-0.5 text-[10px] font-medium text-white/65 transition hover:border-violet-400/40 hover:text-white disabled:opacity-50"
+      title={isSaved ? "Remove tracker" : "Save tracker to your list"}
+    >
+      {isSaved ? "Saved" : "+ Save"}
+    </button>
+  );
+}
+
+function TrackerRemoveButton({
+  trackerId,
+  onRemoved,
+}: {
+  trackerId: string;
+  onRemoved: () => void;
+}) {
+  const [busy, setBusy] = useState(false);
+  return (
+    <button
+      onClick={async (e) => {
+        e.preventDefault();
+        e.stopPropagation();
+        setBusy(true);
+        try {
+          await fetch(`/api/intelligence/trackers?tracker_id=${encodeURIComponent(trackerId)}`, {
+            method: "DELETE",
+          });
+          onRemoved();
+        } finally {
+          setBusy(false);
+        }
+      }}
+      disabled={busy}
+      className="absolute right-2 top-2 rounded-md border border-white/10 bg-white/5 px-1.5 py-0.5 text-[10px] font-medium text-white/65 opacity-0 transition hover:border-red-400/40 hover:text-white group-hover:opacity-100 disabled:opacity-40"
+      title="Remove tracker"
+    >
+      Remove
     </button>
   );
 }

@@ -154,6 +154,8 @@ type Props = {
   onItemDeleted?: (id: string) => void;
   /** Called when the user wants to change the voice of a video item. */
   onChangeVoice?: (item: StudioHistoryItem) => void;
+  /** Video tab: extend a video by using its last frame as next start frame. */
+  onExtendVideo?: (payload: { sourceUrl: string; model: string }) => void;
   /** Pagination: when true, render a Load more button below the last group. */
   hasMore?: boolean;
   /** Pagination: while a load-more fetch is in flight. */
@@ -172,6 +174,7 @@ export function StudioGenerationsHistory({
   onDismissFailed,
   onItemDeleted,
   onChangeVoice,
+  onExtendVideo,
   hasMore,
   isLoadingMore,
   onLoadMore,
@@ -185,6 +188,7 @@ export function StudioGenerationsHistory({
     kind: "image" | "video" | "audio" | "motion";
     prompt: string;
     inputUrls?: string[];
+    model?: string;
     modelLabel?: string;
     studioGenerationKind?: string;
   } | null>(null);
@@ -368,6 +372,22 @@ export function StudioGenerationsHistory({
         isProbablyVideoUrl(lightboxItem.url)) &&
       !isProbablyAudioUrl(lightboxItem.url),
   );
+  const canExtendLightboxVideo = useMemo(() => {
+    if (!isLightboxVideo) return false;
+    const model = (lightboxItem?.model ?? "").trim();
+    if (!model) return false;
+    const allow = new Set([
+      "veo3",
+      "veo3_fast",
+      "veo3_lite",
+      "kling-2.6/video",
+      "kling-3.0/video",
+      "openai/sora-2-pro",
+      "bytedance/seedance-2",
+      "bytedance/seedance-2-fast",
+    ]);
+    return allow.has(model);
+  }, [isLightboxVideo, lightboxItem?.model]);
 
 
   const cardWidthClass =
@@ -600,6 +620,7 @@ export function StudioGenerationsHistory({
                               kind: item.kind === "motion" ? "motion" : "video",
                               prompt: item.label || "",
                               inputUrls: item.inputUrls,
+                              model: item.model,
                               modelLabel: item.modelLabel,
                               studioGenerationKind: item.studioGenerationKind,
                             });
@@ -620,6 +641,7 @@ export function StudioGenerationsHistory({
                                 kind: "image",
                                 prompt: item.label || "",
                                 inputUrls: item.inputUrls,
+                                model: item.model,
                                 modelLabel: item.modelLabel,
                                 studioGenerationKind: item.studioGenerationKind,
                               });
@@ -816,6 +838,23 @@ export function StudioGenerationsHistory({
                   >
                     <Mic className="h-4 w-4 shrink-0 text-violet-300 transition-transform duration-200 group-hover/cv:scale-110" aria-hidden />
                     Change Voice
+                  </button>
+                ) : null}
+
+                {canExtendLightboxVideo && onExtendVideo ? (
+                  <button
+                    type="button"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      if (!lightboxItem?.url || !lightboxItem.model) return;
+                      onExtendVideo({ sourceUrl: lightboxItem.url, model: lightboxItem.model });
+                      setLightboxItem(null);
+                    }}
+                    className="inline-flex w-full items-center justify-center gap-2 rounded-xl border border-emerald-400/25 bg-emerald-500/[0.08] px-4 py-2.5 text-[13px] font-semibold text-emerald-100/90 transition-all duration-200 hover:border-emerald-400/40 hover:bg-emerald-500/[0.14] hover:text-emerald-50"
+                    title="Extend this video using its last frame as the next start frame"
+                  >
+                    <Sparkles className="h-4 w-4 shrink-0" aria-hidden />
+                    Extend
                   </button>
                 ) : null}
 

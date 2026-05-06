@@ -140,27 +140,35 @@ export function CompetitorDetail({
           </div>
         </div>
 
-        <div className="mt-4">
-          {adsLoading ? (
-            <div className="grid gap-2">
-              {Array.from({ length: 6 }).map((_, i) => (
-                <div key={i} className="h-24 animate-pulse rounded-2xl bg-white/5" />
+        <section className="mt-4 rounded-2xl border border-white/10 bg-white/[0.04] p-5 backdrop-blur-sm">
+          <div className="flex items-center justify-between gap-2 mb-3">
+            <h3 className="text-sm font-semibold text-white/80">Top Ads</h3>
+            <button
+              type="button"
+              onClick={() => void fetchAds(true)}
+              className="rounded-lg px-2 py-1 text-xs text-white/40 hover:text-white/70 transition"
+            >
+              Refresh
+            </button>
+          </div>
+
+          {adsLoading && (
+            <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5">
+              {Array.from({ length: 5 }).map((_, i) => (
+                <div key={i} className="aspect-video animate-pulse rounded-xl bg-white/5" />
               ))}
             </div>
-          ) : adsError ? (
-            <div className="rounded-2xl border border-white/10 bg-white/[0.04] p-4 text-sm text-white/70">
-              {adsError}
-            </div>
-          ) : ads.length === 0 ? (
-            <div className="rounded-2xl border border-white/10 bg-white/[0.04] p-4 text-sm text-white/60">
-              No ads found.
-            </div>
-          ) : (
-            <div className="grid gap-2">
-              {ads.map((ad) => (
+          )}
+          {adsError ? <p className="text-xs text-red-400">{adsError}</p> : null}
+          {!adsLoading && !adsError && ads.length === 0 ? (
+            <p className="text-sm text-white/40">No ads found.</p>
+          ) : null}
+          {!adsLoading && ads.length > 0 ? (
+            <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5">
+              {ads.map((ad, idx) => (
                 <AdCard
                   key={ad.id}
-                  ad={ad}
+                  ad={{ ...ad, rank: idx + 1 }}
                   onView={() => setOpenAd(ad)}
                   playVideoOnHover
                   showRecreateShortcut
@@ -168,8 +176,8 @@ export function CompetitorDetail({
                 />
               ))}
             </div>
-          )}
-        </div>
+          ) : null}
+        </section>
       </div>
 
       {openAd ? <AdModal ad={openAd} brandName={competitor.name} onClose={() => setOpenAd(null)} /> : null}

@@ -1,8 +1,5 @@
 import { redirect } from "next/navigation";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
-import { ttListTrackers } from "@/lib/trendtrack";
-import { getCached } from "@/lib/trendtrackCache";
-import type { TTTracker } from "@/lib/trendtrack";
 import StudioShell from "@/app/_components/StudioShell";
 import { IntelligenceClient } from "./_components/IntelligenceClient";
 
@@ -18,9 +15,11 @@ export default async function IntelligencePage() {
 
   let ownTrackerIds: string[] = [];
   try {
-    const cached = await getCached<TTTracker[]>("trackers:list");
-    const trackers = cached ?? (await ttListTrackers());
-    ownTrackerIds = trackers.map((t) => t.id);
+    const { data } = await supabase
+      .from("intelligence_trackers")
+      .select("tracker_id")
+      .order("created_at", { ascending: false });
+    ownTrackerIds = (data ?? []).map((r) => r.tracker_id as string);
   } catch {
     // non-fatal
   }
