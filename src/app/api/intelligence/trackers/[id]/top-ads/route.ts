@@ -17,7 +17,7 @@ export async function GET(
 
   const { id } = await params;
   const force = new URL(req.url).searchParams.get("force") === "true";
-  const key = `tracker:${id}:top-ads`;
+  const key = `tracker:${id}:top-ads:v2`;
 
   if (force) await deleteCached(key);
   const cached = await getCached(key);

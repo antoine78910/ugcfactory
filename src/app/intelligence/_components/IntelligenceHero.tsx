@@ -29,6 +29,7 @@ export function IntelligenceHero({
   domain,
   onRefreshAll,
   refreshing,
+  listFallbackMetrics,
 }: {
   tracker: SelectedTracker;
   overview: TTOverview | null;
@@ -37,8 +38,13 @@ export function IntelligenceHero({
   domain?: string;
   onRefreshAll: () => void;
   refreshing: boolean;
+  /** Values from sidebar tracker list when overview response omits totals. */
+  listFallbackMetrics?: Pick<TTOverview, "activeAds" | "totalTraffic" | "rank">;
 }) {
   const initial = tracker.name.charAt(0).toUpperCase();
+  const activeAdsMerged = overview?.activeAds ?? listFallbackMetrics?.activeAds ?? tracker.activeAds;
+  const trafficMerged = overview?.totalTraffic ?? listFallbackMetrics?.totalTraffic ?? tracker.totalTraffic;
+  const rankMerged = overview?.rank ?? listFallbackMetrics?.rank ?? tracker.rank;
   return (
     <header className="flex flex-wrap items-center gap-4 rounded-2xl border border-white/10 bg-white/[0.04] p-4 backdrop-blur-sm">
       {tracker.logo ? (
@@ -85,11 +91,9 @@ export function IntelligenceHero({
       <div className="flex items-center gap-3">
         {isOwnTracker && (
           <div className="hidden items-center gap-5 sm:flex">
-            <Stat label="Active ads" value={formatNum(overview?.activeAds)} />
-            <Stat label="Traffic" value={formatNum(overview?.totalTraffic)} />
-            {typeof overview?.rank === "number" && (
-              <Stat label="Rank" value={`#${overview.rank}`} />
-            )}
+            <Stat label="Active ads" value={formatNum(activeAdsMerged)} />
+            <Stat label="Traffic" value={formatNum(trafficMerged)} />
+            {typeof rankMerged === "number" && <Stat label="Rank" value={`#${rankMerged}`} />}
           </div>
         )}
         <button

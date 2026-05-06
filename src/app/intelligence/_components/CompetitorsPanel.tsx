@@ -1,11 +1,13 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Loader2, Search, Star, Trash2 } from "lucide-react";
 import type { TTLookupResult, TTTracker } from "@/lib/trendtrack";
 import { proxiedMediaSrc } from "@/lib/mediaProxyUrl";
 import { cn } from "@/lib/utils";
 import type { IntelligenceCompetitor } from "@/app/api/intelligence/competitors/route";
+
+const LOOKUP_DEBOUNCE_MS = 320;
 
 export type CompetitorPick = {
   lookup: TTLookupResult;
@@ -33,14 +35,16 @@ function CompetitorDomainAvatar({
   const clearbit = hasDomain ? `https://logo.clearbit.com/${encodeURIComponent(d)}` : "";
   const googleFb = hasDomain ? `https://www.google.com/s2/favicons?domain=${encodeURIComponent(d)}&sz=64` : "";
 
+  const imgClass =
+    "relative z-[1] h-9 w-9 rounded-[6px] object-contain p-0.5";
+
   const chainImageError = (e: { currentTarget: HTMLImageElement }) => {
     const el = e.currentTarget;
     const step = el.dataset.step ?? "api";
     if (step === "api" && clearbit) {
       el.dataset.step = "clearbit";
       el.src = clearbit;
-      el.className =
-        "relative z-[1] h-9 w-9 rounded-[6px] border border-white/10 bg-white/[0.06] object-contain";
+      el.className = imgClass;
       return;
     }
     if (step === "clearbit" && googleFb) {
@@ -54,8 +58,8 @@ function CompetitorDomainAvatar({
 
   if (proxiedLogo) {
     return (
-      <span className="relative inline-flex h-9 w-9 shrink-0">
-        <span className="absolute inset-0 z-0 flex items-center justify-center rounded-[6px] bg-violet-500/22 text-[10px] font-bold text-violet-200">
+      <span className="relative inline-flex h-9 w-9 shrink-0 overflow-hidden rounded-[6px] border border-black/15 bg-white shadow-[0_0_0_1px_rgba(0,0,0,0.04)_inset]">
+        <span className="absolute inset-0 z-0 flex items-center justify-center bg-neutral-100 text-[10px] font-bold text-neutral-500">
           {letter}
         </span>
         {/* eslint-disable-next-line @next/next/no-img-element */}
@@ -65,7 +69,7 @@ function CompetitorDomainAvatar({
           alt=""
           loading="lazy"
           decoding="async"
-          className="relative z-[1] h-9 w-9 rounded-[6px] border border-white/10 bg-white/[0.06] object-cover"
+          className={imgClass}
           onError={chainImageError}
         />
       </span>
@@ -74,15 +78,15 @@ function CompetitorDomainAvatar({
 
   if (!hasDomain) {
     return (
-      <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-[6px] bg-violet-500/22 text-xs font-bold text-violet-200">
+      <div className="flex h-9 w-9 shrink-0 items-center justify-center overflow-hidden rounded-[6px] border border-black/15 bg-white text-xs font-bold text-neutral-500 shadow-[0_0_0_1px_rgba(0,0,0,0.04)_inset]">
         {letter}
       </div>
     );
   }
 
   return (
-    <span className="relative inline-flex h-9 w-9 shrink-0">
-      <span className="absolute inset-0 z-0 flex items-center justify-center rounded-[6px] bg-violet-500/22 text-[10px] font-bold text-violet-200">
+    <span className="relative inline-flex h-9 w-9 shrink-0 overflow-hidden rounded-[6px] border border-black/15 bg-white shadow-[0_0_0_1px_rgba(0,0,0,0.04)_inset]">
+      <span className="absolute inset-0 z-0 flex items-center justify-center bg-neutral-100 text-[10px] font-bold text-neutral-500">
         {letter}
       </span>
       {/* eslint-disable-next-line @next/next/no-img-element */}
@@ -92,7 +96,7 @@ function CompetitorDomainAvatar({
         alt=""
         loading="lazy"
         decoding="async"
-        className="relative z-[1] h-9 w-9 rounded-[6px] border border-white/10 bg-white/[0.06] object-contain"
+        className={imgClass}
         onError={(e) => {
           chainImageError(e);
         }}
@@ -153,6 +157,8 @@ export function CompetitorsPanel({
   const [saving, setSaving] = useState(false);
   const [searchedOnce, setSearchedOnce] = useState(false);
 
+  const lookupAbortRef = useRef<AbortController | null>(null);
+
   const selectedLookup = useMemo(() => {
     if (!selectedLookupId) return null;
     return lookupResults.find((r) => r.id === selectedLookupId) ?? null;
@@ -179,37 +185,73 @@ export function CompetitorsPanel({
     };
   }, [refreshSaved]);
 
-  const runLookup = useCallback(async () => {
-    const q = query.trim();
-    if (!q) return;
-    setLookupLoading(true);
-    setLookupError(null);
-    setLookupResults([]);
-    setSelectedLookupId(null);
-    onPick(null);
-    setSearchedOnce(true);
-    try {
-      const res = await fetch(
-        `/api/intelligence/lookup?q=${encodeURIComponent(q)}&type=${encodeURIComponent("advertiser")}`,
-      );
-      const json = (await res.json()) as TTLookupResult[] | { error?: string };
-      if (!Array.isArray(json)) {
-        setLookupError(typeof json?.error === "string" ? json.error : "Search failed");
-        return;
+  const executeLookup = useCallback(
+    async (rawQ: string) => {
+      const q = rawQ.trim();
+      if (q.length < 2) return;
+
+      lookupAbortRef.current?.abort();
+      const ctrl = new AbortController();
+      lookupAbortRef.current = ctrl;
+
+      setLookupLoading(true);
+      setLookupError(null);
+      setLookupResults([]);
+      setSelectedLookupId(null);
+      onPick(null);
+      setSearchedOnce(true);
+      try {
+        const res = await fetch(
+          `/api/intelligence/lookup?q=${encodeURIComponent(q)}&type=${encodeURIComponent("advertiser")}`,
+          { signal: ctrl.signal },
+        );
+        const json = (await res.json()) as TTLookupResult[] | { error?: string };
+        if (ctrl.signal.aborted) return;
+        if (!Array.isArray(json)) {
+          setLookupError(typeof json?.error === "string" ? json.error : "Search failed");
+          return;
+        }
+        const limited = json.slice(0, 36);
+        setLookupResults(limited);
+        if (limited.length === 1) {
+          const one = limited[0]!;
+          setSelectedLookupId(one.id);
+          onPick({ lookup: one, isTracked: trackedIds.has(one.id) });
+        }
+      } catch (e) {
+        if (e instanceof Error && e.name === "AbortError") return;
+        setLookupError("Network error");
+      } finally {
+        if (!ctrl.signal.aborted) setLookupLoading(false);
       }
-      const limited = json.slice(0, 36);
-      setLookupResults(limited);
-      if (limited.length === 1) {
-        const one = limited[0]!;
-        setSelectedLookupId(one.id);
-        onPick({ lookup: one, isTracked: trackedIds.has(one.id) });
-      }
-    } catch {
-      setLookupError("Network error");
-    } finally {
+    },
+    [onPick, trackedIds],
+  );
+
+  useEffect(() => {
+    const trimmed = query.trim();
+
+    if (trimmed.length < 2) {
+      lookupAbortRef.current?.abort();
+      lookupAbortRef.current = null;
+      setLookupResults([]);
+      setLookupError(null);
+      setSearchedOnce(false);
+      setSelectedLookupId(null);
+      onPick(null);
       setLookupLoading(false);
+      return;
     }
-  }, [onPick, query, trackedIds]);
+
+    const tid = window.setTimeout(() => {
+      void executeLookup(trimmed);
+    }, LOOKUP_DEBOUNCE_MS);
+
+    return () => {
+      window.clearTimeout(tid);
+      lookupAbortRef.current?.abort();
+    };
+  }, [executeLookup, onPick, query]);
 
   const selectLookup = useCallback(
     (r: TTLookupResult) => {
@@ -263,7 +305,7 @@ export function CompetitorsPanel({
             value={query}
             onChange={(e) => setQuery(e.target.value)}
             onKeyDown={(e) => {
-              if (e.key === "Enter") void runLookup();
+              if (e.key === "Enter") void executeLookup(query);
             }}
             placeholder="Paste a competitor domain or brand…"
             className="w-full rounded-xl border border-white/10 bg-white/5 py-2 pl-9 pr-3 text-sm text-white placeholder-white/30 outline-none focus:border-violet-500/50"
@@ -271,8 +313,8 @@ export function CompetitorsPanel({
         </div>
         <button
           type="button"
-          onClick={() => void runLookup()}
-          disabled={!query.trim() || lookupLoading}
+          onClick={() => void executeLookup(query)}
+          disabled={query.trim().length < 2 || lookupLoading}
           className="flex items-center gap-1.5 rounded-xl bg-violet-400 px-3 py-2 text-sm font-semibold text-black shadow-[0_4px_0_0_rgba(76,29,149,0.95)] transition hover:bg-violet-300 hover:shadow-[0_5px_0_0_rgba(76,29,149,0.95)] active:translate-y-[2px] active:shadow-none disabled:opacity-40"
         >
           {lookupLoading ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : "Search"}

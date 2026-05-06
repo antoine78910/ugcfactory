@@ -38,9 +38,13 @@ function TrackerCard({
       }`}
     >
       {logo ? (
-        <img src={logo} alt={name} className="h-8 w-8 rounded-lg object-contain bg-white/[0.08] p-1" />
+        <img
+          src={logo}
+          alt={name}
+          className="h-8 w-8 overflow-hidden rounded-lg border border-black/15 bg-white object-contain p-0.5 shadow-[0_0_0_1px_rgba(0,0,0,0.04)_inset]"
+        />
       ) : (
-        <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-violet-500/20 text-xs font-bold text-violet-300">
+        <div className="flex h-8 w-8 shrink-0 items-center justify-center overflow-hidden rounded-lg border border-black/15 bg-white text-xs font-bold text-neutral-500 shadow-[0_0_0_1px_rgba(0,0,0,0.04)_inset]">
           {name.charAt(0).toUpperCase()}
         </div>
       )}
@@ -66,6 +70,10 @@ export type SelectedTracker = {
   logo?: string;
   sourceType: "tracker" | "search";
   domain?: string;
+  /** From tracker list TrendTrack snapshot; fills hero metrics when overview lacks fields. */
+  activeAds?: number;
+  totalTraffic?: number;
+  rank?: number;
 };
 
 export function TrackerList({
@@ -204,6 +212,9 @@ export function TrackerList({
               logo: t.logo ?? t.logoUrl ?? t.favicon,
               sourceType: "tracker",
               domain: t.domain,
+              activeAds: t.activeAds,
+              totalTraffic: t.totalTraffic,
+              rank: t.rank,
             })
           }
         />

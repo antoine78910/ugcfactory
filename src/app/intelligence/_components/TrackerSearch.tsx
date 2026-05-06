@@ -1,9 +1,11 @@
 "use client";
 
-import { useCallback, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { Search, Loader2 } from "lucide-react";
 import type { TTLookupResult } from "@/lib/trendtrack";
 import { SearchDropdown } from "./SearchDropdown";
+
+const LOOKUP_DEBOUNCE_MS = 320;
 
 export function TrackerSearch({
   onResult,
@@ -17,37 +19,74 @@ export function TrackerSearch({
   const [open, setOpen] = useState(false);
   const [highlighted, setHighlighted] = useState(0);
   const [emptyQuery, setEmptyQuery] = useState<string | null>(null);
+  const lookupAbortRef = useRef<AbortController | null>(null);
 
-  const handleSearch = useCallback(async () => {
-    const q = query.trim();
-    if (!q) return;
-    setLoading(true);
-    setError(null);
-    setEmptyQuery(null);
-    try {
-      const res = await fetch(`/api/intelligence/lookup?q=${encodeURIComponent(q)}`);
-      const data = (await res.json()) as TTLookupResult[] | { error: string; code?: string };
-      if (!Array.isArray(data)) {
-        setError(data.error ?? "Search failed");
+  const executeSearch = useCallback(
+    async (rawQ: string) => {
+      const q = rawQ.trim();
+      if (q.length < 2) return;
+
+      lookupAbortRef.current?.abort();
+      const ctrl = new AbortController();
+      lookupAbortRef.current = ctrl;
+
+      setLoading(true);
+      setError(null);
+      setEmptyQuery(null);
+      try {
+        const res = await fetch(`/api/intelligence/lookup?q=${encodeURIComponent(q)}`, {
+          signal: ctrl.signal,
+        });
+        const data = (await res.json()) as TTLookupResult[] | { error: string; code?: string };
+        if (ctrl.signal.aborted) return;
+        if (!Array.isArray(data)) {
+          setError(data.error ?? "Search failed");
+          setResults([]);
+          setOpen(false);
+          onResult(null);
+        } else {
+          const limited = data.slice(0, 8);
+          setResults(limited);
+          setHighlighted(0);
+          setOpen(true);
+          if (limited.length === 0) setEmptyQuery(q);
+        }
+      } catch (e) {
+        if (e instanceof Error && e.name === "AbortError") return;
+        setError("Network error");
         setResults([]);
         setOpen(false);
         onResult(null);
-      } else {
-        const limited = data.slice(0, 8);
-        setResults(limited);
-        setHighlighted(0);
-        setOpen(true);
-        if (limited.length === 0) setEmptyQuery(q);
+      } finally {
+        if (!ctrl.signal.aborted) setLoading(false);
       }
-    } catch {
-      setError("Network error");
+    },
+    [onResult],
+  );
+
+  useEffect(() => {
+    const trimmed = query.trim();
+    if (trimmed.length < 2) {
+      lookupAbortRef.current?.abort();
+      lookupAbortRef.current = null;
       setResults([]);
       setOpen(false);
-      onResult(null);
-    } finally {
+      setEmptyQuery(null);
+      setError(null);
+      setHighlighted(0);
       setLoading(false);
+      return;
     }
-  }, [query, onResult]);
+
+    const tid = window.setTimeout(() => {
+      void executeSearch(trimmed);
+    }, LOOKUP_DEBOUNCE_MS);
+
+    return () => {
+      window.clearTimeout(tid);
+      lookupAbortRef.current?.abort();
+    };
+  }, [executeSearch, query]);
 
   const pick = useCallback(
     (r: TTLookupResult) => {
@@ -70,7 +109,7 @@ export function TrackerSearch({
             onKeyDown={(e) => {
               if (e.key === "Enter") {
                 if (open && results[highlighted]) pick(results[highlighted]);
-                else handleSearch();
+                else void executeSearch(query);
               } else if (e.key === "ArrowDown") {
                 if (results.length > 0) {
                   e.preventDefault();
@@ -91,8 +130,9 @@ export function TrackerSearch({
           />
         </div>
         <button
-          onClick={handleSearch}
-          disabled={loading || !query.trim()}
+          type="button"
+          onClick={() => void executeSearch(query)}
+          disabled={loading || query.trim().length < 2}
           className="flex items-center gap-1.5 rounded-xl bg-violet-400 px-4 py-2 text-sm font-semibold text-black shadow-[0_4px_0_0_rgba(76,29,149,0.95)] transition hover:bg-violet-300 hover:shadow-[0_5px_0_0_rgba(76,29,149,0.95)] active:translate-y-[2px] active:shadow-none disabled:opacity-40"
         >
           {loading ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : "Search"}

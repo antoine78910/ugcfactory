@@ -304,6 +304,15 @@ export function TrackerDetail({
         domain={tracker.domain}
         onRefreshAll={refreshAll}
         refreshing={anyLoading}
+        listFallbackMetrics={
+          isOwnTracker
+            ? {
+                activeAds: tracker.activeAds,
+                totalTraffic: tracker.totalTraffic,
+                rank: tracker.rank,
+              }
+            : undefined
+        }
       />
 
       <section className="rounded-2xl border border-white/10 bg-white/[0.04] p-5 backdrop-blur-sm">

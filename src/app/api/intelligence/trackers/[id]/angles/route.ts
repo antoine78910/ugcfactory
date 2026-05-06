@@ -61,7 +61,7 @@ export async function GET(
   const { id } = await params;
   const force = new URL(req.url).searchParams.get("force") === "true";
   const anglesKey = `tracker:${id}:angles`;
-  const topAdsKey = `tracker:${id}:top-ads`;
+  const topAdsKey = `tracker:${id}:top-ads:v2`;
 
   if (force) await deleteCached(anglesKey);
   const cached = await getCached<Angle[]>(anglesKey);

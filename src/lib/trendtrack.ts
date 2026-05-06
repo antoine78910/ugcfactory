@@ -109,31 +109,162 @@ function numOrUndefined(v: unknown): number | undefined {
   return Number.isFinite(n) ? n : undefined;
 }
 
+function asRecord(v: unknown): Record<string, unknown> {
+  return v && typeof v === "object" && !Array.isArray(v) ? (v as Record<string, unknown>) : {};
+}
+
+/**
+ * Maps TrendTrack `GET .../overview` JSON to the small stats shape used in Intelligence UI.
+ * The API returns `{ requestId, data: { graph, mediaMix, topAds, ... }, meta }`; active ads live under `data.mediaMix`.
+ */
+function mapOverviewResponse(raw: unknown): TTOverview {
+  const root = asRecord(raw);
+  const data = asRecord(root.data);
+  const payload = Object.keys(data).length > 0 ? data : root;
+
+  const mediaMix = asRecord(payload.mediaMix);
+  const activeAds = numOrUndefined(mediaMix.activeAds ?? mediaMix.active_ads);
+
+  const graph = asRecord(payload.graph);
+  let totalTraffic: number | undefined;
+
+  const spendSeries = graph.euImpressionsSpend;
+  if (Array.isArray(spendSeries) && spendSeries.length > 0) {
+    const last = asRecord(spendSeries[spendSeries.length - 1]);
+    totalTraffic = numOrUndefined(
+      last.reach ?? last.impressions ?? last.euReach ?? last.totalReach ?? last.value ?? last.estimatedReach,
+    );
+  }
+
+  const liveSeries = graph.liveAds;
+  if (totalTraffic === undefined && Array.isArray(liveSeries) && liveSeries.length > 0) {
+    const last = asRecord(liveSeries[liveSeries.length - 1]);
+    totalTraffic = numOrUndefined(
+      last.reach ?? last.impressions ?? last.adsLaunched ?? last.count ?? last.value ?? last.total,
+    );
+  }
+
+  return {
+    ...(activeAds !== undefined ? { activeAds } : {}),
+    ...(totalTraffic !== undefined ? { totalTraffic } : {}),
+  };
+}
+
+/**
+ * Brandtracker `GET .../top-ads` returns rows `{ ad, metrics }`. Workspace rows use `{ brandtracker, ad, metrics }`.
+ */
+function normalizeTopAdsRow(row: unknown): TTAd {
+  const r = asRecord(row);
+  const innerAd = asRecord(r.ad);
+  const dto = Object.keys(innerAd).length > 0 ? innerAd : r;
+
+  const rowMetrics = asRecord(r.metrics);
+  const base = normalizeTTAd(dto);
+  const reachFromRow =
+    rowMetrics.totalReach ??
+    rowMetrics.reach ??
+    rowMetrics.impressions ??
+    rowMetrics.estimatedReach ??
+    rowMetrics.estimated_reach;
+
+  const mergedReach = base.reach ?? numOrUndefined(reachFromRow);
+  const rankFromMetrics = numOrUndefined(
+    rowMetrics.currentRank ?? rowMetrics.current_rank ?? rowMetrics.rank ?? rowMetrics.page_rank,
+  );
+
+  return {
+    ...base,
+    ...(mergedReach !== undefined ? { reach: mergedReach } : {}),
+    ...(rankFromMetrics !== undefined ? { rank: rankFromMetrics } : {}),
+  };
+}
+
 /**
  * TrendTrack sometimes returns snake_case fields (e.g. `thumbnail_url`) depending on the endpoint
  * and internal caching layer. Normalize to the camelCase `TTAd` shape used across the UI.
  */
 function normalizeTTAd(raw: unknown): TTAd {
   const o = (raw && typeof raw === "object" ? (raw as Record<string, unknown>) : {}) as Record<string, unknown>;
-  const id = String(o.id ?? o.ad_id ?? o.adId ?? o.creative_id ?? o.creativeId ?? "").trim();
-  const headline = (o.headline ?? o.ad_headline ?? o.adHeadline) as unknown;
-  const title = (o.title ?? o.ad_title ?? o.adTitle) as unknown;
-  const body = (o.body ?? o.primary_text ?? o.primaryText ?? o.ad_body ?? o.adBody) as unknown;
-  const text = (o.text ?? o.description ?? o.ad_text ?? o.adText) as unknown;
+  const content = asRecord(o.content);
+  const media = asRecord(o.media);
+  const nestedMetrics = asRecord(o.metrics);
 
-  const thumbnailUrl =
-    (o.thumbnailUrl ?? o.thumbnail_url ?? o.thumbnail ?? o.thumb_url ?? o.thumbUrl) as unknown;
-  const previewUrl =
-    (o.previewUrl ?? o.preview_url ?? o.preview ?? o.creative_preview_url ?? o.creativePreviewUrl) as unknown;
+  const id = String(o.id ?? o.ad_id ?? o.adId ?? o.creative_id ?? o.creativeId ?? "").trim();
+  const headline = (o.headline ?? o.ad_headline ?? o.adHeadline ?? content.headline ?? content.title) as unknown;
+  const title = (o.title ?? o.ad_title ?? o.adTitle ?? content.title ?? content.primaryTitle) as unknown;
+  const body = (o.body ??
+    o.primary_text ??
+    o.primaryText ??
+    o.ad_body ??
+    o.adBody ??
+    content.body ??
+    content.primaryText) as unknown;
+  const text = (o.text ??
+    o.description ??
+    o.ad_text ??
+    o.adText ??
+    content.description ??
+    content.secondaryText) as unknown;
+
+  const thumbnailUrl = (o.thumbnailUrl ??
+    o.thumbnail_url ??
+    o.thumbnail ??
+    media.thumbnailUrl ??
+    media.thumbnail_url ??
+    media.imageUrl ??
+    media.image_url ??
+    media.previewUrl ??
+    media.preview ??
+    media.image) as unknown;
+  const previewUrl = (o.previewUrl ??
+    o.preview_url ??
+    o.preview ??
+    o.creative_preview_url ??
+    o.creativePreviewUrl ??
+    media.previewUrl ??
+    media.preview_url ??
+    media.videoPreviewUrl ??
+    media.video_preview_url) as unknown;
   const imageUrl =
-    (o.imageUrl ?? o.image_url ?? o.image ?? o.creative_image_url ?? o.creativeImageUrl) as unknown;
+    (o.imageUrl ?? o.image_url ?? o.image ?? media.imageUrl ?? media.image_url ?? media.url) as unknown;
 
   const platform = (o.platform ?? o.publisher_platform ?? o.publisherPlatform) as unknown;
-  const reach = numOrUndefined(o.reach ?? o.estimated_reach ?? o.estimatedReach);
-  const impressions = numOrUndefined(o.impressions ?? o.estimated_impressions ?? o.estimatedImpressions);
-  const startDate = (o.startDate ?? o.start_date ?? o.start ?? o.start_time ?? o.startTime) as unknown;
-  const firstSeen = (o.firstSeen ?? o.first_seen ?? o.first_seen_at ?? o.firstSeenAt) as unknown;
-  const adUrl = (o.adUrl ?? o.ad_url ?? o.url ?? o.share_url ?? o.shareUrl) as unknown;
+  const reach = numOrUndefined(
+    o.reach ??
+      o.estimated_reach ??
+      o.estimatedReach ??
+      nestedMetrics.totalReach ??
+      nestedMetrics.reach ??
+      nestedMetrics.impressions,
+  );
+  const impressions = numOrUndefined(
+    o.impressions ?? o.estimated_impressions ?? o.estimatedImpressions ?? nestedMetrics.impressions,
+  );
+  const startDate = (o.startDate ??
+    o.start_date ??
+    o.start ??
+    o.start_time ??
+    o.startTime ??
+    o.createdAt ??
+    o.created_at) as unknown;
+  const firstSeen = (o.firstSeen ?? o.first_seen ?? o.first_seen_at ?? o.firstSeenAt ?? o.first_seen_at) as unknown;
+  const adUrl = (o.adUrl ??
+    o.ad_url ??
+    o.url ??
+    o.share_url ??
+    o.shareUrl ??
+    content.destinationUrl ??
+    content.link_url) as unknown;
+
+  const rankRaw = o.rank;
+  const rankFromObject =
+    typeof rankRaw === "number"
+      ? rankRaw
+      : numOrUndefined(
+          asRecord(rankRaw).currentRank ?? asRecord(rankRaw).current_rank ?? asRecord(rankRaw).value,
+        );
+  const rankFromDto =
+    rankFromObject ?? numOrUndefined(nestedMetrics.currentRank ?? nestedMetrics.current_rank);
 
   return {
     id: id || "unknown",
@@ -150,6 +281,7 @@ function normalizeTTAd(raw: unknown): TTAd {
     ...(typeof startDate === "string" && startDate.trim() ? { startDate: startDate.trim() } : {}),
     ...(typeof firstSeen === "string" && firstSeen.trim() ? { firstSeen: firstSeen.trim() } : {}),
     ...(typeof adUrl === "string" && adUrl.trim() ? { adUrl: adUrl.trim() } : {}),
+    ...(rankFromDto !== undefined ? { rank: rankFromDto } : {}),
   };
 }
 
@@ -168,15 +300,16 @@ export async function ttListTrackers(): Promise<TTTracker[]> {
 }
 
 export async function ttGetOverview(id: string): Promise<TTOverview> {
-  return ttFetch<TTOverview>(`/v1/brandtrackers/${encodeURIComponent(id)}/overview`);
+  const raw = await ttFetch<unknown>(`/v1/brandtrackers/${encodeURIComponent(id)}/overview`);
+  return mapOverviewResponse(raw);
 }
 
-export async function ttGetTopAds(id: string, limit = 10, sortBy?: string): Promise<TTAd[]> {
-  const sort = sortBy ? `&sortBy=${encodeURIComponent(sortBy)}` : "";
-  const res = await ttFetch<{ data?: TTAd[] }>(
-    `/v1/brandtrackers/${encodeURIComponent(id)}/top-ads?limit=${limit}${sort}`
+export async function ttGetTopAds(id: string, limit = 10, sortBy = "currentRank"): Promise<TTAd[]> {
+  const sort = `&sortBy=${encodeURIComponent(sortBy)}`;
+  const res = await ttFetch<{ data?: unknown[] }>(
+    `/v1/brandtrackers/${encodeURIComponent(id)}/top-ads?limit=${limit}${sort}`,
   );
-  return (res.data ?? []).map((ad) => normalizeTTAd(ad));
+  return (res.data ?? []).map((row) => normalizeTopAdsRow(row));
 }
 
 export async function ttLookup(q: string, options?: { type?: string }): Promise<TTLookupResult[]> {
@@ -190,11 +323,15 @@ export async function ttLookup(q: string, options?: { type?: string }): Promise<
 }
 
 export async function ttQueryAds(body: Record<string, unknown>): Promise<TTAd[]> {
-  const res = await ttFetch<{ data?: TTAd[] }>("/v1/ads/query", {
+  const res = await ttFetch<{ data?: unknown[] }>("/v1/ads/query", {
     method: "POST",
     body: JSON.stringify(body),
   });
-  return (res.data ?? []).map((ad) => normalizeTTAd(ad));
+  return (res.data ?? []).map((row) =>
+    row !== null && typeof row === "object" && "ad" in (row as object)
+      ? normalizeTopAdsRow(row)
+      : normalizeTTAd(row),
+  );
 }
 
 export type TTUsage = {

@@ -24,7 +24,11 @@ Use it to verify request bodies, `sortBy` values, TTL/credits, and endpoint diff
 
 Remote MCP endpoint: `https://api.trendtrack.io/v1/mcp`
 
-Configured in the parent **`speel 2.0/.cursor/mcp.json`** as `trendtrack`. After edits, reload Cursor; complete OAuth if prompted. MCP is optional for coding — REST proxy remains `src/lib/trendtrack.ts` + `TRENDTRACK_API_KEY`.
+Configured in **`speel 2.0/.cursor/mcp.json`** and optionally **`ugc-automation/.cursor/mcp.json`** as `trendtrack`. MCP is optional — the app uses **`TRENDTRACK_API_KEY`** + `src/lib/trendtrack.ts`.
+
+### Cursor + TrendTrack OAuth error
+
+If logs show **`redirect_uris must be HTTPS URLs or loopback HTTP URLs`**: Cursor proposes a **`cursor://…`** OAuth redirect; TrendTrack only accepts HTTPS or loopback `http`. That blocks MCP OAuth until Cursor or TrendTrack adjust policy. Disable the MCP server in Cursor settings until then, or ask either vendor about compatibility.
 
 ## `sortBy` rules
 

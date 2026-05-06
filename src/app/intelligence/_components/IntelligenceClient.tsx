@@ -37,6 +37,14 @@ export function IntelligenceClient({ ownTrackerIds }: { ownTrackerIds: string[] 
     }
   }, []);
 
+  const handleCompetitorPick = useCallback((p: CompetitorPick | null) => {
+    setCompetitorPick(p);
+    if (p) {
+      setSelected(null);
+      setSearchResult(null);
+    }
+  }, []);
+
   return (
     <div className="flex min-h-[calc(100dvh-0px)]">
       <aside className="sticky top-0 flex h-dvh w-80 shrink-0 flex-col gap-4 overflow-y-auto border-r border-white/10 bg-[#06070d] p-4">
@@ -63,13 +71,7 @@ export function IntelligenceClient({ ownTrackerIds }: { ownTrackerIds: string[] 
         <CompetitorsPanel
           sortBy={competitorSortBy}
           onSortBy={setCompetitorSortBy}
-          onPick={(p) => {
-            setCompetitorPick(p);
-            if (p) {
-              setSelected(null);
-              setSearchResult(null);
-            }
-          }}
+          onPick={handleCompetitorPick}
         />
       </aside>
 

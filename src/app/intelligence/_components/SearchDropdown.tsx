@@ -71,10 +71,10 @@ export function SearchDropdown({
                 <img
                   src={logo}
                   alt={r.name}
-                  className="h-8 w-8 shrink-0 rounded-md bg-white/10 object-contain p-1"
+                  className="h-8 w-8 shrink-0 overflow-hidden rounded-md border border-black/15 bg-white object-contain p-0.5 shadow-[0_0_0_1px_rgba(0,0,0,0.04)_inset]"
                 />
               ) : (
-                <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-md bg-violet-500/20 text-xs font-bold text-violet-300">
+                <div className="flex h-8 w-8 shrink-0 items-center justify-center overflow-hidden rounded-md border border-black/15 bg-white text-xs font-bold text-neutral-500 shadow-[0_0_0_1px_rgba(0,0,0,0.04)_inset]">
                   {r.name.charAt(0).toUpperCase()}
                 </div>
               )}
