@@ -102,7 +102,7 @@ export function loadWorkflowProjectRaw(scope: string, spaceId: string): Workflow
 export function saveWorkflowProjectRaw(scope: string, spaceId: string, state: WorkflowProjectStateV1) {
   if (typeof window === "undefined") return;
   try {
-    localStorage.setItem(workflowSpaceStorageKey(scope, spaceId), JSON.stringify(state));
+    localStorage.setItem(workflowSpaceStorageKey(scope, spaceId), JSON.stringify(sanitizeProjectForLocalStorage(state)));
   } catch {
     /* quota */
   }
@@ -116,3 +116,64 @@ export function shouldShowWorkflowOnboarding(project: WorkflowProjectStateV1): b
 }
 
 export { newPage };
+
+// ---- LocalStorage safety ----------------------------------------------------
+// Workflow state is stored in localStorage. Some node fields (video frames, data URLs, blob URLs,
+// assistant outputs) can easily exceed quota and cause silent save failures → users "lose" nodes/edges
+// after navigating away and back. We aggressively strip those fields before persisting.
+
+const LOCALSTORAGE_EPHEMERAL_FIELDS = new Set([
+  // AdAsset runtime / previews
+  "outputPreviewUrl",
+  "outputMediaKind",
+  "pendingWorkflowRun",
+  "assistantOutput",
+  "websiteLastRunAt",
+  // Reference previews (keep main stable URLs on ImageRef nodes instead)
+  "referencePreviewUrl",
+  "referenceSource",
+  "referenceMediaKind",
+  // Video generator image references (derived from links)
+  "videoStartImageUrl",
+  "videoEndImageUrl",
+  // Heavy frame extracts (data URLs)
+  "videoExtractedFirstFrameUrl",
+  "videoExtractedLastFrameUrl",
+  // Anything else that might embed data URLs
+  "outputFrameDataUrl",
+]);
+
+function isHeavyDataUrl(v: unknown): boolean {
+  return typeof v === "string" && v.startsWith("data:") && v.length > 200;
+}
+
+function isBlobUrl(v: unknown): boolean {
+  return typeof v === "string" && v.startsWith("blob:");
+}
+
+function sanitizeNodeDataForLocalStorage(data: unknown): unknown {
+  if (!data || typeof data !== "object" || Array.isArray(data)) return data;
+  const out: Record<string, unknown> = { ...(data as Record<string, unknown>) };
+  for (const key of LOCALSTORAGE_EPHEMERAL_FIELDS) {
+    if (key in out) delete out[key];
+  }
+  for (const [k, v] of Object.entries(out)) {
+    if (isHeavyDataUrl(v)) delete out[k];
+    // Blob URLs won't resolve after reload; keep the node but drop the URL so it doesn't break saves.
+    if (isBlobUrl(v)) delete out[k];
+  }
+  return out;
+}
+
+function sanitizeProjectForLocalStorage(project: WorkflowProjectStateV1): WorkflowProjectStateV1 {
+  return {
+    ...project,
+    pages: project.pages.map((p) => ({
+      ...p,
+      nodes: (p.nodes ?? []).map((n) => ({
+        ...n,
+        data: sanitizeNodeDataForLocalStorage((n as any).data) as any,
+      })) as any,
+    })),
+  };
+}

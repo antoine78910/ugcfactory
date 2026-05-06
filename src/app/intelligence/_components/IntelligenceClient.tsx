@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useState } from "react";
+import { useCallback, useMemo, useState } from "react";
 import type { TTLookupResult } from "@/lib/trendtrack";
 import { TrackerSearch } from "./TrackerSearch";
 import { TrackerList, type SelectedTracker } from "./TrackerList";
@@ -8,11 +8,14 @@ import { TrackerDetail } from "./TrackerDetail";
 import { CompetitorsPanel, type CompetitorPick } from "./CompetitorsPanel";
 import { CompetitorDetail } from "./CompetitorDetail";
 import { RecreationsPanel } from "./RecreationsPanel";
+import { WelcomeOverlay } from "./WelcomeOverlay";
+import { IntelligenceOnboarding } from "./IntelligenceOnboarding";
 
 export function IntelligenceClient({ ownTrackerIds }: { ownTrackerIds: string[] }) {
   const [selected, setSelected] = useState<SelectedTracker | null>(null);
   const [searchResult, setSearchResult] = useState<TTLookupResult | null>(null);
   const [competitorPick, setCompetitorPick] = useState<CompetitorPick | null>(null);
+  const [onboardingDone, setOnboardingDone] = useState(false);
   const [competitorSortBy, setCompetitorSortBy] = useState<
     | "currentRank"
     | "reach"
@@ -46,8 +49,11 @@ export function IntelligenceClient({ ownTrackerIds }: { ownTrackerIds: string[] 
     }
   }, []);
 
+  const hasBrand = useMemo(() => ownTrackerIds.length > 0 || onboardingDone, [ownTrackerIds.length, onboardingDone]);
+
   return (
     <div className="flex w-full overflow-hidden max-md:h-[calc(100dvh-3.5rem)] md:h-dvh">
+      <WelcomeOverlay />
       <aside className="flex h-full w-80 shrink-0 flex-col gap-4 overflow-y-auto overscroll-y-contain border-r border-white/10 bg-[#06070d] p-4">
         <div className="flex items-center justify-between gap-2 px-1 pt-1">
           <div className="flex items-center gap-2">
@@ -69,16 +75,26 @@ export function IntelligenceClient({ ownTrackerIds }: { ownTrackerIds: string[] 
             searchResult={searchResult}
           />
         </div>
-        <CompetitorsPanel
-          sortBy={competitorSortBy}
-          onSortBy={setCompetitorSortBy}
-          onPick={handleCompetitorPick}
-        />
-        <RecreationsPanel />
+        {hasBrand ? (
+          <>
+            <CompetitorsPanel
+              sortBy={competitorSortBy}
+              onSortBy={setCompetitorSortBy}
+              onPick={handleCompetitorPick}
+            />
+            <RecreationsPanel />
+          </>
+        ) : null}
       </aside>
 
       <main className="min-h-0 min-w-0 flex-1 overflow-y-auto overscroll-y-contain">
-        {selected ? (
+        {!hasBrand ? (
+          <IntelligenceOnboarding
+            onDone={() => {
+              setOnboardingDone(true);
+            }}
+          />
+        ) : selected ? (
           <TrackerDetail tracker={selected} ownTrackerIds={ownTrackerIds} />
         ) : competitorPick ? (
           <CompetitorDetail competitor={competitorPick.lookup} sortBy={competitorSortBy} />

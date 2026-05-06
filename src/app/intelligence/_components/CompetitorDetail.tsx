@@ -4,6 +4,9 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { TTAd, TTLookupResult } from "@/lib/trendtrack";
 import { AdModal } from "./AdModal";
 import { AdCard } from "./AdCard";
+import { HooksTable } from "./HooksTable";
+import { Copy } from "lucide-react";
+import { cn } from "@/lib/utils";
 
 type SortBy =
   | "currentRank"
@@ -118,6 +121,27 @@ export function CompetitorDetail({
 
   const [openAd, setOpenAd] = useState<TTAd | null>(null);
 
+  const bestScripts = useMemo(() => {
+    const rows = ads
+      .map((ad) => {
+        const hook = (ad.headline ?? ad.title ?? "").trim();
+        const script = (ad.body ?? ad.text ?? "").trim();
+        const score = (ad.spend ?? 0) * 2 + (ad.reach ?? 0) + (ad.impressions ?? 0) * 0.25;
+        return { hook, script, score };
+      })
+      .filter((r) => r.script.length >= 18)
+      .sort((a, b) => b.score - a.score)
+      .slice(0, 5);
+
+    const seen = new Set<string>();
+    return rows.filter((r) => {
+      const key = r.script.slice(0, 120).toLowerCase();
+      if (seen.has(key)) return false;
+      seen.add(key);
+      return true;
+    });
+  }, [ads]);
+
   return (
     <div className="min-h-full bg-[#0b0912] p-6">
       <div className="mx-auto max-w-5xl">
@@ -178,6 +202,51 @@ export function CompetitorDetail({
             </div>
           ) : null}
         </section>
+
+        {!adsLoading && !adsError && ads.length > 0 ? (
+          <section className="mt-4 grid gap-3 lg:grid-cols-2">
+            <div className="rounded-2xl border border-white/10 bg-white/[0.04] p-5 backdrop-blur-sm">
+              <h3 className="mb-3 text-sm font-semibold text-white/80">Best hooks</h3>
+              <HooksTable ads={ads} brandSlug={competitor.name?.toLowerCase().replace(/\s+/g, "-")} />
+            </div>
+
+            <div className="rounded-2xl border border-white/10 bg-white/[0.04] p-5 backdrop-blur-sm">
+              <h3 className="mb-3 text-sm font-semibold text-white/80">Best scripts</h3>
+              {bestScripts.length === 0 ? (
+                <p className="text-sm text-white/40">No script text found on these ads.</p>
+              ) : (
+                <div className="flex flex-col gap-2">
+                  {bestScripts.map((s, idx) => (
+                    <div
+                      key={idx}
+                      className="rounded-xl border border-white/10 bg-white/[0.03] p-3"
+                    >
+                      {s.hook ? (
+                        <p className="text-xs font-semibold text-white/80">“{s.hook.slice(0, 110)}”</p>
+                      ) : null}
+                      <p className={cn("mt-1 text-xs leading-relaxed text-white/55", !s.hook && "mt-0")}>
+                        {s.script}
+                      </p>
+                      <div className="mt-2 flex justify-end">
+                        <button
+                          type="button"
+                          onClick={async () => {
+                            await navigator.clipboard.writeText(s.script);
+                          }}
+                          className="inline-flex items-center gap-1.5 rounded-lg border border-white/10 bg-white/5 px-2.5 py-1 text-[11px] font-medium text-white/70 transition hover:border-violet-400/35 hover:text-white"
+                          title="Copy script"
+                        >
+                          <Copy className="h-3 w-3" />
+                          Copy
+                        </button>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+          </section>
+        ) : null}
       </div>
 
       {openAd ? <AdModal ad={openAd} brandName={competitor.name} onClose={() => setOpenAd(null)} /> : null}

@@ -54,6 +54,7 @@ import {
   Upload,
   UserRound,
   Loader2,
+  X,
 } from "lucide-react";
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
@@ -995,16 +996,23 @@ function WorkflowReactFlowChrome({
     if (!frameOpen || !groupSelectionAnchor) return null;
     const GAP = 12;
     const MIN_TOP_SAFE = 52;
-    const ESTIMATED_PANEL_H = 320;
+    const ESTIMATED_PANEL_H = 340;
+    const VIEW_MARGIN = 10;
+    const vh = typeof window !== "undefined" ? window.innerHeight : 800;
 
     const { left, screenTopY, screenBottomY } = groupSelectionAnchor;
     const roomAbove = screenTopY - MIN_TOP_SAFE;
     const placeAbove = roomAbove >= Math.min(ESTIMATED_PANEL_H, 200) + GAP;
 
-    const top = placeAbove ? screenTopY - GAP : screenBottomY + GAP;
+    const desiredTop = placeAbove ? screenTopY - GAP : screenBottomY + GAP;
     const transform = placeAbove ? "translate(-50%, -100%)" : "translate(-50%, 0)";
 
-    return { left, top, transform };
+    // Clamp so the dialog stays on-screen (users shouldn't have to pan/scroll to click "Create group").
+    const maxTop = Math.max(MIN_TOP_SAFE, vh - VIEW_MARGIN);
+    const minTop = MIN_TOP_SAFE;
+    const clampedTop = Math.max(minTop, Math.min(maxTop, desiredTop));
+
+    return { left, top: clampedTop, transform };
   }, [frameOpen, groupSelectionAnchor]);
 
   useEffect(() => {
@@ -2479,10 +2487,20 @@ function WorkflowReactFlowChrome({
             }
           }
         >
-          <p className="mb-2 text-[11px] font-semibold uppercase tracking-wide text-white/45">New group</p>
+          <div className="mb-2 flex items-center justify-between gap-2">
+            <p className="text-[11px] font-semibold uppercase tracking-wide text-white/45">New group</p>
+            <button
+              type="button"
+              onClick={() => setFrameOpen(false)}
+              className="flex h-6 w-6 items-center justify-center rounded-md text-white/35 transition hover:bg-white/[0.06] hover:text-white/70"
+              aria-label="Close"
+              title="Close"
+            >
+              <X className="h-3.5 w-3.5" aria-hidden />
+            </button>
+          </div>
           <p className="mb-3 text-[11px] leading-snug text-white/45">
-            Box-select nodes on the canvas (Select tool), or hold Ctrl / ⌘ while clicking to add nodes. Then name your
-            group and pick a color.
+            Name it (optional), pick a color, then create.
           </p>
           <label className="mb-2 block">
             <span className="mb-1 block text-[10px] text-white/40">Name</span>
@@ -2539,13 +2557,22 @@ function WorkflowReactFlowChrome({
               <div className="min-h-[52px] rounded-b-[13px] bg-black/[0.12]" />
             </div>
           </div>
-          <button
-            type="button"
-            onClick={createGroup}
-            className="w-full rounded-lg bg-violet-500/90 py-2 text-[13px] font-semibold text-white transition hover:bg-violet-500"
-          >
-            Create group
-          </button>
+          <div className="flex gap-2">
+            <button
+              type="button"
+              onClick={() => setFrameOpen(false)}
+              className="flex-1 rounded-lg border border-white/10 bg-white/[0.04] py-2 text-[13px] font-semibold text-white/70 transition hover:bg-white/[0.07] hover:text-white"
+            >
+              Cancel
+            </button>
+            <button
+              type="button"
+              onClick={createGroup}
+              className="flex-1 rounded-lg bg-violet-500/90 py-2 text-[13px] font-semibold text-white transition hover:bg-violet-500"
+            >
+              Create
+            </button>
+          </div>
         </div>
       ) : null}
     </>

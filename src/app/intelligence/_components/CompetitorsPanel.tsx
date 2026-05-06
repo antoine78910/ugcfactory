@@ -139,10 +139,12 @@ export function CompetitorsPanel({
   onPick,
   sortBy,
   onSortBy,
+  maxSaved = 3,
 }: {
   onPick: (p: CompetitorPick | null) => void;
   sortBy: SortBy;
   onSortBy: (s: SortBy) => void;
+  maxSaved?: number;
 }) {
   const [query, setQuery] = useState("");
   const [lookupLoading, setLookupLoading] = useState(false);
@@ -163,6 +165,12 @@ export function CompetitorsPanel({
     if (!selectedLookupId) return null;
     return lookupResults.find((r) => r.id === selectedLookupId) ?? null;
   }, [lookupResults, selectedLookupId]);
+
+  const maxedOut = useMemo(() => {
+    if (!selectedLookup) return saved.length >= maxSaved;
+    const alreadySaved = saved.some((c) => (c.lookupId ?? c.id) === selectedLookup.id);
+    return saved.length >= maxSaved && !alreadySaved;
+  }, [maxSaved, saved, selectedLookup]);
 
   const refreshSaved = useCallback(async () => {
     const res = await fetch("/api/intelligence/competitors");
@@ -263,6 +271,13 @@ export function CompetitorsPanel({
 
   const saveSelected = useCallback(async () => {
     if (!selectedLookup || saving) return;
+    const alreadySaved = saved.some(
+      (c) => (c.lookupId ?? c.id) === selectedLookup.id,
+    );
+    if (!alreadySaved && saved.length >= maxSaved) {
+      setLookupError(`You can save up to ${maxSaved} competitors.`);
+      return;
+    }
     setSaving(true);
     try {
       const res = await fetch("/api/intelligence/competitors", {
@@ -282,7 +297,7 @@ export function CompetitorsPanel({
     } finally {
       setSaving(false);
     }
-  }, [refreshSaved, saving, selectedLookup]);
+  }, [maxSaved, refreshSaved, saved, saving, selectedLookup]);
 
   const deleteSaved = useCallback(
     async (id: string) => {
@@ -340,12 +355,18 @@ export function CompetitorsPanel({
         <button
           type="button"
           onClick={() => void saveSelected()}
-          disabled={!selectedLookup || saving}
+          disabled={!selectedLookup || saving || maxedOut}
           className={cn(
             "inline-flex items-center gap-1 rounded-lg border border-white/10 bg-white/[0.04] px-2.5 py-1.5 text-[11px] font-semibold text-white/70 transition hover:bg-white/[0.07]",
             (!selectedLookup || saving) && "cursor-not-allowed opacity-50",
           )}
-          title={!selectedLookup ? "Pick a competitor from the list first." : "Save competitor"}
+          title={
+            !selectedLookup
+              ? "Pick a competitor from the list first."
+              : maxedOut
+                ? `Max ${maxSaved} competitors saved.`
+                : "Save competitor"
+          }
         >
           <Star className="h-3.5 w-3.5" />
           Save
