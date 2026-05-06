@@ -41,3 +41,29 @@ export function intelligenceUiSortToAdsQuerySort(uiSortBy: string): TTAdsQuerySo
       return "relevance";
   }
 }
+
+const ADVERTISER_ADS_SORT = new Set(["newest", "createdAt", "longestRunning", "reach", "duplicates"]);
+
+/**
+ * `GET /v1/advertisers/{id}/ads` supports a smaller sort set than brandtracker top-ads.
+ */
+export function intelligenceUiSortToAdvertiserAdsSort(uiSortBy: string): string {
+  const s = uiSortBy.trim();
+  if (ADVERTISER_ADS_SORT.has(s)) return s;
+  switch (s) {
+    case "currentRank":
+    case "rankDelta7d":
+    case "rankDelta14d":
+    case "rankDelta30d":
+      return "reach";
+    case "reach":
+    case "reachDelta1d":
+    case "reachDelta7d":
+    case "reachDelta30d":
+      return "reach";
+    case "longestRunning":
+      return "longestRunning";
+    default:
+      return "reach";
+  }
+}

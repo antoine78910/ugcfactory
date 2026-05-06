@@ -3,8 +3,8 @@ export const runtime = "nodejs";
 import { NextResponse } from "next/server";
 import { createHash } from "crypto";
 import { requireSupabaseUser } from "@/lib/supabase/requireUser";
-import { ttGetTopAds, ttListTrackers, ttQueryAds, type TTAd } from "@/lib/trendtrack";
-import { intelligenceUiSortToAdsQuerySort } from "@/lib/trendtrackAdsQuerySort";
+import { ttGetTopAds, ttListAdvertiserAds, ttListTrackers, ttQueryAds, type TTAd } from "@/lib/trendtrack";
+import { intelligenceUiSortToAdsQuerySort, intelligenceUiSortToAdvertiserAdsSort } from "@/lib/trendtrackAdsQuerySort";
 import { getCached, setCached, deleteCached } from "@/lib/trendtrackCache";
 import { respondTrendTrackError } from "@/app/api/intelligence/_errors";
 
@@ -22,6 +22,9 @@ const SORT_BY_SET = new Set([
   "rankDelta30d",
   "longestRunning",
 ]);
+
+/** Bump when competitor routing/body semantics change so Supabase cache is not polluted. */
+const CACHE_REVISION = "v3";
 
 function looksLikeDomain(q: string): boolean {
   const t = q.trim().toLowerCase();
@@ -47,8 +50,8 @@ export async function GET(req: Request) {
 
   const qHash = createHash("sha256").update(q.toLowerCase()).digest("hex").slice(0, 12);
   const key = lookupId
-    ? `competitor:${lookupId}:${sortBy}:top-ads`
-    : `competitor:q:${qHash}:${sortBy}:top-ads`;
+    ? `competitor:${lookupId}:${sortBy}:top:${CACHE_REVISION}`
+    : `competitor:q:${qHash}:${sortBy}:top:${CACHE_REVISION}`;
 
   if (force) await deleteCached(key);
   const cached = await getCached(key);
@@ -67,14 +70,30 @@ export async function GET(req: Request) {
 
     const isTracked = Boolean(lookupId && trackedIds.has(lookupId));
 
-    // Routing rule (B):
-    // - only use tracker top-ads when `currentRank`, otherwise fallback to ads/query.
-    if (isTracked && sortBy === "currentRank") {
-      const ads = await ttGetTopAds(lookupId, 10, "currentRank");
+    // Workspace trackers: canonical brandtracker rankings (supports full top-ads sort enum).
+    if (isTracked && lookupId) {
+      const ads = await ttGetTopAds(lookupId, 10, sortBy);
       const payload = {
         source: "tracker_top_ads" as const,
         isTracked: true,
         sortBy,
+        ads,
+      };
+      await setCached(key, payload, TTL);
+      return NextResponse.json(payload);
+    }
+
+    // Resolved competitor id from `/v1/lookup?type=advertiser` — constrain to this page only.
+    if (lookupId) {
+      const advSort = intelligenceUiSortToAdvertiserAdsSort(sortBy);
+      const ads = await ttListAdvertiserAds(lookupId, { limit: 10, sortBy: advSort, order: "desc" });
+      const payload = {
+        source: "advertiser_ads" as const,
+        isTracked,
+        /** User-facing Intelligence sort. */
+        sortBy,
+        /** Actual `sortBy` sent to TrendTrack advertiser ads listing. */
+        advertiserAdsSortBy: advSort,
         ads,
       };
       await setCached(key, payload, TTL);

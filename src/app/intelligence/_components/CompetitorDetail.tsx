@@ -92,7 +92,7 @@ export function CompetitorDetail({
         );
         const parsed = await parseIntelResponse<{
           ads: TTAd[];
-          source: "tracker_top_ads" | "ads_query";
+          source: "tracker_top_ads" | "advertiser_ads" | "ads_query";
           isTracked: boolean;
           sortBy: string;
         }>(res);
@@ -158,7 +158,14 @@ export function CompetitorDetail({
           ) : (
             <div className="grid gap-2">
               {ads.map((ad) => (
-                <AdCard key={ad.id} ad={ad} onView={() => setOpenAd(ad)} />
+                <AdCard
+                  key={ad.id}
+                  ad={ad}
+                  onView={() => setOpenAd(ad)}
+                  playVideoOnHover
+                  showRecreateShortcut
+                  brandName={competitor.name}
+                />
               ))}
             </div>
           )}

@@ -332,6 +332,9 @@ export function TrackerDetail({
                 key={ad.id}
                 ad={{ ...ad, rank: idx + 1 }}
                 onView={() => setOpenAd(ad)}
+                playVideoOnHover
+                showRecreateShortcut
+                brandName={tracker.name}
               />
             ))}
           </div>

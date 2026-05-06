@@ -96,6 +96,8 @@ export type TTAd = {
   thumbnailUrl?: string;
   previewUrl?: string;
   imageUrl?: string;
+  /** Creative video URL when TrendTrack exposes `media.mediaUrl` (e.g. Meta video). */
+  videoUrl?: string;
   platform?: string;
   reach?: number;
   impressions?: number;
@@ -227,6 +229,14 @@ function normalizeTTAd(raw: unknown): TTAd {
     media.video_preview_url) as unknown;
   const imageUrl =
     (o.imageUrl ?? o.image_url ?? o.image ?? media.imageUrl ?? media.image_url ?? media.url) as unknown;
+  const videoUrl = (o.videoUrl ??
+    o.video_url ??
+    media.mediaUrl ??
+    media.media_url ??
+    media.videoUrl ??
+    media.video_url ??
+    media.sourceUrl ??
+    media.source_url) as unknown;
 
   const platform = (o.platform ?? o.publisher_platform ?? o.publisherPlatform) as unknown;
   const reach = numOrUndefined(
@@ -275,6 +285,9 @@ function normalizeTTAd(raw: unknown): TTAd {
     ...(typeof thumbnailUrl === "string" && thumbnailUrl.trim() ? { thumbnailUrl: thumbnailUrl.trim() } : {}),
     ...(typeof previewUrl === "string" && previewUrl.trim() ? { previewUrl: previewUrl.trim() } : {}),
     ...(typeof imageUrl === "string" && imageUrl.trim() ? { imageUrl: imageUrl.trim() } : {}),
+    ...(typeof videoUrl === "string" && videoUrl.trim() && /^https?:\/\//i.test(videoUrl.trim())
+      ? { videoUrl: videoUrl.trim() }
+      : {}),
     ...(typeof platform === "string" && platform.trim() ? { platform: platform.trim() } : {}),
     ...(reach !== undefined ? { reach } : {}),
     ...(impressions !== undefined ? { impressions } : {}),
@@ -305,11 +318,37 @@ export async function ttGetOverview(id: string): Promise<TTOverview> {
 }
 
 export async function ttGetTopAds(id: string, limit = 10, sortBy = "currentRank"): Promise<TTAd[]> {
-  const sort = `&sortBy=${encodeURIComponent(sortBy)}`;
+  const apiSort = sortBy === "longestRunning" ? "daysRunning" : sortBy;
+  const sort = `&sortBy=${encodeURIComponent(apiSort)}`;
   const res = await ttFetch<{ data?: unknown[] }>(
     `/v1/brandtrackers/${encodeURIComponent(id)}/top-ads?limit=${limit}${sort}`,
   );
   return (res.data ?? []).map((row) => normalizeTopAdsRow(row));
+}
+
+/**
+ * Page-scoped ad list for a resolved advertiser (Facebook page id). Prefer this over blind `ads/query` text search when you already have `/v1/lookup` id.
+ */
+export async function ttListAdvertiserAds(
+  advertiserId: string,
+  opts?: { limit?: number; offset?: number; sortBy?: string; order?: "asc" | "desc"; status?: string },
+): Promise<TTAd[]> {
+  const limit = opts?.limit ?? 25;
+  const offset = opts?.offset ?? 0;
+  const order = opts?.order ?? "desc";
+  const sortKey = opts?.sortBy?.trim() || "reach";
+  const qs = new URLSearchParams({
+    limit: String(limit),
+    offset: String(offset),
+    sortBy: sortKey,
+    order,
+  });
+  const st = opts?.status?.trim();
+  if (st) qs.set("status", st);
+  const res = await ttFetch<{ data?: unknown[] }>(
+    `/v1/advertisers/${encodeURIComponent(advertiserId)}/ads?${qs}`,
+  );
+  return (res.data ?? []).map((row) => normalizeTTAd(row));
 }
 
 export async function ttLookup(q: string, options?: { type?: string }): Promise<TTLookupResult[]> {

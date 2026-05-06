@@ -36,6 +36,7 @@ export function AdModal({
   if (!ad) return null;
 
   const thumbnail = ad.thumbnailUrl ?? ad.previewUrl ?? ad.imageUrl;
+  const videoSrc = ad.videoUrl?.trim();
   const hook = ad.headline ?? ad.title ?? "";
   const body = ad.body ?? ad.text ?? "";
   const platform = ad.platform ?? "meta";
@@ -59,7 +60,15 @@ export function AdModal({
         </button>
 
         <div className="relative aspect-video w-full bg-black">
-          {thumbnail ? (
+          {videoSrc ? (
+            <video
+              src={videoSrc}
+              poster={thumbnail}
+              controls
+              playsInline
+              className="h-full w-full object-contain"
+            />
+          ) : thumbnail ? (
             <img src={thumbnail} alt={hook} className="h-full w-full object-contain" />
           ) : (
             <div className="flex h-full w-full items-center justify-center text-sm text-white/40">
