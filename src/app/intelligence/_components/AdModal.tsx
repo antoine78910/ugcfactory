@@ -1,8 +1,9 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { Copy, ExternalLink, X } from "lucide-react";
+import { Copy, ExternalLink, Sparkles, X } from "lucide-react";
 import type { TTAd } from "@/lib/trendtrack";
+import { AdRecreateDialog } from "./AdRecreateDialog";
 
 const PLATFORM_LABELS: Record<string, string> = {
   meta: "Meta",
@@ -10,17 +11,27 @@ const PLATFORM_LABELS: Record<string, string> = {
   tiktok: "TikTok",
 };
 
-export function AdModal({ ad, onClose }: { ad: TTAd | null; onClose: () => void }) {
+export function AdModal({
+  ad,
+  onClose,
+  brandName,
+}: {
+  ad: TTAd | null;
+  onClose: () => void;
+  brandName?: string;
+}) {
   const [copied, setCopied] = useState(false);
+  const [recreateOpen, setRecreateOpen] = useState(false);
 
   useEffect(() => {
     if (!ad) return;
+    if (recreateOpen) return;
     const onKey = (e: KeyboardEvent) => {
       if (e.key === "Escape") onClose();
     };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
-  }, [ad, onClose]);
+  }, [ad, onClose, recreateOpen]);
 
   if (!ad) return null;
 
@@ -74,7 +85,14 @@ export function AdModal({ ad, onClose }: { ad: TTAd | null; onClose: () => void 
           {hook && <p className="text-base font-semibold text-white">{hook}</p>}
           {body && <p className="text-sm leading-relaxed text-white/70">{body}</p>}
 
-          <div className="mt-2 flex items-center gap-2">
+          <div className="mt-2 flex flex-wrap items-center gap-2">
+            <button
+              onClick={() => setRecreateOpen(true)}
+              className="flex items-center gap-1.5 rounded-xl bg-violet-400 px-3 py-1.5 text-xs font-semibold text-black shadow-[0_4px_0_0_rgba(76,29,149,0.95)] transition hover:bg-violet-300 active:translate-y-[2px] active:shadow-none"
+            >
+              <Sparkles className="h-3 w-3" />
+              Recreate with my product
+            </button>
             {hook && (
               <button
                 onClick={async () => {
@@ -82,7 +100,7 @@ export function AdModal({ ad, onClose }: { ad: TTAd | null; onClose: () => void 
                   setCopied(true);
                   window.setTimeout(() => setCopied(false), 1500);
                 }}
-                className="flex items-center gap-1.5 rounded-xl bg-violet-400 px-3 py-1.5 text-xs font-semibold text-black shadow-[0_4px_0_0_rgba(76,29,149,0.95)] transition hover:bg-violet-300 active:translate-y-[2px] active:shadow-none"
+                className="flex items-center gap-1.5 rounded-xl border border-white/10 bg-white/5 px-3 py-1.5 text-xs font-medium text-white/80 transition hover:border-violet-400/35 hover:text-white"
               >
                 <Copy className="h-3 w-3" />
                 {copied ? "Copied!" : "Copy hook"}
@@ -102,6 +120,13 @@ export function AdModal({ ad, onClose }: { ad: TTAd | null; onClose: () => void 
           </div>
         </div>
       </div>
+
+      <AdRecreateDialog
+        ad={ad}
+        open={recreateOpen}
+        onOpenChange={setRecreateOpen}
+        brandName={brandName}
+      />
     </div>
   );
 }

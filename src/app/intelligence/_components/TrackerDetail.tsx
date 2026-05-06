@@ -361,7 +361,7 @@ export function TrackerDetail({
         )}
       </section>
 
-      <AdModal ad={openAd} onClose={() => setOpenAd(null)} />
+      <AdModal ad={openAd} onClose={() => setOpenAd(null)} brandName={tracker.name} />
     </div>
   );
 }
