@@ -4,6 +4,8 @@ import { NextResponse } from "next/server";
 import { requireSupabaseUser } from "@/lib/supabase/requireUser";
 import { TrendTrackError } from "@/lib/trendtrack";
 import { ttLookup } from "@/lib/trendtrack";
+import type { TTLookupResult } from "@/lib/trendtrack";
+import { normalizeTTLookupRow } from "@/lib/trendtrackAdvertiserSearch";
 import { getCached, setCached } from "@/lib/trendtrackCache";
 import { respondTrendTrackError } from "@/app/api/intelligence/_errors";
 
@@ -32,9 +34,14 @@ export async function GET(req: Request) {
   const q = normalizeLookupQuery(rawQ);
   if (!q) return NextResponse.json({ error: "Missing q" }, { status: 400 });
 
-  const key = `lookup:${q.toLowerCase()}`;
+  const key = `lookup:v2:${q.toLowerCase()}`;
+  const normalizeCached = (payload: unknown): TTLookupResult[] => {
+    if (!Array.isArray(payload)) return [];
+    return payload.map((row) => normalizeTTLookupRow(row)).filter((x): x is TTLookupResult => x !== null);
+  };
+
   const cached = await getCached(key);
-  if (cached) return NextResponse.json(cached);
+  if (cached) return NextResponse.json(normalizeCached(cached));
 
   try {
     const data = await ttLookup(q);
@@ -47,7 +54,7 @@ export async function GET(req: Request) {
       if (fallback && fallback !== q) {
         try {
           const data = await ttLookup(fallback);
-          await setCached(`lookup:${fallback.toLowerCase()}`, data, TTL);
+          await setCached(`lookup:v2:${fallback.toLowerCase()}`, data, TTL);
           return NextResponse.json(data);
         } catch {
           // fallthrough to structured error below

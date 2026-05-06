@@ -3,6 +3,8 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { Loader2, Search, Star, Trash2 } from "lucide-react";
 import type { TTLookupResult, TTTracker } from "@/lib/trendtrack";
+import type { TTCompetitorSearchHit } from "@/lib/trendtrackAdvertiserSearch";
+import { proxiedMediaSrc } from "@/lib/mediaProxyUrl";
 import { cn } from "@/lib/utils";
 import type { IntelligenceCompetitor } from "@/app/api/intelligence/competitors/route";
 
@@ -10,6 +12,39 @@ export type CompetitorPick = {
   lookup: TTLookupResult;
   isTracked: boolean;
 };
+
+function googleFaviconUrl(domain: string | undefined | null): string | undefined {
+  const d = domain?.trim().replace(/^www\./i, "").toLowerCase();
+  if (!d || !d.includes(".")) return undefined;
+  return `https://www.google.com/s2/favicons?domain=${encodeURIComponent(d)}&sz=64`;
+}
+
+function formatReachShort(n: number | undefined): string {
+  if (n == null || !Number.isFinite(n) || n <= 0) return "";
+  if (n >= 1_000_000) return `${(n / 1_000_000).toFixed(1)}M`;
+  if (n >= 1_000) return `${Math.round(n / 1_000)}K`;
+  return String(Math.round(n));
+}
+
+function subtitlePrimary(hit: TTCompetitorSearchHit): string {
+  if (hit.domain?.trim()) return hit.domain.trim();
+  if ((hit.type ?? "").toLowerCase() === "brandtracker") return "Your tracker";
+  return "Advertising page";
+}
+
+function statsLine(hit: TTCompetitorSearchHit): string | null {
+  const parts: string[] = [];
+  if (typeof hit.sampledAdCount === "number" && hit.sampledAdCount > 0) {
+    parts.push(`${hit.sampledAdCount} ads in sample`);
+  }
+  const reach = formatReachShort(hit.maxReachSeen);
+  if (reach) parts.push(`top reach ~${reach}`);
+  if (typeof hit.followerCount === "number" && hit.followerCount > 0) {
+    const fc = formatReachShort(hit.followerCount);
+    if (fc) parts.push(`~${fc} followers`);
+  }
+  return parts.length > 0 ? parts.join(" · ") : null;
+}
 
 type SortBy =
   | "currentRank"
@@ -46,7 +81,7 @@ export function CompetitorsPanel({
   const [query, setQuery] = useState("");
   const [lookupLoading, setLookupLoading] = useState(false);
   const [lookupError, setLookupError] = useState<string | null>(null);
-  const [lookupResults, setLookupResults] = useState<TTLookupResult[]>([]);
+  const [lookupResults, setLookupResults] = useState<TTCompetitorSearchHit[]>([]);
   const [selectedLookupId, setSelectedLookupId] = useState<string | null>(null);
 
   const [trackers, setTrackers] = useState<TTTracker[]>([]);
@@ -54,6 +89,7 @@ export function CompetitorsPanel({
 
   const [saved, setSaved] = useState<IntelligenceCompetitor[]>([]);
   const [saving, setSaving] = useState(false);
+  const [searchedOnce, setSearchedOnce] = useState(false);
 
   const selectedLookup = useMemo(() => {
     if (!selectedLookupId) return null;
@@ -89,14 +125,15 @@ export function CompetitorsPanel({
     setLookupResults([]);
     setSelectedLookupId(null);
     onPick(null);
+    setSearchedOnce(true);
     try {
-      const res = await fetch(`/api/intelligence/lookup?q=${encodeURIComponent(q)}`);
-      const json = (await res.json()) as TTLookupResult[] | { error?: string };
+      const res = await fetch(`/api/intelligence/competitors/search?q=${encodeURIComponent(q)}`);
+      const json = (await res.json()) as TTCompetitorSearchHit[] | { error?: string };
       if (!Array.isArray(json)) {
         setLookupError(json.error ?? "Search failed");
         return;
       }
-      const limited = json.slice(0, 12);
+      const limited = json.slice(0, 24);
       setLookupResults(limited);
       if (limited.length === 1) {
         const one = limited[0]!;
@@ -111,9 +148,16 @@ export function CompetitorsPanel({
   }, [onPick, query, trackedIds]);
 
   const selectLookup = useCallback(
-    (r: TTLookupResult) => {
-      setSelectedLookupId(r.id);
-      onPick({ lookup: r, isTracked: trackedIds.has(r.id) });
+    (r: TTCompetitorSearchHit | TTLookupResult) => {
+      const hit: TTCompetitorSearchHit =
+        "sources" in r && Array.isArray(r.sources)
+          ? r
+          : {
+              ...r,
+              sources: ["lookup"] as Array<"lookup" | "ads">,
+            };
+      setSelectedLookupId(hit.id);
+      onPick({ lookup: hit, isTracked: trackedIds.has(hit.id) });
     },
     [onPick, trackedIds],
   );
@@ -211,24 +255,52 @@ export function CompetitorsPanel({
 
       {lookupError ? <p className="px-1 text-xs text-red-400">{lookupError}</p> : null}
 
-      {lookupResults.length > 1 ? (
-        <div className="max-h-52 overflow-y-auto rounded-xl border border-white/10 bg-black/25 p-1">
+      {searchedOnce && !lookupLoading && lookupResults.length === 0 && !lookupError ? (
+        <p className="px-1 text-xs text-white/45">
+          No advertisers matched. Try another spelling or paste a domain (e.g. example.com).
+        </p>
+      ) : null}
+
+      {lookupResults.length > 0 ? (
+        <div className="max-h-64 overflow-y-auto rounded-xl border border-white/10 bg-black/25 p-1">
           {lookupResults.map((r) => {
             const active = r.id === selectedLookupId;
             const isTracked = trackedIds.has(r.id);
+            const logoUrl = (r.logo ?? r.logoUrl ?? "").trim();
+            const avatarSrc = logoUrl
+              ? proxiedMediaSrc(logoUrl) || logoUrl
+              : googleFaviconUrl(r.domain ?? null);
+            const stats = statsLine(r);
             return (
               <button
-                key={`${r.type}:${r.id}`}
+                key={`${r.sources?.join(",") ?? r.type}:${r.id}`}
                 type="button"
                 onClick={() => selectLookup(r)}
                 className={cn(
-                  "flex w-full items-center gap-2 rounded-lg px-2.5 py-2 text-left transition",
+                  "flex w-full items-center gap-2.5 rounded-lg px-2.5 py-2 text-left transition",
                   active ? "bg-violet-500/15 text-white" : "text-white/80 hover:bg-white/5",
                 )}
               >
+                {avatarSrc ? (
+                  // eslint-disable-next-line @next/next/no-img-element
+                  <img
+                    src={avatarSrc}
+                    alt=""
+                    loading="lazy"
+                    decoding="async"
+                    className="h-9 w-9 shrink-0 rounded-lg border border-white/10 bg-white/[0.06] object-contain p-0.5"
+                  />
+                ) : (
+                  <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-violet-500/22 text-xs font-bold text-violet-200">
+                    {(r.name || "?").charAt(0).toUpperCase()}
+                  </div>
+                )}
                 <div className="min-w-0 flex-1">
-                  <div className="truncate text-sm font-medium">{r.name}</div>
-                  <div className="truncate text-[11px] text-white/40">{r.domain ?? r.type}</div>
+                  <div className="truncate text-sm font-medium text-white">{r.name}</div>
+                  <div className="truncate text-[11px] text-white/40">{subtitlePrimary(r)}</div>
+                  {stats ? (
+                    <div className="mt-0.5 truncate text-[10px] text-white/32">{stats}</div>
+                  ) : null}
                 </div>
                 <span
                   className={cn(
@@ -258,8 +330,9 @@ export function CompetitorsPanel({
                     selectLookup({
                       id: c.lookupId ?? c.id,
                       name: c.name,
-                      type: c.lookupId ? "brandtracker" : "brand",
+                      type: c.lookupId ? "brandtracker" : "advertiser",
                       domain: c.domain ?? undefined,
+                      sources: ["lookup"],
                     })
                   }
                   className="min-w-0 flex-1 text-left"

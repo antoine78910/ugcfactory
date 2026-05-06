@@ -1,4 +1,5 @@
 import { requireEnv } from "@/lib/env";
+import { normalizeTTLookupRow } from "@/lib/trendtrackAdvertiserSearch";
 
 const BASE = "https://api.trendtrack.io";
 
@@ -179,9 +180,19 @@ export async function ttGetTopAds(id: string, limit = 10, sortBy?: string): Prom
 }
 
 export async function ttLookup(q: string): Promise<TTLookupResult[]> {
-  const res = await ttFetch<{ data?: TTLookupResult[] }>(
+  const res = await ttFetch<{ data?: unknown[] }>(
     `/v1/lookup?q=${encodeURIComponent(q)}`
   );
+  const rows = res.data ?? [];
+  return rows.map((r) => normalizeTTLookupRow(r)).filter((x): x is TTLookupResult => x !== null);
+}
+
+/** Raw rows from `/v1/ads/query` (before `TTAd` normalization) — used to roll up advertiser identities. */
+export async function ttAdsQueryRawRows(body: Record<string, unknown>): Promise<unknown[]> {
+  const res = await ttFetch<{ data?: unknown[] }>("/v1/ads/query", {
+    method: "POST",
+    body: JSON.stringify(body),
+  });
   return res.data ?? [];
 }
 
