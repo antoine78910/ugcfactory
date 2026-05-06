@@ -3054,7 +3054,7 @@ function WorkflowFlowWorkspace({
           }
           return "out";
         })();
-        const fromKind = sourceKindFromNodeHandle(fromNode, from.handleId);
+        const fromKind = sourceKindFromNodeHandle(fromNode, resolvedFromHandle);
         const defaultTargetHandle = targetHandleForNewNodeFromSourceKind(newNode as WorkflowCanvasNode, fromKind);
         if (!defaultTargetHandle) {
           toast.error("Incompatible connection", {
