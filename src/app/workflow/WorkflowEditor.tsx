@@ -3039,7 +3039,9 @@ function WorkflowFlowWorkspace({
         newNode.type === "adAsset" || newNode.type === "textPrompt" || newNode.type === "promptList";
       if (from && connectableFrom) {
         const allNodes = getNodes() as WorkflowCanvasNode[];
-        const fromNode = allNodes.find((n) => n.id === from.nodeId);
+        // React Flow store can lag briefly during rapid interactions; fallback to React state snapshot.
+        const fromNode =
+          allNodes.find((n) => n.id === from.nodeId) ?? (nodes as WorkflowCanvasNode[]).find((n) => n.id === from.nodeId);
         const resolvedFromHandle = (() => {
           const explicit = (from.handleId ?? "").trim();
           if (explicit) return explicit;
@@ -3063,7 +3065,7 @@ function WorkflowFlowWorkspace({
           setPlacementPicker(null);
           return;
         }
-        const nodesSnapFrom = [...(getNodes() as WorkflowCanvasNode[]), newNode];
+        const nodesSnapFrom = [...allNodes, newNode];
         setEdges((eds) => {
           const next = addEdge(
             {
