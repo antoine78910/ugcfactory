@@ -633,6 +633,7 @@ export function AdAssetNode({ id, data, selected }: NodeProps<AdAssetNodeType>) 
   const promptFocusedRef = useRef(false);
   const promptEditorOpenRef = useRef(false);
   const promptEditorTextareaRef = useRef<HTMLTextAreaElement | null>(null);
+  const compactPromptTextareaRef = useRef<HTMLTextAreaElement | null>(null);
   const promptEditorResizeRef = useRef<{ pointerId: number; startX: number; startW: number } | null>(null);
   const previewVideoRef = useRef<HTMLVideoElement | null>(null);
   const previewImageRef = useRef<HTMLImageElement | null>(null);
@@ -1666,13 +1667,11 @@ export function AdAssetNode({ id, data, selected }: NodeProps<AdAssetNodeType>) 
   const promptPreviewText = (data.lastRunPrompt ?? prompt).trim();
   const showPromptPreviewChip =
     hasPreviewMedia && promptPreviewText.length > 0 && !profile360ImageUi;
-  const expandPromptEditorOnFocus =
-    data.kind === "image" ||
-    data.kind === "video" ||
-    data.kind === "motion" ||
-    data.kind === "variation" ||
-    data.kind === "upscale";
+  /** Fullscreen-style prompt overlay: image / video generators only (not motion, variation, upscale, etc.). */
+  const useWorkflowPromptOverlay = data.kind === "image" || data.kind === "video";
+  const expandPromptEditorOnFocus = useWorkflowPromptOverlay;
   const openPromptEditor = useCallback(() => {
+    if (!useWorkflowPromptOverlay) return;
     const composedSeed = (() => {
       if (data.kind !== "image" && data.kind !== "video" && data.kind !== "motion") {
         return prompt;
@@ -1694,7 +1693,7 @@ export function AdAssetNode({ id, data, selected }: NodeProps<AdAssetNodeType>) 
       ),
     );
     setPromptEditorOpen(true);
-  }, [cardWidthPx, data.kind, data.lastRunPrompt, getEdges, getNodes, id, prompt]);
+  }, [cardWidthPx, data.kind, data.lastRunPrompt, getEdges, getNodes, id, prompt, useWorkflowPromptOverlay]);
 
   const closePromptEditor = useCallback(() => {
     patch(id, { prompt: promptEditorDraft });
@@ -4079,7 +4078,16 @@ export function AdAssetNode({ id, data, selected }: NodeProps<AdAssetNodeType>) 
                 "inset-x-2 rounded-lg",
                 showEditLayer ? "pointer-events-auto opacity-100" : "pointer-events-none opacity-0",
               )}
-              onClick={openPromptEditor}
+              onClick={(e) => {
+                e.preventDefault();
+                e.stopPropagation();
+                if (useWorkflowPromptOverlay) {
+                  openPromptEditor();
+                } else {
+                  setCardHovered(true);
+                  requestAnimationFrame(() => compactPromptTextareaRef.current?.focus());
+                }
+              }}
               onPointerDown={(e) => e.stopPropagation()}
               title="Click to edit prompt"
             >
@@ -4155,6 +4163,7 @@ export function AdAssetNode({ id, data, selected }: NodeProps<AdAssetNodeType>) 
                 </p>
               ) : !hasPreviewMedia || !isGeneratorNode || !hasLinkedGeneratorTextInput ? (
                 <textarea
+                  ref={compactPromptTextareaRef}
                   value={prompt}
                   onChange={(e) => patch(id, { prompt: e.target.value })}
                   placeholder={cfg.promptPlaceholder}
@@ -4447,7 +4456,7 @@ export function AdAssetNode({ id, data, selected }: NodeProps<AdAssetNodeType>) 
             </div>
           </div>
 
-          {promptEditorOpen ? (
+          {promptEditorOpen && useWorkflowPromptOverlay ? (
             <div
               className="nodrag nopan absolute inset-0 z-[24] flex items-stretch justify-stretch p-2 sm:p-3"
               onPointerDown={(e) => e.stopPropagation()}
