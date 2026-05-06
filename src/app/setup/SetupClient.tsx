@@ -114,9 +114,8 @@ export default function SetupClient({ embedded = false }: SetupClientProps) {
   }, [embedded]);
 
   function startForFree() {
-    trackDatafastGoal(DATAFAST_GOALS.onboarding_next_clicked, {
-      step: "setup_start_free",
-      surface: embedded ? "onboarding" : "setup",
+    trackDatafastGoal(DATAFAST_GOALS.onboarding_start_for_free_clicked, {
+      surface: embedded ? "onboarding_setup" : "setup",
     });
     window.location.href = sectionToPath("link_to_ad");
   }

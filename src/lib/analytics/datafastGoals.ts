@@ -12,8 +12,9 @@
  *   8. trial_upgrade_dialog_viewed – Subscription upgrade popup is shown to a trial user.
  *   9. trial_upgrade_dialog_plan_clicked – Trial user clicks one of the plans inside the popup.
  *  10. onboarding_next_clicked     – User clicks "Next" on onboarding personalize step.
- *  11. subscription_initiate_checkout – User clicks Subscribe / Upgrade on /subscription.
- *  12. subscription_paid           – User returns from Stripe after a subscription checkout.
+ *  11. onboarding_start_for_free_clicked – User clicks "Start for Free" on setup / onboarding setup step.
+ *  12. subscription_initiate_checkout – User clicks Subscribe / Upgrade on /subscription.
+ *  13. subscription_paid           – User returns from Stripe after a subscription checkout.
  *
  * Goal naming rules (DataFast):
  *   - Lowercase letters, digits, `_` and `-` only.
@@ -34,6 +35,7 @@ export const DATAFAST_GOALS = {
   trial_upgrade_dialog_viewed: "trial_upgrade_dialog_viewed",
   trial_upgrade_dialog_plan_clicked: "trial_upgrade_dialog_plan_clicked",
   onboarding_next_clicked: "onboarding_next_clicked",
+  onboarding_start_for_free_clicked: "onboarding_start_for_free_clicked",
   subscription_initiate_checkout: "subscription_initiate_checkout",
   subscription_paid: "subscription_paid",
 } as const;

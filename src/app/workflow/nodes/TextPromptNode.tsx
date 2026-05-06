@@ -2,7 +2,7 @@
 
 import { Handle, Position, type Node, type NodeProps } from "@xyflow/react";
 import { FileText, Type } from "lucide-react";
-import { useCallback, useRef } from "react";
+import { useCallback } from "react";
 
 import { PromptEnhanceCornerButton } from "@/app/_components/PromptEnhanceCornerButton";
 import { cn } from "@/lib/utils";
@@ -23,7 +23,6 @@ export function TextPromptNode({ id, data: rawData, selected }: NodeProps<TextPr
   const data = { ...defaultData, ...rawData };
   const patchAll = useWorkflowNodePatch();
   const patch = useCallback((p: Partial<TextPromptNodeData>) => patchAll(id, p), [id, patchAll]);
-  const promptTextareaRef = useRef<HTMLTextAreaElement | null>(null);
 
   const outputBubbleShellClass =
     "workflow-port-create-cursor nodrag nopan relative h-8 w-8 shrink-0 rounded-full border border-transparent bg-transparent shadow-none";
@@ -46,30 +45,17 @@ export function TextPromptNode({ id, data: rawData, selected }: NodeProps<TextPr
         >
           <div className="flex items-center gap-2 border-b border-white/[0.08] px-2.5 py-2">
             <FileText className="h-3.5 w-3.5 shrink-0 text-white/50" strokeWidth={2} aria-hidden />
-            <span className="select-none text-[10px] font-semibold uppercase tracking-wide text-white/45">
-              Prompt text
-            </span>
+            <span className="select-none text-[10px] font-semibold uppercase tracking-wide text-white/45">Prompt text</span>
           </div>
           <div className="relative p-2.5">
-            <div className="mb-2 flex items-center justify-between gap-2 px-0.5">
-              <p className="text-[11px] font-semibold uppercase tracking-wide text-white/65">Edit prompt</p>
-              <button
-                type="button"
-                onClick={() => promptTextareaRef.current?.blur()}
-                className="rounded-md px-2 py-1 text-[11px] text-white/60 transition hover:bg-white/10 hover:text-white"
-              >
-                Done
-              </button>
-            </div>
-            <div className="relative rounded-xl border border-white/[0.12] bg-black/40 p-2">
+            <div className="relative">
               <textarea
-                ref={promptTextareaRef}
                 value={data.prompt}
                 onChange={(e) => patch({ prompt: e.target.value })}
                 placeholder="Type the prompt to send into connected generators…"
                 rows={6}
                 onWheelCapture={keepWheelInsideScrollable}
-                className="nodrag nopan nowheel mb-10 min-h-[120px] w-full resize-y rounded-lg border border-white/12 bg-black/50 px-2.5 py-2 text-[13px] leading-snug text-white/90 placeholder:text-white/28 outline-none focus:border-violet-500/35"
+                className="nodrag nopan nowheel w-full resize-y rounded-lg border border-white/12 bg-black/50 px-2.5 pb-10 pt-2 text-[13px] leading-snug text-white/90 placeholder:text-white/28 outline-none focus:border-violet-500/35"
               />
               <PromptEnhanceCornerButton
                 value={data.prompt}

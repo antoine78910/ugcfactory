@@ -529,7 +529,9 @@ export function collectLinkedImageUrlsForHandles(
     const kind = d.outputMediaKind ?? d.referenceMediaKind;
     const targetHandle = e.targetHandle ?? "in";
 
-    if (d.kind === "video" && kind === "video" && (targetHandle === "startImage" || targetHandle === "endImage")) {
+    /** Video modules: frame outputs / double-click extraction feed start, end, and reference image ports. */
+    const videoFrameImageTargets = new Set(["startImage", "endImage", "references", "inImage"]);
+    if (d.kind === "video" && kind === "video" && videoFrameImageTargets.has(targetHandle)) {
       const last = d.videoExtractedLastFrameUrl?.trim();
       const first = d.videoExtractedFirstFrameUrl?.trim();
       const srcHandle = e.sourceHandle ?? "out";
@@ -538,7 +540,9 @@ export function collectLinkedImageUrlsForHandles(
           ? first
           : srcHandle === "videoLast"
             ? last
-            : last || first;
+            : targetHandle === "endImage"
+              ? last || first
+              : first || last;
       if (!pick || seen.has(pick)) continue;
       seen.add(pick);
       urls.push(pick);

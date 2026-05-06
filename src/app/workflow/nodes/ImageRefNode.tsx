@@ -570,22 +570,35 @@ export function ImageRefNode({ id, data }: NodeProps<ImageRefNodeType>) {
           </div>
           {isVideo ? (
             <>
-              <div className={outputBubbleShellClass}>
+              <div className={cn(outputBubbleShellClass, "relative overflow-hidden")}>
                 <Handle
                   id="videoFirst"
                   type="source"
                   position={Position.Right}
                   className={outputBubbleHandleClass}
-                  title="Start image output, double-click to extract from the uploaded video"
+                  title="Start frame — double-click to extract; thumbnail shows when saved."
                   onDoubleClick={(e) => {
                     e.stopPropagation();
                     void onExtractVideoFrame("first");
                   }}
                 />
-                <span className="pointer-events-none absolute inset-0 z-[1] flex items-center justify-center text-white/85">
+                {(data.videoExtractedFirstFrameUrl ?? "").trim() ? (
+                  // eslint-disable-next-line @next/next/no-img-element
+                  <img
+                    src={(data.videoExtractedFirstFrameUrl ?? "").trim()}
+                    alt=""
+                    className="pointer-events-none absolute inset-0 z-0 h-full w-full rounded-full object-cover"
+                  />
+                ) : null}
+                <span
+                  className={cn(
+                    "pointer-events-none absolute inset-0 z-[1] flex items-center justify-center rounded-full ring-1 ring-inset ring-white/[0.08]",
+                    !(data.videoExtractedFirstFrameUrl ?? "").trim() && "bg-black/25 text-white/85",
+                  )}
+                >
                   {frameExtractBusy === "first" ? (
                     <Loader2 className="h-3.5 w-3.5 animate-spin" aria-hidden />
-                  ) : (
+                  ) : (data.videoExtractedFirstFrameUrl ?? "").trim() ? null : (
                     <ImageIcon className="h-3.5 w-3.5" aria-hidden />
                   )}
                 </span>
@@ -596,22 +609,35 @@ export function ImageRefNode({ id, data }: NodeProps<ImageRefNodeType>) {
                   S
                 </span>
               </div>
-              <div className={outputBubbleShellClass}>
+              <div className={cn(outputBubbleShellClass, "relative overflow-hidden")}>
                 <Handle
                   id="videoLast"
                   type="source"
                   position={Position.Right}
                   className={outputBubbleHandleClass}
-                  title="End image output, double-click to extract from the uploaded video"
+                  title="End frame — double-click to extract; thumbnail shows when saved."
                   onDoubleClick={(e) => {
                     e.stopPropagation();
                     void onExtractVideoFrame("last");
                   }}
                 />
-                <span className="pointer-events-none absolute inset-0 z-[1] flex items-center justify-center text-white/85">
+                {(data.videoExtractedLastFrameUrl ?? "").trim() ? (
+                  // eslint-disable-next-line @next/next/no-img-element
+                  <img
+                    src={(data.videoExtractedLastFrameUrl ?? "").trim()}
+                    alt=""
+                    className="pointer-events-none absolute inset-0 z-0 h-full w-full rounded-full object-cover"
+                  />
+                ) : null}
+                <span
+                  className={cn(
+                    "pointer-events-none absolute inset-0 z-[1] flex items-center justify-center rounded-full ring-1 ring-inset ring-white/[0.08]",
+                    !(data.videoExtractedLastFrameUrl ?? "").trim() && "bg-black/25 text-white/85",
+                  )}
+                >
                   {frameExtractBusy === "last" ? (
                     <Loader2 className="h-3.5 w-3.5 animate-spin" aria-hidden />
-                  ) : (
+                  ) : (data.videoExtractedLastFrameUrl ?? "").trim() ? null : (
                     <ImageIcon className="h-3.5 w-3.5" aria-hidden />
                   )}
                 </span>

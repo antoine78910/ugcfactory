@@ -34,6 +34,7 @@ import {
 } from "lucide-react";
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
+import { HoverCard } from "radix-ui";
 import { toast } from "sonner";
 
 import {
@@ -589,9 +590,6 @@ function outputFrameDimensions(ratio: string, intrinsicAspect?: number): { width
   return { width, height };
 }
 
-const WORKFLOW_PROMPT_EDITOR_WIDTH_MIN = 360;
-const WORKFLOW_PROMPT_EDITOR_WIDTH_MAX = 1400;
-
 export function AdAssetNode({ id, data, selected }: NodeProps<AdAssetNodeType>) {
   const patch = useWorkflowNodePatch();
   const { getNodes, getEdges, setNodes, setEdges } = useReactFlow();
@@ -623,7 +621,6 @@ export function AdAssetNode({ id, data, selected }: NodeProps<AdAssetNodeType>) 
   const [promptFocused, setPromptFocused] = useState(false);
   const [promptEditorOpen, setPromptEditorOpen] = useState(false);
   const [promptEditorDraft, setPromptEditorDraft] = useState("");
-  const [promptEditorWidthPx, setPromptEditorWidthPx] = useState(480);
   const [titleEditing, setTitleEditing] = useState(false);
   const [titleDraft, setTitleDraft] = useState(data.label || cfg.title);
   const leaveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -634,7 +631,6 @@ export function AdAssetNode({ id, data, selected }: NodeProps<AdAssetNodeType>) 
   const promptEditorOpenRef = useRef(false);
   const promptEditorTextareaRef = useRef<HTMLTextAreaElement | null>(null);
   const compactPromptTextareaRef = useRef<HTMLTextAreaElement | null>(null);
-  const promptEditorResizeRef = useRef<{ pointerId: number; startX: number; startW: number } | null>(null);
   const previewVideoRef = useRef<HTMLVideoElement | null>(null);
   const previewImageRef = useRef<HTMLImageElement | null>(null);
   const seedanceProVideoFileInputRef = useRef<HTMLInputElement>(null);
@@ -771,23 +767,33 @@ export function AdAssetNode({ id, data, selected }: NodeProps<AdAssetNodeType>) 
 
   const onExtractVideoFrame = useCallback(
     async (which: "first" | "last") => {
+      const fallbackVideoUrl = (data.outputPreviewUrl ?? data.referencePreviewUrl ?? "").trim();
       const v = previewVideoRef.current;
-      if (!v?.src) {
-        toast.error("No video", { description: "Wait until the preview is ready." });
-        return;
-      }
       setFrameExtractBusy(which);
       try {
-        const dataUrl = await extractVideoFrameJpegDataUrl(v, which === "last");
+        let dataUrl: string;
+        if (v?.src) {
+          try {
+            dataUrl = await extractVideoFrameJpegDataUrl(v, which === "last");
+          } catch {
+            if (!fallbackVideoUrl) throw new Error("Preview frame capture failed and no video URL is available.");
+            dataUrl = await extractVideoFrameJpegDataUrlFromUrl(fallbackVideoUrl, which === "last");
+          }
+        } else if (fallbackVideoUrl) {
+          dataUrl = await extractVideoFrameJpegDataUrlFromUrl(fallbackVideoUrl, which === "last");
+        } else {
+          toast.error("No video", { description: "Wait until the preview is ready or generate a clip first." });
+          return;
+        }
         if (which === "first") {
           patch(id, { videoExtractedFirstFrameUrl: dataUrl });
           toast.success("First frame saved", {
-            description: "Wire this module’s output to another video’s start or end port.",
+            description: "Thumbnail on the S bubble; wire S or use references with this module.",
           });
         } else {
           patch(id, { videoExtractedLastFrameUrl: dataUrl });
           toast.success("Last frame saved", {
-            description: "Best for continuing into the next clip (start port on the next generator).",
+            description: "Thumbnail on the E bubble; wire E into the next clip’s start or references.",
           });
         }
       } catch (e) {
@@ -804,7 +810,7 @@ export function AdAssetNode({ id, data, selected }: NodeProps<AdAssetNodeType>) 
         setFrameExtractBusy(null);
       }
     },
-    [id, patch],
+    [data.outputPreviewUrl, data.referencePreviewUrl, id, patch],
   );
   const openOutputPreviewLightbox = useCallback(() => {
     const outputUrl = (data.outputPreviewUrl ?? data.referencePreviewUrl ?? "").trim();
@@ -1325,6 +1331,8 @@ export function AdAssetNode({ id, data, selected }: NodeProps<AdAssetNodeType>) 
   );
 
   const showVideoOutputBubbles = data.kind === "video" || data.kind === "motion";
+  const videoExtractedFirstThumb = (data.videoExtractedFirstFrameUrl ?? "").trim();
+  const videoExtractedLastThumb = (data.videoExtractedLastFrameUrl ?? "").trim();
   /** Card width follows preview width exactly for image/video generators. */
   const cardWidthPx = frame.width + CARD_PAD_X_PX;
 
@@ -1683,40 +1691,13 @@ export function AdAssetNode({ id, data, selected }: NodeProps<AdAssetNodeType>) 
     })();
     const seed = (data.lastRunPrompt ?? composedSeed ?? prompt).trim() || prompt;
     setPromptEditorDraft(seed);
-    const viewportW =
-      typeof window !== "undefined" && Number.isFinite(window.innerWidth) ? Math.max(0, window.innerWidth) : 0;
-    const preferred = viewportW > 0 ? Math.round(viewportW - 48) : Math.round(cardWidthPx * 1.15);
-    setPromptEditorWidthPx(
-      Math.min(
-        WORKFLOW_PROMPT_EDITOR_WIDTH_MAX,
-        Math.max(WORKFLOW_PROMPT_EDITOR_WIDTH_MIN, preferred),
-      ),
-    );
     setPromptEditorOpen(true);
-  }, [cardWidthPx, data.kind, data.lastRunPrompt, getEdges, getNodes, id, prompt, useWorkflowPromptOverlay]);
+  }, [data.kind, data.lastRunPrompt, getEdges, getNodes, id, prompt, useWorkflowPromptOverlay]);
 
   const closePromptEditor = useCallback(() => {
     patch(id, { prompt: promptEditorDraft });
     setPromptEditorOpen(false);
   }, [id, patch, promptEditorDraft]);
-
-  const onPromptEditorResizePointerDown = useCallback(
-    (e: React.PointerEvent<HTMLDivElement>) => {
-      e.preventDefault();
-      e.stopPropagation();
-      promptEditorResizeRef.current = {
-        pointerId: e.pointerId,
-        startX: e.clientX,
-        startW: promptEditorWidthPx,
-      };
-      try {
-        e.currentTarget.setPointerCapture(e.pointerId);
-      } catch {
-        /* ignore */
-      }
-    },
-    [promptEditorWidthPx],
-  );
 
   useEffect(() => {
     if (!promptEditorOpen) return;
@@ -1734,33 +1715,6 @@ export function AdAssetNode({ id, data, selected }: NodeProps<AdAssetNodeType>) 
     if (!promptEditorOpen) return;
     const raf = requestAnimationFrame(() => promptEditorTextareaRef.current?.focus());
     return () => cancelAnimationFrame(raf);
-  }, [promptEditorOpen]);
-
-  useEffect(() => {
-    if (!promptEditorOpen) return;
-    const onMove = (e: PointerEvent) => {
-      const st = promptEditorResizeRef.current;
-      if (!st || e.pointerId !== st.pointerId) return;
-      const dx = e.clientX - st.startX;
-      const next = Math.min(
-        WORKFLOW_PROMPT_EDITOR_WIDTH_MAX,
-        Math.max(WORKFLOW_PROMPT_EDITOR_WIDTH_MIN, st.startW + dx),
-      );
-      setPromptEditorWidthPx(next);
-    };
-    const onEnd = (e: PointerEvent) => {
-      const st = promptEditorResizeRef.current;
-      if (!st || e.pointerId !== st.pointerId) return;
-      promptEditorResizeRef.current = null;
-    };
-    window.addEventListener("pointermove", onMove);
-    window.addEventListener("pointerup", onEnd);
-    window.addEventListener("pointercancel", onEnd);
-    return () => {
-      window.removeEventListener("pointermove", onMove);
-      window.removeEventListener("pointerup", onEnd);
-      window.removeEventListener("pointercancel", onEnd);
-    };
   }, [promptEditorOpen]);
 
   useEffect(() => {
@@ -3897,7 +3851,7 @@ export function AdAssetNode({ id, data, selected }: NodeProps<AdAssetNodeType>) 
             <div
               className={cn(
                 "absolute inset-0 z-[1] h-full w-full transition-[filter,opacity] duration-200 ease-out",
-                promptEditorOpen && "opacity-[0.38] blur-[2px]",
+                promptEditorOpen && useWorkflowPromptOverlay && "pointer-events-none opacity-0",
               )}
             >
               {previewMediaKind === "video" ||
@@ -4127,27 +4081,53 @@ export function AdAssetNode({ id, data, selected }: NodeProps<AdAssetNodeType>) 
                   {videoElementRefUrls.slice(0, 6).map((url, idx) => {
                     const tag = `@image${idx + 1}`;
                     return (
-                      <button
-                        key={`${tag}-${url}`}
-                        type="button"
-                        title={`Insert ${tag} into prompt`}
-                        onPointerDown={(e) => e.stopPropagation()}
-                        onClick={() => {
-                          const current = prompt ?? "";
-                          const needsSep = current.length > 0 && !/\s$/.test(current);
-                          const next = `${current}${needsSep ? " " : ""}${tag} `;
-                          patch(id, { prompt: next });
-                        }}
-                        className="flex shrink-0 items-center gap-1 rounded-full border border-violet-400/30 bg-violet-500/12 pl-0.5 pr-1.5 py-0.5 text-[9px] font-semibold text-violet-100 transition hover:border-violet-300/60 hover:bg-violet-500/22"
-                      >
-                        {/* eslint-disable-next-line @next/next/no-img-element */}
-                        <img
-                          src={url}
-                          alt={tag}
-                          className="h-4 w-4 rounded-full object-cover ring-1 ring-violet-300/30"
-                        />
-                        <span className="tabular-nums">{tag}</span>
-                      </button>
+                      <HoverCard.Root key={`${tag}-${url}`} openDelay={140} closeDelay={80}>
+                        <HoverCard.Trigger asChild>
+                          <button
+                            type="button"
+                            title={`Insert ${tag} into prompt`}
+                            aria-label={`${tag}: insert into prompt`}
+                            onPointerDown={(e) => e.stopPropagation()}
+                            onClick={() => {
+                              const current = prompt ?? "";
+                              const needsSep = current.length > 0 && !/\s$/.test(current);
+                              const next = `${current}${needsSep ? " " : ""}${tag} `;
+                              patch(id, { prompt: next });
+                            }}
+                            className="flex shrink-0 items-center gap-1 rounded-full border border-violet-400/30 bg-violet-500/12 pl-0.5 pr-1.5 py-0.5 text-[9px] font-semibold text-violet-100 transition hover:border-violet-300/60 hover:bg-violet-500/22"
+                          >
+                            {/* eslint-disable-next-line @next/next/no-img-element */}
+                            <img
+                              src={url}
+                              alt=""
+                              className="h-4 w-4 rounded-full object-cover ring-1 ring-violet-300/30"
+                            />
+                            <span className="tabular-nums">{tag}</span>
+                          </button>
+                        </HoverCard.Trigger>
+                        <HoverCard.Portal>
+                          <HoverCard.Content
+                            side="top"
+                            align="center"
+                            sideOffset={10}
+                            collisionPadding={16}
+                            className={cn(
+                              "nodrag nopan z-[520] max-w-[min(92vw,22rem)] rounded-xl border border-white/15 bg-[#141418] p-2.5 shadow-[0_24px_64px_rgba(0,0,0,0.75)] outline-none",
+                              "data-[state=open]:animate-in data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=open]:fade-in-0 data-[state=closed]:zoom-out-95 data-[state=open]:zoom-in-95",
+                            )}
+                          >
+                            {/* eslint-disable-next-line @next/next/no-img-element */}
+                            <img
+                              src={url}
+                              alt=""
+                              className="mx-auto block max-h-[min(72vh,20rem)] w-auto max-w-full rounded-lg object-contain"
+                            />
+                            <div className="mt-2 text-center text-[10px] font-semibold uppercase tracking-wide text-white/55">
+                              {tag}
+                            </div>
+                          </HoverCard.Content>
+                        </HoverCard.Portal>
+                      </HoverCard.Root>
                     );
                   })}
                   {videoElementRefUrls.length > 6 ? (
@@ -4458,54 +4438,29 @@ export function AdAssetNode({ id, data, selected }: NodeProps<AdAssetNodeType>) 
 
           {promptEditorOpen && useWorkflowPromptOverlay ? (
             <div
-              className="nodrag nopan absolute inset-0 z-[24] flex items-stretch justify-stretch p-2 sm:p-3"
+              className="nodrag nopan absolute inset-0 z-[24] flex h-full min-h-0 w-full flex-col bg-[#0d0d10]"
               onPointerDown={(e) => e.stopPropagation()}
             >
-              <button
-                type="button"
-                aria-label="Close prompt editor"
-                className="absolute inset-0 z-0 bg-black/50 backdrop-blur-sm"
-                onClick={closePromptEditor}
-              />
-              <div
-                className="relative z-[25] flex w-full max-h-[min(82vh,92%)] flex-col rounded-xl border border-violet-400/40 bg-[#15151a]/96 p-3 shadow-[0_18px_48px_rgba(0,0,0,0.55)] backdrop-blur-md"
-                style={{ width: promptEditorWidthPx, maxWidth: "calc(100vw - 24px)" }}
-                onPointerDown={(e) => e.stopPropagation()}
-              >
-                <div
-                  role="separator"
-                  aria-orientation="vertical"
-                  title="Drag to resize width"
-                  onPointerDown={onPromptEditorResizePointerDown}
-                  className="nodrag nopan absolute -right-1 bottom-2 top-2 z-[2] w-3 cursor-ew-resize rounded-full border border-white/10 bg-white/[0.06] hover:bg-white/[0.12]"
-                />
-                <div className="mb-2 flex items-center justify-between gap-2">
-                  <p className="text-[11px] font-semibold uppercase tracking-wide text-white/65">Edit prompt</p>
-                  <button
-                    type="button"
-                    onClick={closePromptEditor}
-                    className="rounded-md px-2 py-1 text-[11px] text-white/60 transition hover:bg-white/10 hover:text-white"
-                  >
-                    Done
-                  </button>
-                </div>
-                <textarea
-                  ref={promptEditorTextareaRef}
-                  value={promptEditorDraft}
-                  onChange={(e) => setPromptEditorDraft(e.target.value)}
-                  placeholder={cfg.promptPlaceholder}
-                  rows={data.kind === "video" ? 10 : 7}
-                  onWheelCapture={keepWheelInsideScrollable}
-                  onFocus={() => setPromptFocused(true)}
-                  onBlur={() => setPromptFocused(false)}
-                  className={cn(
-                    "nodrag nopan nowheel w-full resize-y rounded-xl border border-white/15 bg-black/45 px-3 py-2 text-[13px] leading-relaxed text-white/92 placeholder:text-white/35 outline-none focus:border-violet-500/40 focus:ring-1 focus:ring-violet-500/25",
-                    data.kind === "video"
-                      ? "min-h-[220px] max-h-[52vh] overflow-y-scroll studio-params-scroll"
-                      : "min-h-[160px] max-h-[52vh] overflow-y-scroll studio-params-scroll",
-                  )}
-                />
+              <div className="flex shrink-0 items-center justify-between gap-2 border-b border-white/[0.1] px-2.5 py-2">
+                <p className="text-[11px] font-semibold uppercase tracking-wide text-white/65">Edit prompt</p>
+                <button
+                  type="button"
+                  onClick={closePromptEditor}
+                  className="rounded-md px-2 py-1 text-[11px] text-white/60 transition hover:bg-white/10 hover:text-white"
+                >
+                  Done
+                </button>
               </div>
+              <textarea
+                ref={promptEditorTextareaRef}
+                value={promptEditorDraft}
+                onChange={(e) => setPromptEditorDraft(e.target.value)}
+                placeholder={cfg.promptPlaceholder}
+                onWheelCapture={keepWheelInsideScrollable}
+                onFocus={() => setPromptFocused(true)}
+                onBlur={() => setPromptFocused(false)}
+                className="nodrag nopan nowheel min-h-0 flex-1 resize-none overflow-y-auto border-0 bg-[#0a0a0c] px-3 py-3 text-[13px] leading-relaxed text-white/92 placeholder:text-white/35 outline-none ring-0 focus:ring-0 studio-params-scroll"
+              />
             </div>
           ) : null}
         </div>
@@ -4669,44 +4624,70 @@ export function AdAssetNode({ id, data, selected }: NodeProps<AdAssetNodeType>) 
               <Clapperboard className="h-3.5 w-3.5" strokeWidth={2} aria-hidden />
             </span>
           </div>
-          <div className={cn(workflowPortBubbleShellClass, "nodrag nopan relative")}>
+          <div className={cn(workflowPortBubbleShellClass, "nodrag nopan relative overflow-hidden")}>
             <Handle
               id="videoFirst"
               type="source"
               position={Position.Right}
               className={workflowPortSourceBubbleHandleClass}
               aria-label="First frame output"
-              title="First frame, double-click to capture from this video, drag to connect"
+              title="First frame — double-click to capture; thumbnail appears here when saved. Wire S into start or references."
               onDoubleClick={(e) => {
                 e.stopPropagation();
                 void onExtractVideoFrame("first");
               }}
             />
-            <span className="pointer-events-none absolute inset-0 z-[1] flex items-center justify-center text-white/85">
+            {videoExtractedFirstThumb ? (
+              // eslint-disable-next-line @next/next/no-img-element
+              <img
+                src={videoExtractedFirstThumb}
+                alt=""
+                className="pointer-events-none absolute inset-0 z-0 h-full w-full rounded-full object-cover"
+              />
+            ) : null}
+            <span
+              className={cn(
+                "pointer-events-none absolute inset-0 z-[1] flex items-center justify-center rounded-full ring-1 ring-inset ring-white/[0.08]",
+                !videoExtractedFirstThumb && "bg-black/25 text-white/88",
+              )}
+            >
               {frameExtractBusy === "first" ? (
                 <Loader2 className="h-3.5 w-3.5 animate-spin" strokeWidth={2} aria-hidden />
-              ) : (
+              ) : videoExtractedFirstThumb ? null : (
                 <ImageIcon className="h-3.5 w-3.5" strokeWidth={2} aria-hidden />
               )}
             </span>
           </div>
-          <div className={cn(workflowPortBubbleShellClass, "nodrag nopan relative")}>
+          <div className={cn(workflowPortBubbleShellClass, "nodrag nopan relative overflow-hidden")}>
             <Handle
               id="videoLast"
               type="source"
               position={Position.Right}
               className={workflowPortSourceBubbleHandleClass}
               aria-label="Last frame output"
-              title="Last frame, double-click to capture, drag to the next clip’s start port"
+              title="Last frame — double-click to capture; thumbnail here when saved. Wire E into the next start or references."
               onDoubleClick={(e) => {
                 e.stopPropagation();
                 void onExtractVideoFrame("last");
               }}
             />
-            <span className="pointer-events-none absolute inset-0 z-[1] flex items-center justify-center text-white/85">
+            {videoExtractedLastThumb ? (
+              // eslint-disable-next-line @next/next/no-img-element
+              <img
+                src={videoExtractedLastThumb}
+                alt=""
+                className="pointer-events-none absolute inset-0 z-0 h-full w-full rounded-full object-cover"
+              />
+            ) : null}
+            <span
+              className={cn(
+                "pointer-events-none absolute inset-0 z-[1] flex items-center justify-center rounded-full ring-1 ring-inset ring-white/[0.08]",
+                !videoExtractedLastThumb && "bg-black/25 text-white/88",
+              )}
+            >
               {frameExtractBusy === "last" ? (
                 <Loader2 className="h-3.5 w-3.5 animate-spin" strokeWidth={2} aria-hidden />
-              ) : (
+              ) : videoExtractedLastThumb ? null : (
                 <ImageIcon className="h-3.5 w-3.5" strokeWidth={2} aria-hidden />
               )}
             </span>
