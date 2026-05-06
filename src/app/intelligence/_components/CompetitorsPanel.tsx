@@ -3,8 +3,6 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { Loader2, Search, Star, Trash2 } from "lucide-react";
 import type { TTLookupResult, TTTracker } from "@/lib/trendtrack";
-import type { TTCompetitorSearchHit } from "@/lib/trendtrackAdvertiserSearch";
-import { proxiedMediaSrc } from "@/lib/mediaProxyUrl";
 import { cn } from "@/lib/utils";
 import type { IntelligenceCompetitor } from "@/app/api/intelligence/competitors/route";
 
@@ -13,37 +11,60 @@ export type CompetitorPick = {
   isTracked: boolean;
 };
 
-function googleFaviconUrl(domain: string | undefined | null): string | undefined {
-  const d = domain?.trim().replace(/^www\./i, "").toLowerCase();
-  if (!d || !d.includes(".")) return undefined;
-  return `https://www.google.com/s2/favicons?domain=${encodeURIComponent(d)}&sz=64`;
+/** Clearbit logo (free); on error swap to Google favicons — zero TrendTrack credits. */
+function CompetitorDomainAvatar({
+  domain,
+  name,
+}: {
+  domain: string | undefined;
+  name: string;
+}) {
+  const d = domain?.trim().replace(/^www\./i, "").toLowerCase() ?? "";
+  const letter = (name || "?").charAt(0).toUpperCase();
+  const hasDomain = Boolean(d && d.includes("."));
+
+  if (!hasDomain) {
+    return (
+      <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-[6px] bg-violet-500/22 text-xs font-bold text-violet-200">
+        {letter}
+      </div>
+    );
+  }
+
+  const clearbit = `https://logo.clearbit.com/${encodeURIComponent(d)}`;
+  const googleFb = `https://www.google.com/s2/favicons?domain=${encodeURIComponent(d)}&sz=64`;
+
+  return (
+    <span className="relative inline-flex h-9 w-9 shrink-0">
+      <span className="absolute inset-0 z-0 flex items-center justify-center rounded-[6px] bg-violet-500/22 text-[10px] font-bold text-violet-200">
+        {letter}
+      </span>
+      {/* eslint-disable-next-line @next/next/no-img-element */}
+      <img
+        src={clearbit}
+        alt=""
+        loading="lazy"
+        decoding="async"
+        className="relative z-[1] h-9 w-9 rounded-[6px] border border-white/10 bg-white/[0.06] object-contain"
+        onError={(e) => {
+          const el = e.currentTarget;
+          if (!el.src.includes("google.com")) {
+            el.src = googleFb;
+            return;
+          }
+          el.onerror = null;
+          el.style.visibility = "hidden";
+        }}
+      />
+    </span>
+  );
 }
 
-function formatReachShort(n: number | undefined): string {
-  if (n == null || !Number.isFinite(n) || n <= 0) return "";
-  if (n >= 1_000_000) return `${(n / 1_000_000).toFixed(1)}M`;
-  if (n >= 1_000) return `${Math.round(n / 1_000)}K`;
-  return String(Math.round(n));
-}
-
-function subtitlePrimary(hit: TTCompetitorSearchHit): string {
-  if (hit.domain?.trim()) return hit.domain.trim();
-  if ((hit.type ?? "").toLowerCase() === "brandtracker") return "Your tracker";
+function subtitleLine(hit: TTLookupResult): string {
+  if (hit.domain?.trim()) return hit.domain.trim().toLowerCase();
+  const t = (hit.type ?? "").toLowerCase();
+  if (t === "brandtracker") return "Your tracker";
   return "Advertising page";
-}
-
-function statsLine(hit: TTCompetitorSearchHit): string | null {
-  const parts: string[] = [];
-  if (typeof hit.sampledAdCount === "number" && hit.sampledAdCount > 0) {
-    parts.push(`${hit.sampledAdCount} ads in sample`);
-  }
-  const reach = formatReachShort(hit.maxReachSeen);
-  if (reach) parts.push(`top reach ~${reach}`);
-  if (typeof hit.followerCount === "number" && hit.followerCount > 0) {
-    const fc = formatReachShort(hit.followerCount);
-    if (fc) parts.push(`~${fc} followers`);
-  }
-  return parts.length > 0 ? parts.join(" · ") : null;
 }
 
 type SortBy =
@@ -81,7 +102,7 @@ export function CompetitorsPanel({
   const [query, setQuery] = useState("");
   const [lookupLoading, setLookupLoading] = useState(false);
   const [lookupError, setLookupError] = useState<string | null>(null);
-  const [lookupResults, setLookupResults] = useState<TTCompetitorSearchHit[]>([]);
+  const [lookupResults, setLookupResults] = useState<TTLookupResult[]>([]);
   const [selectedLookupId, setSelectedLookupId] = useState<string | null>(null);
 
   const [trackers, setTrackers] = useState<TTTracker[]>([]);
@@ -127,13 +148,15 @@ export function CompetitorsPanel({
     onPick(null);
     setSearchedOnce(true);
     try {
-      const res = await fetch(`/api/intelligence/competitors/search?q=${encodeURIComponent(q)}`);
-      const json = (await res.json()) as TTCompetitorSearchHit[] | { error?: string };
+      const res = await fetch(
+        `/api/intelligence/lookup?q=${encodeURIComponent(q)}&type=${encodeURIComponent("advertiser")}`,
+      );
+      const json = (await res.json()) as TTLookupResult[] | { error?: string };
       if (!Array.isArray(json)) {
-        setLookupError(json.error ?? "Search failed");
+        setLookupError(typeof json?.error === "string" ? json.error : "Search failed");
         return;
       }
-      const limited = json.slice(0, 24);
+      const limited = json.slice(0, 36);
       setLookupResults(limited);
       if (limited.length === 1) {
         const one = limited[0]!;
@@ -148,16 +171,9 @@ export function CompetitorsPanel({
   }, [onPick, query, trackedIds]);
 
   const selectLookup = useCallback(
-    (r: TTCompetitorSearchHit | TTLookupResult) => {
-      const hit: TTCompetitorSearchHit =
-        "sources" in r && Array.isArray(r.sources)
-          ? r
-          : {
-              ...r,
-              sources: ["lookup"] as Array<"lookup" | "ads">,
-            };
-      setSelectedLookupId(hit.id);
-      onPick({ lookup: hit, isTracked: trackedIds.has(hit.id) });
+    (r: TTLookupResult) => {
+      setSelectedLookupId(r.id);
+      onPick({ lookup: r, isTracked: trackedIds.has(r.id) });
     },
     [onPick, trackedIds],
   );
@@ -266,14 +282,9 @@ export function CompetitorsPanel({
           {lookupResults.map((r) => {
             const active = r.id === selectedLookupId;
             const isTracked = trackedIds.has(r.id);
-            const logoUrl = (r.logo ?? r.logoUrl ?? "").trim();
-            const avatarSrc = logoUrl
-              ? proxiedMediaSrc(logoUrl) || logoUrl
-              : googleFaviconUrl(r.domain ?? null);
-            const stats = statsLine(r);
             return (
               <button
-                key={`${r.sources?.join(",") ?? r.type}:${r.id}`}
+                key={`${r.type}:${r.id}`}
                 type="button"
                 onClick={() => selectLookup(r)}
                 className={cn(
@@ -281,26 +292,10 @@ export function CompetitorsPanel({
                   active ? "bg-violet-500/15 text-white" : "text-white/80 hover:bg-white/5",
                 )}
               >
-                {avatarSrc ? (
-                  // eslint-disable-next-line @next/next/no-img-element
-                  <img
-                    src={avatarSrc}
-                    alt=""
-                    loading="lazy"
-                    decoding="async"
-                    className="h-9 w-9 shrink-0 rounded-lg border border-white/10 bg-white/[0.06] object-contain p-0.5"
-                  />
-                ) : (
-                  <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-violet-500/22 text-xs font-bold text-violet-200">
-                    {(r.name || "?").charAt(0).toUpperCase()}
-                  </div>
-                )}
+                <CompetitorDomainAvatar domain={r.domain} name={r.name} />
                 <div className="min-w-0 flex-1">
                   <div className="truncate text-sm font-medium text-white">{r.name}</div>
-                  <div className="truncate text-[11px] text-white/40">{subtitlePrimary(r)}</div>
-                  {stats ? (
-                    <div className="mt-0.5 truncate text-[10px] text-white/32">{stats}</div>
-                  ) : null}
+                  <div className="truncate text-[11px] text-white/55">{subtitleLine(r)}</div>
                 </div>
                 <span
                   className={cn(
@@ -323,7 +318,10 @@ export function CompetitorsPanel({
           <div className="px-1 text-[11px] font-medium uppercase tracking-[0.12em] text-white/35">Saved</div>
           <div className="flex flex-col gap-1">
             {saved.slice(0, 12).map((c) => (
-              <div key={c.id} className="flex items-center gap-2 rounded-xl border border-white/10 bg-white/[0.03] px-2.5 py-2">
+              <div
+                key={c.id}
+                className="flex items-center gap-2 rounded-xl border border-white/10 bg-white/[0.03] px-2.5 py-2"
+              >
                 <button
                   type="button"
                   onClick={() =>
@@ -332,7 +330,6 @@ export function CompetitorsPanel({
                       name: c.name,
                       type: c.lookupId ? "brandtracker" : "advertiser",
                       domain: c.domain ?? undefined,
-                      sources: ["lookup"],
                     })
                   }
                   className="min-w-0 flex-1 text-left"
@@ -357,4 +354,3 @@ export function CompetitorsPanel({
     </div>
   );
 }
-

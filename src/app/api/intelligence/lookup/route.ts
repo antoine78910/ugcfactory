@@ -34,7 +34,8 @@ export async function GET(req: Request) {
   const q = normalizeLookupQuery(rawQ);
   if (!q) return NextResponse.json({ error: "Missing q" }, { status: 400 });
 
-  const key = `lookup:v2:${q.toLowerCase()}`;
+  const lookupType = new URL(req.url).searchParams.get("type")?.trim() ?? "";
+  const key = `lookup:v3:${lookupType || "_"}:${q.toLowerCase()}`;
   const normalizeCached = (payload: unknown): TTLookupResult[] => {
     if (!Array.isArray(payload)) return [];
     return payload.map((row) => normalizeTTLookupRow(row)).filter((x): x is TTLookupResult => x !== null);
@@ -44,7 +45,8 @@ export async function GET(req: Request) {
   if (cached) return NextResponse.json(normalizeCached(cached));
 
   try {
-    const data = await ttLookup(q);
+    const lookupOpts = lookupType ? { type: lookupType } : undefined;
+    const data = await ttLookup(q, lookupOpts);
     await setCached(key, data, TTL);
     return NextResponse.json(data);
   } catch (err) {
@@ -53,8 +55,9 @@ export async function GET(req: Request) {
       const fallback = normalizeLookupQuery(rawQ);
       if (fallback && fallback !== q) {
         try {
-          const data = await ttLookup(fallback);
-          await setCached(`lookup:v2:${fallback.toLowerCase()}`, data, TTL);
+          const lookupOpts = lookupType ? { type: lookupType } : undefined;
+          const data = await ttLookup(fallback, lookupOpts);
+          await setCached(`lookup:v3:${lookupType || "_"}:${fallback.toLowerCase()}`, data, TTL);
           return NextResponse.json(data);
         } catch {
           // fallthrough to structured error below

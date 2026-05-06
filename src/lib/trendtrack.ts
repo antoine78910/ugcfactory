@@ -179,21 +179,14 @@ export async function ttGetTopAds(id: string, limit = 10, sortBy?: string): Prom
   return (res.data ?? []).map((ad) => normalizeTTAd(ad));
 }
 
-export async function ttLookup(q: string): Promise<TTLookupResult[]> {
+export async function ttLookup(q: string, options?: { type?: string }): Promise<TTLookupResult[]> {
+  const t = options?.type?.trim();
+  const typeParam = t ? `&type=${encodeURIComponent(t)}` : "";
   const res = await ttFetch<{ data?: unknown[] }>(
-    `/v1/lookup?q=${encodeURIComponent(q)}`
+    `/v1/lookup?q=${encodeURIComponent(q)}${typeParam}`
   );
   const rows = res.data ?? [];
   return rows.map((r) => normalizeTTLookupRow(r)).filter((x): x is TTLookupResult => x !== null);
-}
-
-/** Raw rows from `/v1/ads/query` (before `TTAd` normalization) — used to roll up advertiser identities. */
-export async function ttAdsQueryRawRows(body: Record<string, unknown>): Promise<unknown[]> {
-  const res = await ttFetch<{ data?: unknown[] }>("/v1/ads/query", {
-    method: "POST",
-    body: JSON.stringify(body),
-  });
-  return res.data ?? [];
 }
 
 export async function ttQueryAds(body: Record<string, unknown>): Promise<TTAd[]> {
