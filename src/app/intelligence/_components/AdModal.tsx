@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { Copy, ExternalLink, Sparkles, X } from "lucide-react";
 import type { TTAd } from "@/lib/trendtrack";
 import { AdRecreateDialog } from "./AdRecreateDialog";
@@ -22,6 +22,7 @@ export function AdModal({
 }) {
   const [copied, setCopied] = useState(false);
   const [recreateOpen, setRecreateOpen] = useState(false);
+  const videoRef = useRef<HTMLVideoElement | null>(null);
 
   useEffect(() => {
     if (!ad) return;
@@ -41,6 +42,19 @@ export function AdModal({
   const body = ad.body ?? ad.text ?? "";
   const platform = ad.platform ?? "meta";
   const label = PLATFORM_LABELS[platform.toLowerCase()] ?? platform;
+
+  useEffect(() => {
+    if (!ad || recreateOpen) return;
+    const v = videoRef.current;
+    if (!v) return;
+    try {
+      v.muted = false;
+      v.volume = 1;
+      void v.play();
+    } catch {
+      /* autoplay with sound may be blocked; user can press play */
+    }
+  }, [ad, recreateOpen]);
 
   return (
     <div
@@ -62,12 +76,13 @@ export function AdModal({
         <div className="relative aspect-video w-full bg-black">
           {videoSrc ? (
             <video
+              ref={videoRef}
               src={videoSrc}
               poster={thumbnail}
               controls
-              muted
               autoPlay
               playsInline
+              preload="metadata"
               className="h-full w-full object-contain"
             />
           ) : thumbnail ? (

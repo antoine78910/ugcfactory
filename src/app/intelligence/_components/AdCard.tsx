@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useRef, useState } from "react";
-import { Maximize2, Sparkles } from "lucide-react";
+import { CalendarDays, Coins, Copy, Eye, Maximize2, Sparkles, Users } from "lucide-react";
 import type { TTAd } from "@/lib/trendtrack";
 import { AdRecreateDialog } from "./AdRecreateDialog";
 import { cn } from "@/lib/utils";
@@ -26,13 +26,22 @@ function formatUsd(n?: number): string {
   return `$${n.toFixed(1)}`;
 }
 
-function MetricPill({ children, title }: { children: React.ReactNode; title?: string }) {
+function MetricPill({
+  icon,
+  children,
+  title,
+}: {
+  icon: React.ReactNode;
+  children: React.ReactNode;
+  title?: string;
+}) {
   return (
     <span
       title={title}
-      className="inline-flex items-center rounded-md border border-white/10 bg-black/60 px-2 py-1 text-[10px] font-semibold text-white/90 backdrop-blur"
+      className="inline-flex items-center gap-1.5 rounded-md border border-white/10 bg-white/[0.04] px-2 py-1 text-[10px] font-semibold text-white/85"
     >
-      {children}
+      <span className="text-white/55">{icon}</span>
+      <span>{children}</span>
     </span>
   );
 }
@@ -211,30 +220,60 @@ export function AdCard({
             </button>
           ) : null}
 
-          <div className="absolute left-2 bottom-2 right-2 flex flex-wrap gap-1.5">
-            {typeof ad.impressions === "number" ? (
-              <MetricPill title="Impressions">{formatReach(ad.impressions)} impr.</MetricPill>
-            ) : null}
-            {typeof ad.reach === "number" ? (
-              <MetricPill title="Reach">{formatReach(ad.reach)} reach</MetricPill>
-            ) : null}
-            {typeof ad.spend === "number" ? (
-              <MetricPill title="Estimated total spend">{formatUsd(ad.spend)} total</MetricPill>
-            ) : null}
-            {typeof ad.spendPerDay === "number" ? (
-              <MetricPill title="Estimated spend per day">{formatUsd(ad.spendPerDay)}/d</MetricPill>
-            ) : null}
-            {typeof ad.daysRunning === "number" ? (
-              <MetricPill title="Days running">{ad.daysRunning}d</MetricPill>
-            ) : null}
-            {typeof ad.duplicates === "number" ? (
-              <MetricPill title="Duplicate creatives">{ad.duplicates} dup</MetricPill>
-            ) : null}
-          </div>
-
           <span className="pointer-events-none absolute left-2 top-2 rounded-full bg-black/60 px-2 py-0.5 text-[10px] font-medium text-white/85 backdrop-blur">
             {label}
           </span>
+        </div>
+
+        <div className="flex flex-wrap gap-1.5">
+          {typeof ad.impressions === "number" ? (
+            <MetricPill
+              icon={<Eye className="h-3.5 w-3.5" aria-hidden />}
+              title="Impressions"
+            >
+              {formatReach(ad.impressions)}
+            </MetricPill>
+          ) : null}
+          {typeof ad.reach === "number" ? (
+            <MetricPill
+              icon={<Users className="h-3.5 w-3.5" aria-hidden />}
+              title="Reach"
+            >
+              {formatReach(ad.reach)}
+            </MetricPill>
+          ) : null}
+          {typeof ad.spend === "number" ? (
+            <MetricPill
+              icon={<Coins className="h-3.5 w-3.5" aria-hidden />}
+              title="Estimated total spend"
+            >
+              {formatUsd(ad.spend)}
+            </MetricPill>
+          ) : null}
+          {typeof ad.spendPerDay === "number" ? (
+            <MetricPill
+              icon={<Coins className="h-3.5 w-3.5" aria-hidden />}
+              title="Estimated spend per day"
+            >
+              {formatUsd(ad.spendPerDay)}/d
+            </MetricPill>
+          ) : null}
+          {typeof ad.daysRunning === "number" ? (
+            <MetricPill
+              icon={<CalendarDays className="h-3.5 w-3.5" aria-hidden />}
+              title="Days running"
+            >
+              {ad.daysRunning}d
+            </MetricPill>
+          ) : null}
+          {typeof ad.duplicates === "number" ? (
+            <MetricPill
+              icon={<Copy className="h-3.5 w-3.5" aria-hidden />}
+              title="Duplicate creatives"
+            >
+              {ad.duplicates}
+            </MetricPill>
+          ) : null}
         </div>
 
         <p className="line-clamp-2 text-xs text-white/75">
