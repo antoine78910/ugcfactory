@@ -39,7 +39,7 @@ export function TextPromptNode({ id, data: rawData, selected }: NodeProps<TextPr
       >
         <div
           className={cn(
-            "relative flex w-[240px] flex-col overflow-hidden rounded-xl border border-white/[0.1] bg-[#0a0a0c] shadow-[0_12px_40px_rgba(0,0,0,0.55)]",
+            "relative flex w-[300px] flex-col overflow-hidden rounded-xl border border-white/[0.1] bg-[#0a0a0c] shadow-[0_12px_40px_rgba(0,0,0,0.55)]",
             selected && "ring-2 ring-violet-500/85 ring-offset-2 ring-offset-[#06070d]",
           )}
         >
