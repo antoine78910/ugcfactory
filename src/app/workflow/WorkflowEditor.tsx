@@ -847,6 +847,8 @@ type ChromeProps = {
   setAddOpen: (v: boolean | ((b: boolean) => boolean)) => void;
   setNodes: React.Dispatch<React.SetStateAction<WorkflowCanvasNode[]>>;
   setEdges: React.Dispatch<React.SetStateAction<Edge[]>>;
+  /** Immediately persist a nodes/edges snapshot into the parent `project` state (avoids debounce loss on refresh). */
+  commitProjectSnapshotNow: (nodes: WorkflowCanvasNode[], edges: Edge[]) => void;
   activePageId: string;
   activeName: string;
   selectedNodes: WorkflowCanvasNode[];
@@ -884,6 +886,7 @@ function WorkflowReactFlowChrome({
   setAddOpen,
   setNodes,
   setEdges,
+  commitProjectSnapshotNow,
   activePageId,
   activeName,
   selectedNodes,
@@ -905,7 +908,8 @@ function WorkflowReactFlowChrome({
 }: ChromeProps) {
   const pathname = usePathname();
   const barIcon = "h-[18px] w-[18px] shrink-0";
-  const { screenToFlowPosition, flowToScreenPosition, getNodesBounds, getInternalNode, getNodes } = useReactFlow();
+  const { screenToFlowPosition, flowToScreenPosition, getNodesBounds, getInternalNode, getNodes, getEdges } =
+    useReactFlow();
   const viewport = useStore((s) => s.transform);
 
   const [groupNameDraft, setGroupNameDraft] = useState("Group");
@@ -1129,12 +1133,17 @@ function WorkflowReactFlowChrome({
       y: window.innerHeight / 2,
     });
     const built = buildWorkflow360ProfileBranch(position);
+    const nodesSnap = getNodes() as WorkflowCanvasNode[];
+    const edgesSnap = getEdges();
+    const nextNodes = [...nodesSnap, ...built.nodes];
+    const nextEdges = [...edgesSnap, ...built.edges];
     setNodes((prev) => [...prev, ...built.nodes]);
     setEdges((prev) => [...prev, ...built.edges]);
+    commitProjectSnapshotNow(nextNodes, nextEdges);
     setAddOpen(false);
     setFrameOpen(false);
     toast.success("360° profile generator added — wire your own image reference.");
-  }, [screenToFlowPosition, setNodes, setEdges, setAddOpen, setFrameOpen]);
+  }, [commitProjectSnapshotNow, getEdges, getNodes, screenToFlowPosition, setNodes, setEdges, setAddOpen, setFrameOpen]);
 
   const addWorkflowImageToJsonBranch = useCallback(() => {
     const position = screenToFlowPosition({
@@ -1142,12 +1151,17 @@ function WorkflowReactFlowChrome({
       y: window.innerHeight / 2,
     });
     const built = buildWorkflowImageToJsonBranch(position);
+    const nodesSnap = getNodes() as WorkflowCanvasNode[];
+    const edgesSnap = getEdges();
+    const nextNodes = [...nodesSnap, ...built.nodes];
+    const nextEdges = [...edgesSnap, ...built.edges];
     setNodes((prev) => [...prev, ...built.nodes]);
     setEdges((prev) => [...prev, ...built.edges]);
+    commitProjectSnapshotNow(nextNodes, nextEdges);
     setAddOpen(false);
     setFrameOpen(false);
     toast.success("Image → JSON assistant added — connect an HTTPS image.");
-  }, [screenToFlowPosition, setNodes, setEdges, setAddOpen, setFrameOpen]);
+  }, [commitProjectSnapshotNow, getEdges, getNodes, screenToFlowPosition, setNodes, setEdges, setAddOpen, setFrameOpen]);
 
   const [addPlusTab, setAddPlusTab] = useState<"basics" | "upload">("basics");
   const [avatarPickerOpen, setAvatarPickerOpen] = useState(false);
@@ -2592,6 +2606,19 @@ function WorkflowFlowWorkspace({
   }, []);
 
   const prevActiveId = useRef(project.activePageId);
+
+  const commitProjectSnapshotNow = useCallback(
+    (nextNodes: WorkflowCanvasNode[], nextEdges: Edge[]) => {
+      const id = project.activePageId;
+      // Keep the flush ref snapshot in sync immediately (avoids losing placement on rapid refresh/navigation).
+      nodesEdgesRef.current = { nodes: nextNodes, edges: nextEdges };
+      setProject((prev) => ({
+        ...prev,
+        pages: prev.pages.map((p) => (p.id === id ? { ...p, nodes: nextNodes, edges: nextEdges } : p)),
+      }));
+    },
+    [project.activePageId, setProject],
+  );
 
   useEffect(() => {
     if (prevActiveId.current === project.activePageId) return;
@@ -4287,6 +4314,7 @@ function WorkflowFlowWorkspace({
             setAddOpen={setAddOpen}
             setNodes={setNodes}
             setEdges={setEdges}
+            commitProjectSnapshotNow={commitProjectSnapshotNow}
             activePageId={project.activePageId}
             activeName={activeName}
             selectedNodes={selectedNodes}
