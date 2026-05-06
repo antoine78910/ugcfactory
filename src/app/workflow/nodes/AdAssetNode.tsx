@@ -645,6 +645,30 @@ export function AdAssetNode({ id, data, selected }: NodeProps<AdAssetNodeType>) 
       : null,
   );
   const previousReferenceSignatureRef = useRef<string | null>(null);
+  /**
+   * Hydration guard for the "auto-clear stale preview" effect below.
+   *
+   * After mount, the node receives several waves of `data` updates:
+   *  1. The synchronous local-storage state (some fields may be stripped for quota).
+   *  2. The async cloud-synced state (full state) replacing it ~100–1500ms later.
+   *
+   * Without this guard, the second wave looks like a "reference change" to the
+   * effect — the signature transitions from the stripped local one to the full
+   * cloud one — and it wipes the user's generated `outputPreviewUrl`. That
+   * manifested as "all my generated images in Image Generator nodes disappeared
+   * after reload".
+   *
+   * We only enable auto-clear after a short hydration window so genuine
+   * user-initiated reference changes (uploads, manual frame swaps) still
+   * properly invalidate stale outputs.
+   */
+  const referenceAutoClearArmedRef = useRef(false);
+  useEffect(() => {
+    const t = window.setTimeout(() => {
+      referenceAutoClearArmedRef.current = true;
+    }, 2500);
+    return () => window.clearTimeout(t);
+  }, []);
 
   useEffect(() => {
     if (data.kind !== "image" && data.kind !== "video" && data.kind !== "motion") return;
@@ -662,6 +686,9 @@ export function AdAssetNode({ id, data, selected }: NodeProps<AdAssetNodeType>) 
     }
     if (previous === currentSignature) return;
     previousReferenceSignatureRef.current = currentSignature;
+    // During the hydration window, just track the latest signature without
+    // clearing the existing output (see ref comment above).
+    if (!referenceAutoClearArmedRef.current) return;
     if (!data.outputPreviewUrl?.trim()) return;
     patch(id, {
       outputPreviewUrl: undefined,

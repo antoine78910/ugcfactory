@@ -120,31 +120,25 @@ export { newPage };
 // ---- LocalStorage safety ----------------------------------------------------
 // Workflow state is stored in localStorage. Some node fields (video frames, data URLs, blob URLs,
 // assistant outputs) can easily exceed quota and cause silent save failures → users "lose" nodes/edges
-// after navigating away and back. We aggressively strip those fields before persisting.
+// after navigating away and back. We strip those heavy fields before persisting.
 //
-// However, fields that contain only small metadata or normal HTTPS URLs (task ids,
-// generator output URLs, media kind) MUST persist so users can:
-//   - resume polling an in-flight image/video generation after navigating to another
-//     workflow space and coming back (see AdAssetNode `pendingWorkflowRun` resume effect),
-//   - still see the completed preview that arrived while they were on a different page.
-// The secondary `isHeavyDataUrl` / `isBlobUrl` pass below still strips data:/blob:
-// payloads from those fields, so the quota safety net stays in place.
+// IMPORTANT: do NOT strip stable fields that participate in node-level invariants
+// (e.g. reference signatures used by the AdAssetNode auto-clear effect). Stripping
+// them would make the local state diverge from the cloud state, and on reload the
+// cloud sync would look like a "reference change" → the effect would auto-clear
+// the user's generated preview (`outputPreviewUrl`).
+//
+// The blanket secondary pass (`isHeavyDataUrl` / `isBlobUrl`) below still removes
+// any data:/blob: payload from any field, so the quota safety net stays in place
+// even when we keep these fields in the explicit allow list.
 
 const LOCALSTORAGE_EPHEMERAL_FIELDS = new Set([
-  // AdAsset runtime fields that can carry large blobs
+  // Long markdown/JSON assistant output — can be huge; rerun is cheap.
   "assistantOutput",
-  "websiteLastRunAt",
-  // Reference previews (keep main stable URLs on ImageRef nodes instead)
-  "referencePreviewUrl",
-  "referenceSource",
-  "referenceMediaKind",
-  // Video generator image references (derived from links)
-  "videoStartImageUrl",
-  "videoEndImageUrl",
-  // Heavy frame extracts (data URLs)
+  // Heavy frame extracts (always data URLs).
   "videoExtractedFirstFrameUrl",
   "videoExtractedLastFrameUrl",
-  // Anything else that might embed data URLs
+  // Anything else that's known to embed a data URL of arbitrary size.
   "outputFrameDataUrl",
 ]);
 
