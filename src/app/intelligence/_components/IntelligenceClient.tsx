@@ -46,8 +46,8 @@ export function IntelligenceClient({ ownTrackerIds }: { ownTrackerIds: string[] 
   }, []);
 
   return (
-    <div className="flex min-h-[calc(100dvh-0px)]">
-      <aside className="sticky top-0 flex h-dvh w-80 shrink-0 flex-col gap-4 overflow-y-auto border-r border-white/10 bg-[#06070d] p-4">
+    <div className="flex w-full overflow-hidden max-md:h-[calc(100dvh-3.5rem)] md:h-dvh">
+      <aside className="flex h-full w-80 shrink-0 flex-col gap-4 overflow-y-auto overscroll-y-contain border-r border-white/10 bg-[#06070d] p-4">
         <div className="flex items-center justify-between gap-2 px-1 pt-1">
           <div className="flex items-center gap-2">
             <div className="h-2 w-2 rounded-full bg-violet-400 shadow-[0_0_10px_rgba(167,139,250,0.8)]" />
@@ -75,7 +75,7 @@ export function IntelligenceClient({ ownTrackerIds }: { ownTrackerIds: string[] 
         />
       </aside>
 
-      <main className="flex-1 overflow-y-auto">
+      <main className="min-h-0 min-w-0 flex-1 overflow-y-auto overscroll-y-contain">
         {selected ? (
           <TrackerDetail tracker={selected} ownTrackerIds={ownTrackerIds} />
         ) : competitorPick ? (
