@@ -3719,6 +3719,29 @@ export function AdAssetNode({ id, data, selected }: NodeProps<AdAssetNodeType>) 
             </span>
           </div>
 
+          {data.kind === "motion" || (data.kind === "video" && seedance2ProLike) ? (
+            <div className={cn(workflowPortBubbleShellClass, "nodrag nopan")}>
+              <Handle
+                id="inVideo"
+                type="target"
+                position={Position.Left}
+                className={workflowPortTargetBubbleHandleClass}
+                aria-label={
+                  data.kind === "motion" ? "Motion reference video input" : "Seedance reference video input"
+                }
+                title={
+                  data.kind === "motion"
+                    ? "Motion reference video — click to add upload, list, or video generator."
+                    : "Seedance 2 / Fast: optional motion reference video for omni_reference."
+                }
+                onPointerDown={(e) => handleInputBubblePointerDown(e, "inVideo")}
+              />
+              <span className={workflowPortBubbleIconClass} aria-hidden>
+                <Play className="h-4 w-4" strokeWidth={2} aria-hidden="true" />
+              </span>
+            </div>
+          ) : null}
+
           {data.kind === "motion" || (data.kind === "video" && videoModelHasStartFrame) ? (
             <div className={cn(workflowPortBubbleShellClass, "nodrag nopan")}>
               {data.kind === "motion" || (data.kind === "video" && !videoModelHasReferences) ? (
@@ -3755,29 +3778,6 @@ export function AdAssetNode({ id, data, selected }: NodeProps<AdAssetNodeType>) 
               )}
               <span className={workflowPortBubbleIconClass} aria-hidden>
                 <ImageIcon className="h-4 w-4" strokeWidth={2} aria-hidden="true" />
-              </span>
-            </div>
-          ) : null}
-
-          {data.kind === "motion" || (data.kind === "video" && seedance2ProLike) ? (
-            <div className={cn(workflowPortBubbleShellClass, "nodrag nopan")}>
-              <Handle
-                id="inVideo"
-                type="target"
-                position={Position.Left}
-                className={workflowPortTargetBubbleHandleClass}
-                aria-label={
-                  data.kind === "motion" ? "Motion reference video input" : "Seedance reference video input"
-                }
-                title={
-                  data.kind === "motion"
-                    ? "Motion reference video — click to add upload, list, or video generator."
-                    : "Seedance 2 / Fast: optional motion reference video for omni_reference."
-                }
-                onPointerDown={(e) => handleInputBubblePointerDown(e, "inVideo")}
-              />
-              <span className={workflowPortBubbleIconClass} aria-hidden>
-                <Play className="h-4 w-4" strokeWidth={2} aria-hidden="true" />
               </span>
             </div>
           ) : null}
