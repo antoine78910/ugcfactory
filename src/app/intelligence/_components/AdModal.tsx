@@ -65,6 +65,8 @@ export function AdModal({
               src={videoSrc}
               poster={thumbnail}
               controls
+              muted
+              autoPlay
               playsInline
               className="h-full w-full object-contain"
             />

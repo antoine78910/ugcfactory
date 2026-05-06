@@ -101,7 +101,7 @@ export function CompetitorDetail({
           setAdsError(intelErrorMessage(parsed.error));
           return;
         }
-        setAds(parsed.data.ads ?? []);
+        setAds((parsed.data.ads ?? []).filter((a) => Boolean(a.videoUrl && a.videoUrl.trim())));
         setStaleAt(parsed.staleAt ?? null);
       } catch {
         setAdsError("Network error");

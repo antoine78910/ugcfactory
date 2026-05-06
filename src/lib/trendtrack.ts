@@ -101,6 +101,14 @@ export type TTAd = {
   platform?: string;
   reach?: number;
   impressions?: number;
+  /** Total spend estimate for this creative (if provider exposes it). */
+  spend?: number;
+  /** Spend per day estimate (if provider exposes it). */
+  spendPerDay?: number;
+  /** How many days the ad has been running (if provider exposes it; else computed client-side when possible). */
+  daysRunning?: number;
+  /** Approx count of duplicates/variations for this creative (if provider exposes it). */
+  duplicates?: number;
   startDate?: string;
   firstSeen?: string;
   adUrl?: string;
@@ -113,6 +121,14 @@ function numOrUndefined(v: unknown): number | undefined {
 
 function asRecord(v: unknown): Record<string, unknown> {
   return v && typeof v === "object" && !Array.isArray(v) ? (v as Record<string, unknown>) : {};
+}
+
+function parseIsoDate(v: unknown): Date | null {
+  if (typeof v !== "string") return null;
+  const t = v.trim();
+  if (!t) return null;
+  const d = new Date(t);
+  return Number.isFinite(d.getTime()) ? d : null;
 }
 
 /**
@@ -250,6 +266,26 @@ function normalizeTTAd(raw: unknown): TTAd {
   const impressions = numOrUndefined(
     o.impressions ?? o.estimated_impressions ?? o.estimatedImpressions ?? nestedMetrics.impressions,
   );
+
+  const spend = numOrUndefined(
+    o.spend ??
+      o.estimated_spend ??
+      o.estimatedSpend ??
+      nestedMetrics.spend ??
+      nestedMetrics.estimatedSpend ??
+      nestedMetrics.estimated_spend ??
+      nestedMetrics.totalSpend ??
+      nestedMetrics.total_spend,
+  );
+
+  const spendPerDay = numOrUndefined(
+    o.spendPerDay ??
+      o.spend_per_day ??
+      nestedMetrics.spendPerDay ??
+      nestedMetrics.spend_per_day ??
+      nestedMetrics.dailySpend ??
+      nestedMetrics.daily_spend,
+  );
   const startDate = (o.startDate ??
     o.start_date ??
     o.start ??
@@ -276,6 +312,32 @@ function normalizeTTAd(raw: unknown): TTAd {
   const rankFromDto =
     rankFromObject ?? numOrUndefined(nestedMetrics.currentRank ?? nestedMetrics.current_rank);
 
+  const duplicates = numOrUndefined(
+    o.duplicates ??
+      o.duplicateCount ??
+      o.duplicate_count ??
+      nestedMetrics.duplicates ??
+      nestedMetrics.duplicateCount ??
+      nestedMetrics.duplicate_count,
+  );
+
+  const daysRunning =
+    numOrUndefined(
+      o.daysRunning ??
+        o.days_running ??
+        nestedMetrics.daysRunning ??
+        nestedMetrics.days_running ??
+        nestedMetrics.durationDays ??
+        nestedMetrics.duration_days,
+    ) ??
+    (() => {
+      const start = parseIsoDate(firstSeen) ?? parseIsoDate(startDate);
+      if (!start) return undefined;
+      const ms = Date.now() - start.getTime();
+      if (!Number.isFinite(ms) || ms < 0) return undefined;
+      return Math.max(0, Math.floor(ms / (24 * 60 * 60 * 1000)));
+    })();
+
   return {
     id: id || "unknown",
     ...(typeof headline === "string" && headline.trim() ? { headline: headline.trim() } : {}),
@@ -291,6 +353,10 @@ function normalizeTTAd(raw: unknown): TTAd {
     ...(typeof platform === "string" && platform.trim() ? { platform: platform.trim() } : {}),
     ...(reach !== undefined ? { reach } : {}),
     ...(impressions !== undefined ? { impressions } : {}),
+    ...(spend !== undefined ? { spend } : {}),
+    ...(spendPerDay !== undefined ? { spendPerDay } : {}),
+    ...(daysRunning !== undefined ? { daysRunning } : {}),
+    ...(duplicates !== undefined ? { duplicates } : {}),
     ...(typeof startDate === "string" && startDate.trim() ? { startDate: startDate.trim() } : {}),
     ...(typeof firstSeen === "string" && firstSeen.trim() ? { firstSeen: firstSeen.trim() } : {}),
     ...(typeof adUrl === "string" && adUrl.trim() ? { adUrl: adUrl.trim() } : {}),

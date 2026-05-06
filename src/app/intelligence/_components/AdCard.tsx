@@ -19,6 +19,24 @@ function formatReach(n?: number): string {
   return String(n);
 }
 
+function formatUsd(n?: number): string {
+  if (n == null || !Number.isFinite(n) || n <= 0) return "—";
+  if (n >= 1000) return `$${Math.round(n).toLocaleString("en-US")}`;
+  if (n >= 10) return `$${n.toFixed(0)}`;
+  return `$${n.toFixed(1)}`;
+}
+
+function MetricPill({ children, title }: { children: React.ReactNode; title?: string }) {
+  return (
+    <span
+      title={title}
+      className="inline-flex items-center rounded-md border border-white/10 bg-black/60 px-2 py-1 text-[10px] font-semibold text-white/90 backdrop-blur"
+    >
+      {children}
+    </span>
+  );
+}
+
 export function AdCard({
   ad,
   onView,
@@ -80,6 +98,7 @@ export function AdCard({
   }, [stopVideo]);
 
   const clickable = typeof onView === "function";
+  const showInlineVideo = Boolean(videoSrc && !thumbnail && !videoBroken);
 
   return (
     <div
@@ -118,12 +137,37 @@ export function AdCard({
                 videoSrc && playVideoOnHover && hoverPlay && !videoBroken && videoReady && "opacity-0",
               )}
             />
+          ) : showInlineVideo ? (
+            // eslint-disable-next-line jsx-a11y/media-has-caption
+            <video
+              ref={videoRef}
+              src={videoSrc}
+              className="absolute inset-0 h-full w-full object-cover"
+              muted
+              playsInline
+              preload="metadata"
+              onLoadedData={(e) => {
+                setVideoReady(true);
+                const v = e.currentTarget;
+                try {
+                  v.pause();
+                  const d = Number(v.duration);
+                  v.currentTime = Number.isFinite(d) && d > 0 ? Math.min(0.05, d * 0.01) : 0.001;
+                } catch {
+                  /* ignore */
+                }
+              }}
+              onError={() => {
+                setVideoBroken(true);
+                setVideoReady(false);
+              }}
+            />
           ) : (
             <div className="flex h-full w-full items-center justify-center text-xs text-white/30">
               No preview
             </div>
           )}
-          {videoSrc && playVideoOnHover && !videoBroken ? (
+          {videoSrc && playVideoOnHover && !videoBroken && !showInlineVideo ? (
             <video
               ref={videoRef}
               src={videoSrc}
@@ -167,11 +211,29 @@ export function AdCard({
             </button>
           ) : null}
 
+          <div className="absolute left-2 bottom-2 right-2 flex flex-wrap gap-1.5">
+            {typeof ad.impressions === "number" ? (
+              <MetricPill title="Impressions">{formatReach(ad.impressions)} impr.</MetricPill>
+            ) : null}
+            {typeof ad.reach === "number" ? (
+              <MetricPill title="Reach">{formatReach(ad.reach)} reach</MetricPill>
+            ) : null}
+            {typeof ad.spend === "number" ? (
+              <MetricPill title="Estimated total spend">{formatUsd(ad.spend)} total</MetricPill>
+            ) : null}
+            {typeof ad.spendPerDay === "number" ? (
+              <MetricPill title="Estimated spend per day">{formatUsd(ad.spendPerDay)}/d</MetricPill>
+            ) : null}
+            {typeof ad.daysRunning === "number" ? (
+              <MetricPill title="Days running">{ad.daysRunning}d</MetricPill>
+            ) : null}
+            {typeof ad.duplicates === "number" ? (
+              <MetricPill title="Duplicate creatives">{ad.duplicates} dup</MetricPill>
+            ) : null}
+          </div>
+
           <span className="pointer-events-none absolute left-2 top-2 rounded-full bg-black/60 px-2 py-0.5 text-[10px] font-medium text-white/85 backdrop-blur">
             {label}
-          </span>
-          <span className="pointer-events-none absolute bottom-2 right-2 rounded-full bg-black/60 px-2 py-0.5 text-[10px] font-medium text-white/85 backdrop-blur">
-            {formatReach(ad.reach)}
           </span>
         </div>
 

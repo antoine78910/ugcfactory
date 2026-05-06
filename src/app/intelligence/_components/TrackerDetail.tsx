@@ -176,7 +176,7 @@ export function TrackerDetail({
           setAdsError(intelErrorMessage(parsed.error));
           return;
         }
-        setAds(parsed.data);
+        setAds((parsed.data ?? []).filter((a) => Boolean(a.videoUrl && a.videoUrl.trim())));
         setAdsAt(new Date().toISOString());
       } catch {
         setAdsError("Network error");
