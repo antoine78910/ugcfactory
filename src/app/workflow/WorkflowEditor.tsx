@@ -4729,20 +4729,6 @@ function WorkflowFlowWorkspace({
                 <button
                   type="button"
                   className="rounded-lg border border-white/10 bg-white/[0.06] px-3 py-2 text-left text-[13px] font-medium text-white/90 transition hover:border-violet-400/35 hover:bg-violet-500/15"
-                  onClick={() => placeNodeAtPicker("promptList")}
-                >
-                  List
-                </button>
-                <button
-                  type="button"
-                  className="rounded-lg border border-white/10 bg-white/[0.06] px-3 py-2 text-left text-[13px] font-medium text-white/50 opacity-50"
-                  disabled
-                >
-                  Website (Soon)
-                </button>
-                <button
-                  type="button"
-                  className="rounded-lg border border-white/10 bg-white/[0.06] px-3 py-2 text-left text-[13px] font-medium text-white/90 transition hover:border-violet-400/35 hover:bg-violet-500/15"
                   onClick={() => placeNodeAtPicker("assistant")}
                 >
                   Assistant
@@ -4764,16 +4750,21 @@ function WorkflowFlowWorkspace({
                 >
                   Video generator
                 </button>
-                <button
-                  type="button"
-                  className="rounded-lg border border-white/10 bg-white/[0.06] px-3 py-2 text-left text-[13px] font-medium text-white/90 transition hover:border-violet-400/35 hover:bg-violet-500/15"
-                  onClick={() => placeNodeAtPicker("promptList")}
-                >
-                  List
-                </button>
               </>
             ) : placementPicker.intent === "image-input" ? (
               <>
+                <button
+                  type="button"
+                  className="rounded-lg border border-violet-400/30 bg-violet-500/10 px-3 py-2 text-left text-[13px] font-medium text-white/90 transition hover:border-violet-300/45 hover:bg-violet-500/15"
+                  onClick={() =>
+                    placeNodeAtPicker("image", {
+                      label: "360° profile",
+                      imageWorkflowPreset: "profile_360",
+                    })
+                  }
+                >
+                  360° profile
+                </button>
                 <button
                   type="button"
                   className="rounded-lg border border-white/10 bg-white/[0.06] px-3 py-2 text-left text-[13px] font-medium text-white/90 transition hover:border-violet-400/35 hover:bg-violet-500/15"
