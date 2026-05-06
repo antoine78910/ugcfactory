@@ -3605,6 +3605,25 @@ export function AdAssetNode({ id, data, selected }: NodeProps<AdAssetNodeType>) 
   return (
     <>
       <WorkflowNodeContextToolbar nodeId={id} onRun={runThisNodeOnly} onRunFromHere={runFromHere} />
+
+      {seedanceProVideoTrimFile ? (
+        <WorkflowMediaTrimDialog
+          open={true}
+          file={seedanceProVideoTrimFile}
+          kind="video"
+          maxDurationSec={15}
+          title="Trim video to 15s"
+          onOpenChange={(open) => {
+            if (open) return;
+            setSeedanceProVideoTrimFile(null);
+          }}
+          onTrimmed={(trimmed) => {
+            setSeedanceProVideoTrimFile(null);
+            void attachSeedanceProReferenceVideoFile(trimmed);
+          }}
+        />
+      ) : null}
+
       <div
         className="relative flex gap-1 items-stretch"
         onMouseEnter={() => window.dispatchEvent(new CustomEvent("workflow:hover-node", { detail: { nodeId: id } }))}

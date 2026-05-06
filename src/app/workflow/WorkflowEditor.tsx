@@ -862,6 +862,18 @@ type ChromeProps = {
   onRedo: () => void;
   canUndo: boolean;
   canRedo: boolean;
+  uploadTrimState: {
+    open: boolean;
+    file: File;
+    pendingConnect: { targetNodeId: string; targetHandleId: string; flow: XYPosition } | null;
+  } | null;
+  setUploadTrimState: React.Dispatch<
+    React.SetStateAction<{
+      open: boolean;
+      file: File;
+      pendingConnect: { targetNodeId: string; targetHandleId: string; flow: XYPosition } | null;
+    } | null>
+  >;
   readOnly?: boolean;
 };
 
@@ -887,6 +899,8 @@ function WorkflowReactFlowChrome({
   onRedo,
   canUndo,
   canRedo,
+  uploadTrimState,
+  setUploadTrimState,
   readOnly,
 }: ChromeProps) {
   const pathname = usePathname();
@@ -1145,11 +1159,6 @@ function WorkflowReactFlowChrome({
   const [feedbackImageUploading, setFeedbackImageUploading] = useState(false);
   const [feedbackImageUrl, setFeedbackImageUrl] = useState<string | null>(null);
   const [feedbackImagePreviewUrl, setFeedbackImagePreviewUrl] = useState<string | null>(null);
-  const [uploadTrimState, setUploadTrimState] = useState<{
-    open: boolean;
-    file: File;
-    pendingConnect: { targetNodeId: string; targetHandleId: string; flow: XYPosition } | null;
-  } | null>(null);
   const uploadInputRef = useRef<HTMLInputElement>(null);
   const feedbackImageInputRef = useRef<HTMLInputElement>(null);
 
@@ -2523,6 +2532,11 @@ function WorkflowFlowWorkspace({
   const selectedNodes = useMemo(() => nodes.filter((n) => n.selected), [nodes]);
   const [placementPicker, setPlacementPicker] = useState<WorkflowPlacementPickerState | null>(null);
   const placementRef = useRef<HTMLDivElement>(null);
+  const [uploadTrimState, setUploadTrimState] = useState<{
+    open: boolean;
+    file: File;
+    pendingConnect: { targetNodeId: string; targetHandleId: string; flow: XYPosition } | null;
+  } | null>(null);
   const cutTargetBusyRef = useRef(false);
   const cutSuppressNextPaneClickRef = useRef(false);
   /** After a wire drop that opens the placement menu, ignore the synthetic pane click that would clear it. */
@@ -4288,6 +4302,8 @@ function WorkflowFlowWorkspace({
             onRedo={onRedo}
             canUndo={canUndo}
             canRedo={canRedo}
+            uploadTrimState={uploadTrimState}
+            setUploadTrimState={setUploadTrimState}
             readOnly={readOnly}
           />
         </ReactFlow>
