@@ -917,6 +917,16 @@ export async function POST(req: Request) {
         ) {
           kieInput.first_frame_url = await mirrorImageUrlForPiapiSeedance(imageUrlRaw, user.id);
           kieInput.last_frame_url = await mirrorImageUrlForPiapiSeedance(endImageUrlRaw, user.id);
+        } else if (
+          hasKieReferenceImage &&
+          !hasKieEndImage &&
+          klingElementsForJob.length === 0 &&
+          !useCompactSeedancePreviewRefs
+        ) {
+          // Single start frame: use Image-to-Video (First Frame) mode. Sending it via
+          // `reference_image_urls` would silently switch Seedance to Multimodal Reference mode,
+          // which doesn't anchor the image as a literal first frame.
+          kieInput.first_frame_url = await mirrorImageUrlForPiapiSeedance(imageUrlRaw, user.id);
         } else {
           let ordered: string[] = [];
           if (useCompactSeedancePreviewRefs) {

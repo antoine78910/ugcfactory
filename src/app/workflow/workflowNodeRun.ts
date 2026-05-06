@@ -1131,11 +1131,16 @@ export function workflowVideoElementInputHandleAffectsImageMentions(
 ): boolean {
   const h = (targetHandle ?? "").trim();
   if (!h) return false;
+  const m = normalizeLegacySeedanceMarketModelId(resolveWorkflowVideoModelId(workflowModelPickerValue));
+  // Only Seedance 2 / 2 Fast actually consume `@imageN` mentions in the workflow:
+  // - Seedance accepts 1 URL per ref and binds @image1, @image2, … positionally via `reference_image_urls`.
+  // - Kling 3.0 requires **2–4 URLs per element**, which the workflow can't satisfy from its
+  //   one-image-per-port pool, so we don't auto-emit @imageN tags for Kling 3.0 anymore.
+  //   Kling 3.0 still gets first/last frame via `image_urls` (start + optional end frame).
+  const isSeedancePro = m === "bytedance/seedance-2" || m === "bytedance/seedance-2-fast";
+  if (!isSeedancePro) return false;
   if (h === "startImage" || h === "references" || h === "inImage") return true;
-  if (h === "endImage") {
-    const m = normalizeLegacySeedanceMarketModelId(resolveWorkflowVideoModelId(workflowModelPickerValue));
-    return m === "bytedance/seedance-2" || m === "bytedance/seedance-2-fast";
-  }
+  if (h === "endImage") return true;
   return false;
 }
 
@@ -1464,6 +1469,13 @@ export async function runWorkflowVideoJob(params: WorkflowRunVideoParams): Promi
   /**
    * Seedance 2.0 / 2.0 Fast: fold wired start/end/extra refs into `seedanceOmniMedia`
    * (images + optional motion-reference videos). Legacy Preview picker ids normalize to these models.
+   *
+   * Provider note: per docs.kie.ai/market/bytedance/seedance-2, **First & Last Frames mode**
+   * (`first_frame_url` + `last_frame_url`) and **Multimodal Reference mode**
+   * (`reference_image_urls` / `reference_video_urls`) are mutually exclusive. When the user only
+   * wired a start (and optionally end) frame — no extra refs and no reference videos — we route
+   * through `imageUrl` / `endImageUrl` so the route actually uses the dedicated first/last frame
+   * fields. Otherwise we stay on omni references.
    */
   const seedanceKie =
     seedanceResolvedModel === "bytedance/seedance-2" ||
@@ -1477,8 +1489,19 @@ export async function runWorkflowVideoJob(params: WorkflowRunVideoParams): Promi
     ? dedupeKeepOrder(resolvedRefVideos.filter((u) => Boolean(u?.trim()))).slice(0, SEEDANCE_PRO_MAX_VIDEO_URLS)
     : [];
 
+  // First/last frame routing (mutually exclusive with omni refs on the provider side).
+  // We require either a startUrl or endUrl, AND no extra refs / videos so we don't lose
+  // information by switching modes.
+  const seedanceUseFirstLastFrames =
+    seedanceKie &&
+    refUrls.length === 0 &&
+    seedanceMergedVideoUrls.length === 0 &&
+    Boolean(startUrl || endUrl);
+
   const seedanceOmniMedia =
-    seedanceKie && (seedanceMergedImageUrls.length > 0 || seedanceMergedVideoUrls.length > 0)
+    seedanceKie &&
+    !seedanceUseFirstLastFrames &&
+    (seedanceMergedImageUrls.length > 0 || seedanceMergedVideoUrls.length > 0)
       ? [
           ...seedanceMergedImageUrls.map((url) => ({ type: "image" as const, url })),
           ...seedanceMergedVideoUrls.map((url) => ({ type: "video" as const, url })),
@@ -1549,10 +1572,13 @@ export async function runWorkflowVideoJob(params: WorkflowRunVideoParams): Promi
 
   /**
    * Auto-bind references to `@imageN` mentions in the prompt. We always emit the elements
-   * payload, even when the prompt does not yet `@image1`, so saved Kling 3.0 workflows still
+   * payload, even when the prompt does not yet `@image1`, so saved Seedance workflows still
    * receive their reference images and any ad-hoc `@imageN` typed by the user resolves cleanly.
-   * The PiAPI Seedance mirror auto-prepends missing `@imageN` tags to the prompt, but Kling
-   * keeps prompt text untouched so the elements list is the only binding mechanism there.
+   *
+   * Important: Kling 3.0 requires **2–4 URLs per element** (provider validation), which the
+   * workflow can't satisfy because each wired image port produces a single URL. So we do NOT
+   * synthesize `kling_elements` for Kling 3.0 here — the workflow still passes the start/end
+   * frame via `image_urls` and the user can add named refs through Studio if they need them.
    */
   const supportsAutoElements = workflowVideoModelSupportsElements(modelId);
   const elementsRefPool: string[] = supportsAutoElements
@@ -1560,13 +1586,9 @@ export async function runWorkflowVideoJob(params: WorkflowRunVideoParams): Promi
         [startUrl, ...refUrls].filter((u): u is string => Boolean(u && u.trim())),
       )
     : [];
-  const klingElements =
-    isKling30 && elementsRefPool.length > 0
-      ? elementsRefPool.slice(0, 4).map((url, idx) => ({
-          name: `image${idx + 1}`,
-          element_input_urls: [url],
-        }))
-      : undefined;
+  // Provider needs 2-4 URLs per element (https://docs.kie.ai/market/kling/kling-3-0). The
+  // workflow only has 1 URL per wired image port, so we never auto-emit elements anymore.
+  let klingElements: { name: string; element_input_urls: string[] }[] | undefined;
 
   const promptTrimmed = params.prompt.trim();
   if (!supportsAutoElements && promptHasUnsupportedElementMentions(promptTrimmed)) {
@@ -1627,8 +1649,16 @@ export async function runWorkflowVideoJob(params: WorkflowRunVideoParams): Promi
       accountPlan: params.planId,
       marketModel: marketModelForGenerate,
       prompt: promptForAttempt,
-      imageUrl: seedanceKie ? undefined : startUrl ?? refUrls[0],
-      endImageUrl: seedanceKie ? undefined : endUrl,
+      imageUrl: seedanceKie
+        ? seedanceUseFirstLastFrames
+          ? startUrl
+          : undefined
+        : startUrl ?? refUrls[0],
+      endImageUrl: seedanceKie
+        ? seedanceUseFirstLastFrames
+          ? endUrl
+          : undefined
+        : endUrl,
       seedancePreviewImageUrls: undefined,
       seedanceOmniMedia,
       klingElements,
