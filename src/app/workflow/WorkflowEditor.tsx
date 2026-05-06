@@ -5256,7 +5256,28 @@ export function WorkflowEditor({
    *    something even before any explicit "save" gesture.
    *
    * Viewer access is treated as read-only; editors and owners get full sync.
+   *
+   * When a generation is in flight (`pendingWorkflowRun` set on some node),
+   * the debounce is shortened so the cloud copy reliably captures the pending
+   * task ids even if the user navigates to another workflow within ~1.5s of
+   * clicking Generate. Without this, returning to the workflow on another
+   * device (or after a localStorage clear) would never resume polling.
    */
+  const workflowHasPendingRun = useMemo(() => {
+    for (const page of workflowProject.pages) {
+      for (const n of page.nodes) {
+        const d = (n as { data?: { pendingWorkflowRun?: { taskIds?: unknown; updatedAt?: unknown } } })
+          .data;
+        const pending = d?.pendingWorkflowRun;
+        if (!pending || typeof pending !== "object") continue;
+        const updatedAt = typeof pending.updatedAt === "number" ? pending.updatedAt : 0;
+        if (updatedAt > 0 && Date.now() - updatedAt > 5 * 60_000) continue;
+        return true;
+      }
+    }
+    return false;
+  }, [workflowProject]);
+
   useEffect(() => {
     if (!workflowHydrated) return;
     if (!authUserId) return;
@@ -5267,6 +5288,7 @@ export function WorkflowEditor({
       return;
     }
 
+    const debounceMs = workflowHasPendingRun ? 250 : 1500;
     const t = window.setTimeout(() => {
       void (async () => {
         // If the initial cloud fetch failed (null ref), fetch now so we can send a
@@ -5305,7 +5327,7 @@ export function WorkflowEditor({
           }
         }
       })();
-    }, 1500);
+    }, debounceMs);
     return () => window.clearTimeout(t);
   }, [
     workflowHydrated,
@@ -5316,6 +5338,7 @@ export function WorkflowEditor({
     publishedTemplateId,
     spaceSource,
     spaceRole,
+    workflowHasPendingRun,
   ]);
 
   /**
