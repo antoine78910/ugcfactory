@@ -2220,8 +2220,55 @@ function WorkflowReactFlowChrome({
           onTrimmed={(trimmed) => {
             const saved = uploadTrimState.pendingConnect;
             setUploadTrimState(null);
-            pendingImageRefConnectRef.current = saved;
-            addImageNodeFromFile(trimmed);
+            if (saved?.targetNodeId && saved.targetHandleId) {
+              pendingImageRefConnectRef.current = saved;
+              addImageNodeFromFile(trimmed);
+              return;
+            }
+            // Drop-to-canvas trim flow: place the node at the stored flow coordinates.
+            const flow = saved?.flow;
+            if (!flow) return;
+            const file = trimmed;
+            const objectUrl = URL.createObjectURL(file);
+            void (async () => {
+              try {
+                const isVideo = isVideoFile(file);
+                const ar = isVideo
+                  ? await measureVideoAspectFromObjectUrl(objectUrl)
+                  : await measureImageAspectFromObjectUrl(objectUrl);
+                const baseName = file.name.replace(/\.[^.]+$/, "") || (isVideo ? "Video" : "Image");
+                const tempNode = buildImageRefNode(flow, {
+                  imageUrl: objectUrl,
+                  source: "upload",
+                  mediaKind: isVideo ? "video" : "image",
+                  intrinsicAspect: ar,
+                  label: `${baseName} (uploading...)`,
+                });
+                setNodes((prev) => [...prev, tempNode]);
+                const hostedUrl = await uploadFileToCdn(file, { kind: isVideo ? "video" : "image" });
+                setNodes((prev) =>
+                  prev.map((n) => {
+                    if (n.id !== tempNode.id || n.type !== "imageRef") return n;
+                    return {
+                      ...n,
+                      data: {
+                        ...(n.data as ImageRefNodeData),
+                        imageUrl: hostedUrl,
+                        label: baseName,
+                        source: "upload",
+                        mediaKind: isVideo ? "video" : "image",
+                        intrinsicAspect: ar,
+                      },
+                    } as WorkflowCanvasNode;
+                  }),
+                );
+                URL.revokeObjectURL(objectUrl);
+                toast.success("Node added");
+              } catch {
+                URL.revokeObjectURL(objectUrl);
+                toast.error("Could not read file", { description: "Try another image or video." });
+              }
+            })();
           }}
         />
       ) : null}
@@ -2701,11 +2748,84 @@ function WorkflowFlowWorkspace({
     (e: DragEvent) => {
       if (readOnly) return;
       e.preventDefault();
-      const raw = e.dataTransfer.getData(WORKFLOW_NODE_DND);
-      if (!raw) return;
       const flowPos = screenToFlowPosition({ x: e.clientX, y: e.clientY });
       setAddOpen(false);
       setFrameOpen(false);
+
+      const files = Array.from(e.dataTransfer.files ?? []);
+      if (files.length > 0) {
+        void (async () => {
+          let added = 0;
+          let offset = 0;
+          for (const file of files) {
+            const isVideo = isVideoFile(file);
+            const isImage = file.type.startsWith("image/");
+            if (!isVideo && !isImage) continue;
+            const pos = { x: flowPos.x + offset, y: flowPos.y + offset * 0.65 };
+            offset += 28;
+            const objectUrl = URL.createObjectURL(file);
+            try {
+              if (isVideo) {
+                const v = document.createElement("video");
+                v.preload = "metadata";
+                v.src = objectUrl;
+                const duration = await new Promise<number>((resolve, reject) => {
+                  v.onloadedmetadata = () => resolve(Number(v.duration || 0));
+                  v.onerror = () => reject(new Error("Could not read video duration."));
+                });
+                if (Number.isFinite(duration) && duration > 15.01) {
+                  URL.revokeObjectURL(objectUrl);
+                  setUploadTrimState({
+                    open: true,
+                    file,
+                    pendingConnect: { targetNodeId: "", targetHandleId: "", flow: pos },
+                  });
+                  return;
+                }
+              }
+              const ar = isVideo
+                ? await measureVideoAspectFromObjectUrl(objectUrl)
+                : await measureImageAspectFromObjectUrl(objectUrl);
+              const baseName = file.name.replace(/\.[^.]+$/, "") || (isVideo ? "Video" : "Image");
+              const tempNode = buildImageRefNode(pos, {
+                imageUrl: objectUrl,
+                source: "upload",
+                mediaKind: isVideo ? "video" : "image",
+                intrinsicAspect: ar,
+                label: `${baseName} (uploading...)`,
+              });
+              setNodes((prev) => [...prev, tempNode]);
+              const hostedUrl = await uploadFileToCdn(file, { kind: isVideo ? "video" : "image" });
+              setNodes((prev) =>
+                prev.map((n) => {
+                  if (n.id !== tempNode.id || n.type !== "imageRef") return n;
+                  return {
+                    ...n,
+                    data: {
+                      ...(n.data as ImageRefNodeData),
+                      imageUrl: hostedUrl,
+                      label: baseName,
+                      source: "upload",
+                      mediaKind: isVideo ? "video" : "image",
+                      intrinsicAspect: ar,
+                    },
+                  } as WorkflowCanvasNode;
+                }),
+              );
+              URL.revokeObjectURL(objectUrl);
+              added += 1;
+            } catch {
+              URL.revokeObjectURL(objectUrl);
+            }
+          }
+          if (added > 0) toast.success(added === 1 ? "Node added" : `${added} nodes added`);
+          else toast.error("No supported file dropped", { description: "Drop an image or a video file." });
+        })();
+        return;
+      }
+
+      const raw = e.dataTransfer.getData(WORKFLOW_NODE_DND);
+      if (!raw) return;
       if (raw === "pick") {
         setPlacementPicker({ flow: flowPos, screenX: e.clientX, screenY: e.clientY });
         return;
