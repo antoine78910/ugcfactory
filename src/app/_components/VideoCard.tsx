@@ -25,38 +25,82 @@ export default function VideoCard({
   onOpenFullscreen,
   enableLightbox = true,
 }: VideoCardProps) {
+  const containerRef = useRef<HTMLDivElement>(null);
   const videoRef = useRef<HTMLVideoElement>(null);
   const [lightbox, setLightbox] = useState(false);
+  // Lazy mount the <video> element only when it's near the viewport.
+  // Avoids spinning up dozens of decoder pipelines for off-screen rows in History.
+  const [shouldMount, setShouldMount] = useState(false);
+  // Becomes true once the first frame has been decoded — drives the fade from skeleton/poster.
+  const [firstFrameReady, setFirstFrameReady] = useState(false);
+
   const playSrc = proxiedMediaSrc(src);
   const playPoster = poster?.trim() ? proxiedMediaSrc(poster) : undefined;
+
+  useEffect(() => {
+    if (shouldMount) return;
+    if (typeof IntersectionObserver === "undefined") {
+      setShouldMount(true);
+      return;
+    }
+    const el = containerRef.current;
+    if (!el) return;
+    const observer = new IntersectionObserver(
+      (entries) => {
+        for (const entry of entries) {
+          if (entry.isIntersecting) {
+            setShouldMount(true);
+            observer.disconnect();
+            break;
+          }
+        }
+      },
+      { rootMargin: "300px 0px", threshold: 0.01 },
+    );
+    observer.observe(el);
+    return () => observer.disconnect();
+  }, [shouldMount]);
 
   const openFullscreen = () => {
     if (typeof onOpenFullscreen === "function") return onOpenFullscreen();
     if (enableLightbox !== false) setLightbox(true);
   };
 
-  /** Without a poster, seek slightly past 0 so the first decoded frame shows (avoids all-black idle). */
+  // Without a poster, seek slightly past 0 so the first decoded frame shows (avoids all-black idle).
+  // `loadedmetadata` fires earlier on many providers than `loadeddata` and is enough to display
+  // the first frame, so we use both to flip `firstFrameReady` ASAP.
   useEffect(() => {
-    if (playPoster) return;
+    if (!shouldMount) return;
     const v = videoRef.current;
     if (!v || !playSrc.trim()) return;
 
+    const reveal = () => setFirstFrameReady(true);
     const onLoadedData = () => {
       try {
-        v.pause();
-        v.currentTime = 0.001;
+        if (!playPoster) {
+          v.pause();
+          v.currentTime = 0.001;
+        }
       } catch {
         /* ignore */
       }
+      reveal();
     };
 
+    v.addEventListener("loadedmetadata", reveal);
     v.addEventListener("loadeddata", onLoadedData);
-    return () => v.removeEventListener("loadeddata", onLoadedData);
-  }, [playSrc, playPoster]);
+    return () => {
+      v.removeEventListener("loadedmetadata", reveal);
+      v.removeEventListener("loadeddata", onLoadedData);
+    };
+  }, [shouldMount, playSrc, playPoster]);
 
   const handleMouseEnter = useCallback(() => {
     const v = videoRef.current;
     if (!v) return;
+
+    // Bump preload to `auto` so the browser starts buffering the rest while we try to play.
+    if (v.preload !== "auto") v.preload = "auto";
 
     const playFromStart = () => {
       try {
@@ -93,25 +137,53 @@ export default function VideoCard({
     }
   }, []);
 
+  const showSkeleton = shouldMount && !firstFrameReady;
+
   return (
     <>
       <div
+        ref={containerRef}
         className={cn("group/vc relative overflow-hidden rounded-lg border border-white/10 bg-black", aspectClassName, className)}
         onMouseEnter={handleMouseEnter}
         onMouseLeave={handleMouseLeave}
       >
-        {/* eslint-disable-next-line jsx-a11y/media-has-caption */}
-        <video
-          ref={videoRef}
-          src={playSrc}
-          poster={playPoster}
-          muted
-          playsInline
-          preload="none"
-          loop
-          className="relative z-0 h-full w-full cursor-pointer object-cover"
-          onClick={openFullscreen}
-        />
+        {playPoster && !firstFrameReady ? (
+          // Poster acts as a high-fidelity placeholder until the video can render its first frame.
+          // eslint-disable-next-line @next/next/no-img-element
+          <img
+            src={playPoster}
+            alt=""
+            loading="lazy"
+            decoding="async"
+            aria-hidden
+            className="absolute inset-0 z-0 h-full w-full object-cover"
+          />
+        ) : null}
+
+        {showSkeleton ? (
+          <div
+            aria-hidden
+            className="pointer-events-none absolute inset-0 z-[1] animate-pulse bg-gradient-to-br from-white/[0.04] via-white/[0.07] to-white/[0.03]"
+          />
+        ) : null}
+
+        {shouldMount ? (
+          // eslint-disable-next-line jsx-a11y/media-has-caption
+          <video
+            ref={videoRef}
+            src={playSrc}
+            poster={playPoster}
+            muted
+            playsInline
+            preload="metadata"
+            loop
+            className={cn(
+              "relative z-[2] h-full w-full cursor-pointer object-cover transition-opacity duration-200",
+              firstFrameReady ? "opacity-100" : "opacity-0",
+            )}
+            onClick={openFullscreen}
+          />
+        ) : null}
 
         <button
           type="button"

@@ -39,6 +39,8 @@ export async function GET(req: Request) {
   }
 
   const range = req.headers.get("range");
+  const ifNoneMatch = req.headers.get("if-none-match");
+  const ifModifiedSince = req.headers.get("if-modified-since");
   const filename = safeFilenameFromUrl(target);
 
   try {
@@ -48,10 +50,11 @@ export async function GET(req: Request) {
     try {
       upstream = await fetch(target, {
         redirect: "follow",
-        cache: "no-store",
         signal: controller.signal,
         headers: {
           ...(range ? { Range: range } : {}),
+          ...(ifNoneMatch ? { "If-None-Match": ifNoneMatch } : {}),
+          ...(ifModifiedSince ? { "If-Modified-Since": ifModifiedSince } : {}),
           "User-Agent":
             "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/133.0.0.0 Safari/537.36",
           Accept: "image/avif,image/webp,image/apng,image/*,*/*;q=0.8",
@@ -67,6 +70,17 @@ export async function GET(req: Request) {
     const finalUrl = upstream.url ? new URL(upstream.url) : null;
     if (finalUrl && isPrivateHost(finalUrl.hostname)) {
       return Response.json({ error: "URL not allowed." }, { status: 400 });
+    }
+
+    // Forward 304 Not Modified directly so the browser keeps using its cached body.
+    if (upstream.status === 304) {
+      const out = new Headers();
+      for (const h of PASS_THROUGH_HEADERS) {
+        const v = upstream.headers.get(h);
+        if (v) out.set(h, v);
+      }
+      out.set("Cache-Control", "public, max-age=86400, stale-while-revalidate=604800, immutable");
+      return new Response(null, { status: 304, headers: out });
     }
 
     if (!upstream.ok || !upstream.body) {
@@ -94,7 +108,14 @@ export async function GET(req: Request) {
       if (v) out.set(h, v);
     }
     out.set("Content-Disposition", `inline; filename="${filename}"`);
-    out.set("Cache-Control", "private, max-age=300");
+    // Treat the proxied URL as immutable: the upstream URL itself acts as the cache key
+    // (it almost always carries a signed token / hash). This lets the browser skip the
+    // network on subsequent loads, fixing the multi-second / multi-minute reloads in the
+    // history grid. `stale-while-revalidate` keeps things snappy if the entry just expired.
+    out.set("Cache-Control", "public, max-age=86400, stale-while-revalidate=604800, immutable");
+    // Make sure intermediaries vary on the requesting cookie (auth) so we never leak
+    // one user's signed media to another in a shared cache.
+    if (!out.has("Vary")) out.set("Vary", "Cookie, Range");
 
     return new Response(upstream.body, {
       status: upstream.status,
