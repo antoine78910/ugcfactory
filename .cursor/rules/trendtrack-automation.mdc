@@ -1,0 +1,39 @@
+---
+description: TrendTrack REST API vs Intelligence UI — MCP, docs URL, ads/query vs top-ads sort rules.
+globs:
+  - src/lib/trendtrack*.ts
+  - src/lib/trendtrackAdvertiser*.ts
+  - src/lib/trendtrackCache.ts
+  - src/lib/trendtrackAdsQuerySort.ts
+  - src/app/api/intelligence/**/*.ts
+  - src/app/intelligence/**/*.{tsx,ts}
+alwaysApply: false
+---
+
+# TrendTrack automation (Youry Intelligence)
+
+## Primary doc (paste for LLMs / agents)
+
+Official full reference (single file):
+
+https://docs.trendtrack.io/docs/llms-full.txt
+
+Use it to verify request bodies, `sortBy` values, TTL/credits, and endpoint differences.
+
+## MCP in Cursor (parent workspace)
+
+Remote MCP endpoint: `https://api.trendtrack.io/v1/mcp`
+
+Configured in the parent **`speel 2.0/.cursor/mcp.json`** as `trendtrack`. After edits, reload Cursor; complete OAuth if prompted. MCP is optional for coding — REST proxy remains `src/lib/trendtrack.ts` + `TRENDTRACK_API_KEY`.
+
+## `sortBy` rules
+
+**`POST /v1/ads/query`** only accepts:
+
+`createdAt`, `longestRunning`, `relevance`, `relevanceScore`, `newest`, `mostDuplicates`, `reach`, `reachDelta1d`, `reachDelta7d`, `reachDelta30d`, `adOrder`.
+
+**`GET .../top-ads`** accepts a different set (`currentRank`, `rankDelta*`, … per docs).
+
+Map UI selections through **`intelligenceUiSortToAdsQuerySort`** in **`src/lib/trendtrackAdsQuerySort.ts`** before calling `ttQueryAds`. Never send `currentRank` to `/v1/ads/query`.
+
+English UI copy only.

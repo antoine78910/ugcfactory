@@ -1,0 +1,7 @@
+{
+  "mcpServers": {
+    "trendtrack": {
+      "url": "https://api.trendtrack.io/v1/mcp"
+    }
+  }
+}

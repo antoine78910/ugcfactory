@@ -4,6 +4,7 @@ import { NextResponse } from "next/server";
 import { createHash } from "crypto";
 import { requireSupabaseUser } from "@/lib/supabase/requireUser";
 import { ttGetTopAds, ttListTrackers, ttQueryAds, type TTAd } from "@/lib/trendtrack";
+import { intelligenceUiSortToAdsQuerySort } from "@/lib/trendtrackAdsQuerySort";
 import { getCached, setCached, deleteCached } from "@/lib/trendtrackCache";
 import { respondTrendTrackError } from "@/app/api/intelligence/_errors";
 
@@ -81,11 +82,20 @@ export async function GET(req: Request) {
     }
 
     const searchType = looksLikeDomain(q) ? "domain" : "brand";
-    const ads: TTAd[] = await ttQueryAds({ searchType, q, sortBy, limit: 10 });
+    const adsQuerySortBy = intelligenceUiSortToAdsQuerySort(sortBy);
+    const ads: TTAd[] = await ttQueryAds({
+      searchType,
+      q,
+      sortBy: adsQuerySortBy,
+      limit: 10,
+    });
     const payload = {
       source: "ads_query" as const,
       isTracked,
+      /** User-selected Intelligence sort (UI / cache key). */
       sortBy,
+      /** Actual `sortBy` sent to TrendTrack POST /v1/ads/query (narrower enum). */
+      adsQuerySortBy,
       ads,
     };
     await setCached(key, payload, TTL);
