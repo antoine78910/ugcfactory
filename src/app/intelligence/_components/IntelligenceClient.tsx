@@ -5,13 +5,28 @@ import type { TTLookupResult } from "@/lib/trendtrack";
 import { TrackerSearch } from "./TrackerSearch";
 import { TrackerList, type SelectedTracker } from "./TrackerList";
 import { TrackerDetail } from "./TrackerDetail";
+import { CompetitorsPanel, type CompetitorPick } from "./CompetitorsPanel";
+import { CompetitorDetail } from "./CompetitorDetail";
 
 export function IntelligenceClient({ ownTrackerIds }: { ownTrackerIds: string[] }) {
   const [selected, setSelected] = useState<SelectedTracker | null>(null);
   const [searchResult, setSearchResult] = useState<TTLookupResult | null>(null);
+  const [competitorPick, setCompetitorPick] = useState<CompetitorPick | null>(null);
+  const [competitorSortBy, setCompetitorSortBy] = useState<
+    | "currentRank"
+    | "reach"
+    | "reachDelta1d"
+    | "reachDelta7d"
+    | "reachDelta30d"
+    | "rankDelta7d"
+    | "rankDelta14d"
+    | "rankDelta30d"
+    | "longestRunning"
+  >("currentRank");
 
   const handleSearchResult = useCallback((result: TTLookupResult | null) => {
     setSearchResult(result);
+    setCompetitorPick(null);
     if (result) {
       setSelected({
         id: result.id,
@@ -45,11 +60,24 @@ export function IntelligenceClient({ ownTrackerIds }: { ownTrackerIds: string[] 
             searchResult={searchResult}
           />
         </div>
+        <CompetitorsPanel
+          sortBy={competitorSortBy}
+          onSortBy={setCompetitorSortBy}
+          onPick={(p) => {
+            setCompetitorPick(p);
+            if (p) {
+              setSelected(null);
+              setSearchResult(null);
+            }
+          }}
+        />
       </aside>
 
       <main className="flex-1 overflow-y-auto">
         {selected ? (
           <TrackerDetail tracker={selected} ownTrackerIds={ownTrackerIds} />
+        ) : competitorPick ? (
+          <CompetitorDetail competitor={competitorPick.lookup} sortBy={competitorSortBy} />
         ) : (
           <EmptyState />
         )}

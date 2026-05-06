@@ -170,9 +170,10 @@ export async function ttGetOverview(id: string): Promise<TTOverview> {
   return ttFetch<TTOverview>(`/v1/brandtrackers/${encodeURIComponent(id)}/overview`);
 }
 
-export async function ttGetTopAds(id: string, limit = 10): Promise<TTAd[]> {
+export async function ttGetTopAds(id: string, limit = 10, sortBy?: string): Promise<TTAd[]> {
+  const sort = sortBy ? `&sortBy=${encodeURIComponent(sortBy)}` : "";
   const res = await ttFetch<{ data?: TTAd[] }>(
-    `/v1/brandtrackers/${encodeURIComponent(id)}/top-ads?limit=${limit}`
+    `/v1/brandtrackers/${encodeURIComponent(id)}/top-ads?limit=${limit}${sort}`
   );
   return (res.data ?? []).map((ad) => normalizeTTAd(ad));
 }
