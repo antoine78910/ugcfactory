@@ -308,6 +308,28 @@ export function AdRecreateDialog({
       );
       if (cancelRef.current) return;
       setGeneration({ kind: "success", videoUrl, taskId: json.taskId });
+      // Store recreate in DB for the user's Intelligence history.
+      void fetch("/api/intelligence/recreations", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          kind: "ad_recreate",
+          sourceAdId: ad?.id ?? null,
+          sourceBrand: brandName ?? null,
+          sourcePlatform: ad?.platform ?? null,
+          sourceHook: (ad?.headline ?? ad?.title ?? null) as string | null,
+          prompt: trimmedPrompt,
+          model: SEEDANCE_RECREATE_MODEL,
+          taskId: json.taskId,
+          outputVideoUrl: videoUrl,
+          meta: {
+            aspectRatio,
+            clipType,
+            productImageUrls: productCdnUrls,
+            productDescription: productDescription.trim() || null,
+          },
+        }),
+      }).catch(() => {});
       toast.success("Recreate ready.");
     } catch (err) {
       if (cancelRef.current) return;
@@ -315,7 +337,7 @@ export function AdRecreateDialog({
       setGeneration({ kind: "error", message });
       toast.error(`Generation failed: ${message}`);
     }
-  }, [prompt, productCdnUrls, planId, aspectRatio]);
+  }, [prompt, productCdnUrls, planId, aspectRatio, ad?.id, ad?.platform, ad?.headline, ad?.title, brandName, clipType, productDescription]);
 
   const headerSubtitle = useMemo(() => {
     if (!ad) return "";

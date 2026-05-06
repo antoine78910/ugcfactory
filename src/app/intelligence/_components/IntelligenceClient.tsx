@@ -7,6 +7,7 @@ import { TrackerList, type SelectedTracker } from "./TrackerList";
 import { TrackerDetail } from "./TrackerDetail";
 import { CompetitorsPanel, type CompetitorPick } from "./CompetitorsPanel";
 import { CompetitorDetail } from "./CompetitorDetail";
+import { RecreationsPanel } from "./RecreationsPanel";
 
 export function IntelligenceClient({ ownTrackerIds }: { ownTrackerIds: string[] }) {
   const [selected, setSelected] = useState<SelectedTracker | null>(null);
@@ -73,6 +74,7 @@ export function IntelligenceClient({ ownTrackerIds }: { ownTrackerIds: string[] 
           onSortBy={setCompetitorSortBy}
           onPick={handleCompetitorPick}
         />
+        <RecreationsPanel />
       </aside>
 
       <main className="min-h-0 min-w-0 flex-1 overflow-y-auto overscroll-y-contain">
