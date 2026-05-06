@@ -75,8 +75,10 @@ import {
 import { AvatarPickerDialog } from "@/app/_components/AvatarPickerDialog";
 import { loadAvatarUrls } from "@/lib/avatarLibrary";
 import { clipboardImageFiles } from "@/lib/clipboardImage";
+import { compressImageFileForUpload } from "@/lib/compressImageFileForUpload";
 import { useSupabaseBrowserClient } from "@/lib/supabase/BrowserSupabaseProvider";
 import { uploadFileToCdn } from "@/lib/uploadBlobUrlToCdn";
+import { STUDIO_IMAGE_FILE_ACCEPT } from "@/lib/studioUploadValidation";
 import { cn } from "@/lib/utils";
 import { toast } from "sonner";
 
@@ -174,6 +176,7 @@ import {
   workflowVideoModelHasStartFrame,
   workflowVideoOrderedElementImageRefs,
 } from "./workflowNodeRun";
+import { WorkflowMediaTrimDialog } from "./WorkflowMediaTrimDialog";
 
 /** Matches `workflowNodeFactory` default for new Video Generator nodes (picker chaining eligibility). */
 const DEFAULT_NEW_VIDEO_GENERATOR_MODEL = "kling-3.0/video";
@@ -1139,7 +1142,16 @@ function WorkflowReactFlowChrome({
   const [feedbackCategory, setFeedbackCategory] = useState<"feedback" | "feature" | "bug">("feedback");
   const [feedbackMessage, setFeedbackMessage] = useState("");
   const [feedbackSending, setFeedbackSending] = useState(false);
+  const [feedbackImageUploading, setFeedbackImageUploading] = useState(false);
+  const [feedbackImageUrl, setFeedbackImageUrl] = useState<string | null>(null);
+  const [feedbackImagePreviewUrl, setFeedbackImagePreviewUrl] = useState<string | null>(null);
+  const [uploadTrimState, setUploadTrimState] = useState<{
+    open: boolean;
+    file: File;
+    pendingConnect: { targetNodeId: string; targetHandleId: string; flow: XYPosition } | null;
+  } | null>(null);
   const uploadInputRef = useRef<HTMLInputElement>(null);
+  const feedbackImageInputRef = useRef<HTMLInputElement>(null);
 
   const submitFeedback = useCallback(async () => {
     const message = feedbackMessage.trim();
@@ -1147,15 +1159,22 @@ function WorkflowReactFlowChrome({
       toast.error("Please add your message.");
       return;
     }
+    if (feedbackImageUploading) {
+      toast.error("Please wait for the image upload to finish.");
+      return;
+    }
     setFeedbackSending(true);
     try {
+      const fullMessage = feedbackImageUrl
+        ? `${message}\n\nAttachment: ${feedbackImageUrl}`
+        : message;
       const r = await fetch("/api/feedback", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         credentials: "include",
         body: JSON.stringify({
           category: feedbackCategory,
-          message,
+          message: fullMessage,
           pagePath: pathname || "/workflow",
         }),
       });
@@ -1163,6 +1182,15 @@ function WorkflowReactFlowChrome({
       if (!r.ok) throw new Error(data.error ?? `HTTP ${r.status}`);
       setFeedbackMessage("");
       setFeedbackCategory("feedback");
+      setFeedbackImageUrl(null);
+      setFeedbackImagePreviewUrl((prev) => {
+        if (prev?.startsWith("blob:")) {
+          try {
+            URL.revokeObjectURL(prev);
+          } catch {}
+        }
+        return null;
+      });
       setFeedbackOpen(false);
       toast.success("Feedback sent. Thank you!");
     } catch (error) {
@@ -1170,7 +1198,22 @@ function WorkflowReactFlowChrome({
     } finally {
       setFeedbackSending(false);
     }
-  }, [feedbackCategory, feedbackMessage, pathname]);
+  }, [feedbackCategory, feedbackImageUploading, feedbackImageUrl, feedbackMessage, pathname]);
+
+  useEffect(() => {
+    if (!feedbackOpen) {
+      setFeedbackImageUrl(null);
+      setFeedbackImagePreviewUrl((prev) => {
+        if (prev?.startsWith("blob:")) {
+          try {
+            URL.revokeObjectURL(prev);
+          } catch {}
+        }
+        return null;
+      });
+      setFeedbackImageUploading(false);
+    }
+  }, [feedbackOpen]);
   useEffect(() => {
     const onOpen = (
       ev: Event,
@@ -1246,6 +1289,24 @@ function WorkflowReactFlowChrome({
       let tempNodeId: string | null = null;
       void (async () => {
         try {
+          if (isVideo) {
+            const v = document.createElement("video");
+            v.preload = "metadata";
+            v.src = objectUrl;
+            const duration = await new Promise<number>((resolve, reject) => {
+              v.onloadedmetadata = () => resolve(Number(v.duration || 0));
+              v.onerror = () => reject(new Error("Could not read video duration."));
+            });
+            if (Number.isFinite(duration) && duration > 15.01) {
+              URL.revokeObjectURL(objectUrl);
+              setUploadTrimState({
+                open: true,
+                file,
+                pendingConnect,
+              });
+              return;
+            }
+          }
           const ar = isVideo
             ? await measureVideoAspectFromObjectUrl(objectUrl)
             : await measureImageAspectFromObjectUrl(objectUrl);
@@ -2011,6 +2072,95 @@ function WorkflowReactFlowChrome({
                   className="w-full resize-y rounded-lg border border-white/10 bg-black/30 px-3 py-2 text-sm text-white outline-none placeholder:text-white/25 focus:border-violet-500/40"
                 />
               </label>
+              <div className="grid gap-1">
+                <span className="text-[11px] text-white/45">Image (optional)</span>
+                <div className="flex flex-wrap items-center gap-2">
+                  <input
+                    ref={feedbackImageInputRef}
+                    type="file"
+                    accept={STUDIO_IMAGE_FILE_ACCEPT}
+                    className="hidden"
+                    onChange={(e) => {
+                      const file = e.target.files?.[0];
+                      e.target.value = "";
+                      if (!file) return;
+                      void (async () => {
+                        if (feedbackImageUploading) return;
+                        setFeedbackImageUploading(true);
+                        const objectUrl = URL.createObjectURL(file);
+                        setFeedbackImagePreviewUrl((prev) => {
+                          if (prev?.startsWith("blob:")) {
+                            try {
+                              URL.revokeObjectURL(prev);
+                            } catch {}
+                          }
+                          return objectUrl;
+                        });
+                        try {
+                          const compressed = await compressImageFileForUpload(file);
+                          const hosted = await uploadFileToCdn(compressed, { kind: "image" });
+                          setFeedbackImageUrl(hosted);
+                          toast.success("Image attached.");
+                        } catch (err) {
+                          const msg = err instanceof Error ? err.message : "Upload failed.";
+                          toast.error(msg);
+                          setFeedbackImageUrl(null);
+                          setFeedbackImagePreviewUrl((prev) => {
+                            if (prev?.startsWith("blob:")) {
+                              try {
+                                URL.revokeObjectURL(prev);
+                              } catch {}
+                            }
+                            return null;
+                          });
+                        } finally {
+                          setFeedbackImageUploading(false);
+                        }
+                      })();
+                    }}
+                  />
+                  <button
+                    type="button"
+                    disabled={feedbackImageUploading}
+                    onClick={() => feedbackImageInputRef.current?.click()}
+                    className="inline-flex items-center rounded-lg border border-white/10 bg-white/[0.03] px-3 py-1.5 text-xs font-semibold text-white/65 transition hover:bg-white/[0.08] disabled:cursor-not-allowed disabled:opacity-60"
+                  >
+                    {feedbackImageUploading ? "Uploading..." : feedbackImageUrl ? "Replace image" : "Upload image"}
+                  </button>
+                  {feedbackImagePreviewUrl ? (
+                    <div className="relative h-12 w-12 overflow-hidden rounded-lg border border-white/10 bg-black/30">
+                      {/* eslint-disable-next-line @next/next/no-img-element */}
+                      <img
+                        src={feedbackImagePreviewUrl}
+                        alt="Feedback attachment"
+                        className="h-full w-full object-cover"
+                      />
+                    </div>
+                  ) : null}
+                  {feedbackImageUrl ? (
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setFeedbackImageUrl(null);
+                        setFeedbackImagePreviewUrl((prev) => {
+                          if (prev?.startsWith("blob:")) {
+                            try {
+                              URL.revokeObjectURL(prev);
+                            } catch {}
+                          }
+                          return null;
+                        });
+                      }}
+                      className="rounded-lg border border-white/10 bg-white/[0.03] px-3 py-1.5 text-xs font-semibold text-white/65 transition hover:bg-white/[0.08]"
+                    >
+                      Remove
+                    </button>
+                  ) : null}
+                </div>
+                <p className="text-[11px] text-white/35">
+                  This helps us understand your bug/feature faster.
+                </p>
+              </div>
             </div>
             <div className="mt-4 flex items-center justify-end gap-2">
               <button
@@ -2023,7 +2173,7 @@ function WorkflowReactFlowChrome({
               <button
                 type="button"
                 onClick={() => void submitFeedback()}
-                disabled={feedbackSending}
+                disabled={feedbackSending || feedbackImageUploading}
                 className="inline-flex items-center rounded-lg border border-violet-400/40 bg-violet-500/20 px-3 py-1.5 text-xs font-semibold text-violet-100 transition hover:bg-violet-500/30 disabled:cursor-not-allowed disabled:opacity-60"
               >
                 {feedbackSending ? "Sending..." : "Send feedback"}
@@ -2031,6 +2181,26 @@ function WorkflowReactFlowChrome({
             </div>
           </div>
         </div>
+      ) : null}
+
+      {uploadTrimState?.open && uploadTrimState.file ? (
+        <WorkflowMediaTrimDialog
+          open={true}
+          file={uploadTrimState.file}
+          kind="video"
+          maxDurationSec={15}
+          title="Trim video to 15s"
+          onOpenChange={(open) => {
+            if (open) return;
+            setUploadTrimState(null);
+          }}
+          onTrimmed={(trimmed) => {
+            const saved = uploadTrimState.pendingConnect;
+            setUploadTrimState(null);
+            pendingImageRefConnectRef.current = saved;
+            addImageNodeFromFile(trimmed);
+          }}
+        />
       ) : null}
 
       {!readOnly && canGroup && !frameOpen && groupSelectionAnchor ? (
@@ -2801,7 +2971,7 @@ function WorkflowFlowWorkspace({
           const vm = resolveWorkflowVideoModelId(d.model ?? "");
           if (vm === "bytedance/seedance-2" || vm === "bytedance/seedance-2-fast") {
             const h = pendingConnect.targetHandleId;
-            if (h === "references" || h === "inImage" || h === "startImage") {
+            if (h === "references" || h === "inImage" || h === "startImage" || h === "inVideo") {
               fileAccept = WORKFLOW_SEEDANCE_2_PRO_VIDEO_FILE_ACCEPT;
             }
           }
@@ -3637,6 +3807,20 @@ function WorkflowFlowWorkspace({
         let tempNodeId: string | null = null;
         void (async () => {
           try {
+            if (isVideo) {
+              const v = document.createElement("video");
+              v.preload = "metadata";
+              v.src = objectUrl;
+              const duration = await new Promise<number>((resolve, reject) => {
+                v.onloadedmetadata = () => resolve(Number(v.duration || 0));
+                v.onerror = () => reject(new Error("Could not read video duration."));
+              });
+              if (Number.isFinite(duration) && duration > 15.01) {
+                URL.revokeObjectURL(objectUrl);
+                setUploadTrimState({ open: true, file, pendingConnect: null });
+                return;
+              }
+            }
             const ar = isVideo
               ? await measureVideoAspectFromObjectUrl(objectUrl)
               : await measureImageAspectFromObjectUrl(objectUrl);

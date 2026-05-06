@@ -43,6 +43,7 @@ import {
   isPlatformCreditBypassActive,
   useCreditsPlan,
 } from "@/app/_components/CreditsPlanContext";
+import { WorkflowMediaTrimDialog } from "../WorkflowMediaTrimDialog";
 import {
   detailedMessageFromCaughtError,
   userFacingProviderErrorOrDefault,
@@ -635,6 +636,7 @@ export function AdAssetNode({ id, data, selected }: NodeProps<AdAssetNodeType>) 
   const previewImageRef = useRef<HTMLImageElement | null>(null);
   const seedanceProVideoFileInputRef = useRef<HTMLInputElement>(null);
   const [seedanceProVideoUploadBusy, setSeedanceProVideoUploadBusy] = useState(false);
+  const [seedanceProVideoTrimFile, setSeedanceProVideoTrimFile] = useState<File | null>(null);
   const [frameExtractBusy, setFrameExtractBusy] = useState<null | "first" | "last">(null);
   const [outputPreviewLightbox, setOutputPreviewLightbox] = useState(false);
   const [motionDetectedInputDurationSec, setMotionDetectedInputDurationSec] = useState<number | null>(
@@ -823,11 +825,9 @@ export function AdAssetNode({ id, data, selected }: NodeProps<AdAssetNodeType>) 
     const fallbackName = data.kind === "video" ? "workflow-video.mp4" : "workflow-image.jpg";
     triggerMediaDownload(outputUrl, fallbackName);
   }, [data.kind, data.outputPreviewUrl, data.referencePreviewUrl]);
-  const onSeedanceProReferenceVideoSelected = useCallback(
-    async (e: React.ChangeEvent<HTMLInputElement>) => {
-      const file = e.target.files?.[0];
-      e.target.value = "";
-      if (!file) return;
+
+  const attachSeedanceProReferenceVideoFile = useCallback(
+    async (file: File) => {
       setSeedanceProVideoUploadBusy(true);
       try {
         const hostedUrl = await uploadFileToCdn(file, { kind: "video" });
@@ -844,6 +844,36 @@ export function AdAssetNode({ id, data, selected }: NodeProps<AdAssetNodeType>) 
       }
     },
     [id, patch],
+  );
+
+  const onSeedanceProReferenceVideoSelected = useCallback(
+    async (e: React.ChangeEvent<HTMLInputElement>) => {
+      const file = e.target.files?.[0];
+      e.target.value = "";
+      if (!file) return;
+      try {
+        const objectUrl = URL.createObjectURL(file);
+        try {
+          const v = document.createElement("video");
+          v.preload = "metadata";
+          v.src = objectUrl;
+          const duration = await new Promise<number>((resolve, reject) => {
+            v.onloadedmetadata = () => resolve(Number(v.duration || 0));
+            v.onerror = () => reject(new Error("Could not read video duration."));
+          });
+          if (Number.isFinite(duration) && duration > 15.01) {
+            setSeedanceProVideoTrimFile(file);
+            return;
+          }
+        } finally {
+          URL.revokeObjectURL(objectUrl);
+        }
+      } catch {
+        // If metadata fails, fall through and attempt upload (server may still accept it).
+      }
+      await attachSeedanceProReferenceVideoFile(file);
+    },
+    [attachSeedanceProReferenceVideoFile],
   );
   const normalizeCompletedMediaLines = useCallback((lines: string[]): string[] => {
     return lines
@@ -1470,6 +1500,70 @@ export function AdAssetNode({ id, data, selected }: NodeProps<AdAssetNodeType>) 
     () => (data.kind === "video" ? workflowVideoModelSupportsElements(resolvedVideoModelId) : false),
     [data.kind, resolvedVideoModelId],
   );
+  const videoModelSeedance2ProLike = useMemo(
+    () =>
+      data.kind === "video" &&
+      (resolvedVideoModelId === "bytedance/seedance-2" || resolvedVideoModelId === "bytedance/seedance-2-fast"),
+    [data.kind, resolvedVideoModelId],
+  );
+
+  /** Seedance 2 / Fast: supports omni reference video uploads (`referenceVideoUrls`). */
+  const seedance2ProLike = useMemo(() => {
+    if (data.kind !== "video") return false;
+    return resolvedVideoModelId === "bytedance/seedance-2" || resolvedVideoModelId === "bytedance/seedance-2-fast";
+  }, [data.kind, resolvedVideoModelId]);
+
+  /**
+   * If a model switch hides an input bubble, prune any edges that still target that handle.
+   * This prevents “ghost” connections to handles that no longer render (e.g. Seedance has no start/end frame ports).
+   */
+  useEffect(() => {
+    const validTargets = new Set<string>();
+    validTargets.add("text");
+    validTargets.add("inText");
+
+    if (data.kind === "motion") {
+      validTargets.add("startImage");
+      validTargets.add("inImage");
+      validTargets.add("inVideo");
+    }
+
+    if (data.kind === "video") {
+      if (videoModelHasStartFrame) {
+        validTargets.add("startImage");
+        if (!videoModelHasReferences) validTargets.add("inImage");
+      }
+      if (videoModelHasEndFrame) validTargets.add("endImage");
+      if (videoModelHasReferences) {
+        validTargets.add("references");
+        validTargets.add("inImage");
+      }
+      if (seedance2ProLike) {
+        validTargets.add("inVideo");
+      }
+    }
+
+    if (data.kind === "image" || data.kind === "variation" || data.kind === "assistant" || data.kind === "upscale") {
+      validTargets.add("inImage");
+    }
+
+    setEdges((prev) =>
+      prev.filter((e) => {
+        if (e.target !== id) return true;
+        const h = (e.targetHandle ?? "").trim();
+        if (!h) return true;
+        return validTargets.has(h);
+      }),
+    );
+  }, [
+    data.kind,
+    id,
+    seedance2ProLike,
+    setEdges,
+    videoModelHasEndFrame,
+    videoModelHasReferences,
+    videoModelHasStartFrame,
+  ]);
 
   const motionAutoSettings = data.motionAutoSettings ?? true;
   const motionBackgroundSource = data.motionBackgroundSource ?? "input_video";
@@ -1554,6 +1648,36 @@ export function AdAssetNode({ id, data, selected }: NodeProps<AdAssetNodeType>) 
   const videoElementRefUrls = useMemo(
     () => (videoElementRefSignature ? videoElementRefSignature.split("|").filter(Boolean) : []),
     [videoElementRefSignature],
+  );
+
+  /** Seedance 2 / Fast: connected video refs (omni motion reference). */
+  const seedanceVideoRefSignature = useStore(
+    useCallback(
+      (s) => {
+        if (data.kind !== "video") return "";
+        if (!videoModelSeedance2ProLike) return "";
+        const linked = collectLinkedVideoUrlsForHandles(s.nodes, s.edges, id, ["inVideo"]);
+        const nodeLocal =
+          data.referenceMediaKind === "video" && data.referencePreviewUrl?.trim()
+            ? [data.referencePreviewUrl.trim()]
+            : [];
+        const all = [...linked, ...nodeLocal];
+        const seen = new Set<string>();
+        const out: string[] = [];
+        for (const u of all) {
+          const t = u.trim();
+          if (!t || seen.has(t)) continue;
+          seen.add(t);
+          out.push(t);
+        }
+        return out.join("|");
+      },
+      [data.kind, data.referenceMediaKind, data.referencePreviewUrl, id, videoModelSeedance2ProLike],
+    ),
+  );
+  const seedanceVideoRefUrls = useMemo(
+    () => (seedanceVideoRefSignature ? seedanceVideoRefSignature.split("|").filter(Boolean) : []),
+    [seedanceVideoRefSignature],
   );
 
   useEffect(() => {
@@ -2701,11 +2825,8 @@ export function AdAssetNode({ id, data, selected }: NodeProps<AdAssetNodeType>) 
       const isSeedanceModel = model.startsWith("bytedance/seedance");
       const seedance2ProLike =
         resolvedVideoModelId === "bytedance/seedance-2" || resolvedVideoModelId === "bytedance/seedance-2-fast";
-      const linkedVideoFromRefs = seedance2ProLike
-        ? collectLinkedVideoUrlsForHandles(nodesForVideoInputs, edges, id, ["references", "inImage"])
-        : [];
-      const linkedVideoFromStart = seedance2ProLike
-        ? collectLinkedVideoUrlsForHandles(nodesForVideoInputs, edges, id, ["startImage"])
+      const linkedVideoFromInPort = seedance2ProLike
+        ? collectLinkedVideoUrlsForHandles(nodesForVideoInputs, edges, id, ["inVideo"])
         : [];
       const nodeLocalVideoUrl =
         seedance2ProLike && data.referenceMediaKind === "video" && data.referencePreviewUrl?.trim()
@@ -2715,7 +2836,7 @@ export function AdAssetNode({ id, data, selected }: NodeProps<AdAssetNodeType>) 
         ? (() => {
             const seen = new Set<string>();
             const out: string[] = [];
-            for (const u of [...linkedVideoFromStart, ...linkedVideoFromRefs, ...(nodeLocalVideoUrl ? [nodeLocalVideoUrl] : [])]) {
+            for (const u of [...linkedVideoFromInPort, ...(nodeLocalVideoUrl ? [nodeLocalVideoUrl] : [])]) {
               const t = u.trim();
               if (!t || seen.has(t)) continue;
               seen.add(t);
@@ -2784,7 +2905,7 @@ export function AdAssetNode({ id, data, selected }: NodeProps<AdAssetNodeType>) 
           ) {
             throw new Error(
               seedance2ProLike
-                ? "Seedance could not resolve any reference from this node. Connect reference images, wire a video module to References, or upload a reference video (Seedance 2 / Fast), then run again."
+                ? "Seedance could not resolve any reference from this node. Connect reference images, wire a video module into Video input, or upload a reference video (Seedance 2 / Fast), then run again."
                 : "Seedance could not resolve any reference image from this node inputs. Connect at least one image to Start image or References on the Video Generator (not Text), then run again.",
             );
           }
@@ -3555,15 +3676,21 @@ export function AdAssetNode({ id, data, selected }: NodeProps<AdAssetNodeType>) 
             </div>
           ) : null}
 
-          {data.kind === "motion" ? (
+          {data.kind === "motion" || (data.kind === "video" && seedance2ProLike) ? (
             <div className={cn(workflowPortBubbleShellClass, "nodrag nopan")}>
               <Handle
                 id="inVideo"
                 type="target"
                 position={Position.Left}
                 className={workflowPortTargetBubbleHandleClass}
-                aria-label="Motion reference video input"
-                title="Motion reference video — click to add upload, list, or video generator."
+                aria-label={
+                  data.kind === "motion" ? "Motion reference video input" : "Seedance reference video input"
+                }
+                title={
+                  data.kind === "motion"
+                    ? "Motion reference video — click to add upload, list, or video generator."
+                    : "Seedance 2 / Fast: optional motion reference video for omni_reference."
+                }
                 onPointerDown={(e) => handleInputBubblePointerDown(e, "inVideo")}
               />
               <span className={workflowPortBubbleIconClass} aria-hidden>
@@ -4133,6 +4260,65 @@ export function AdAssetNode({ id, data, selected }: NodeProps<AdAssetNodeType>) 
                   {videoElementRefUrls.length > 6 ? (
                     <span className="shrink-0 text-[9px] font-semibold text-white/45">
                       +{videoElementRefUrls.length - 6}
+                    </span>
+                  ) : null}
+                </div>
+              ) : null}
+              {data.kind === "video" && videoModelSeedance2ProLike && seedanceVideoRefUrls.length > 0 ? (
+                <div
+                  className="mb-1 flex w-full items-center gap-1 overflow-x-auto pb-0.5 nowheel"
+                  title="Reference video (Seedance omni). Type @video1 in the prompt to bind it."
+                >
+                  {seedanceVideoRefUrls.slice(0, 3).map((url, idx) => {
+                    const tag = `@video${idx + 1}`;
+                    return (
+                      <HoverCard.Root key={`${tag}-${url}`} openDelay={160} closeDelay={90}>
+                        <HoverCard.Trigger asChild>
+                          <button
+                            type="button"
+                            title={`Insert ${tag} into prompt`}
+                            aria-label={`${tag}: insert into prompt`}
+                            onPointerDown={(e) => e.stopPropagation()}
+                            onClick={() => {
+                              const current = prompt ?? "";
+                              const needsSep = current.length > 0 && !/\s$/.test(current);
+                              const next = `${current}${needsSep ? " " : ""}${tag} `;
+                              patch(id, { prompt: next });
+                            }}
+                            className="flex shrink-0 items-center gap-1 rounded-full border border-sky-400/25 bg-sky-500/10 pl-1 pr-1.5 py-0.5 text-[9px] font-semibold text-sky-100 transition hover:border-sky-300/55 hover:bg-sky-500/20"
+                          >
+                            <span className="tabular-nums">{tag}</span>
+                          </button>
+                        </HoverCard.Trigger>
+                        <HoverCard.Portal>
+                          <HoverCard.Content
+                            side="top"
+                            align="center"
+                            sideOffset={10}
+                            collisionPadding={16}
+                            className={cn(
+                              "nodrag nopan z-[520] w-[min(92vw,22rem)] rounded-xl border border-white/15 bg-[#141418] p-2.5 shadow-[0_24px_64px_rgba(0,0,0,0.75)] outline-none",
+                              "data-[state=open]:animate-in data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=open]:fade-in-0 data-[state=closed]:zoom-out-95 data-[state=open]:zoom-in-95",
+                            )}
+                          >
+                            <video
+                              src={`/api/download?url=${encodeURIComponent(url)}`}
+                              className="block w-full max-h-[min(72vh,18rem)] rounded-lg bg-black"
+                              controls
+                              playsInline
+                              preload="metadata"
+                            />
+                            <div className="mt-2 text-center text-[10px] font-semibold uppercase tracking-wide text-white/55">
+                              {tag}
+                            </div>
+                          </HoverCard.Content>
+                        </HoverCard.Portal>
+                      </HoverCard.Root>
+                    );
+                  })}
+                  {seedanceVideoRefUrls.length > 3 ? (
+                    <span className="shrink-0 text-[9px] font-semibold text-white/45">
+                      +{seedanceVideoRefUrls.length - 3}
                     </span>
                   ) : null}
                 </div>

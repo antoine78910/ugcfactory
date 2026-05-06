@@ -11,6 +11,7 @@ import { uploadFileToCdn } from "@/lib/uploadBlobUrlToCdn";
 import { cloneWorkflowSelection } from "../workflowClone";
 import type { WorkflowCanvasNode } from "../workflowFlowTypes";
 import { isVideoFile, measureImageAspectFromObjectUrl, measureVideoAspectFromObjectUrl } from "../workflowMediaAspect";
+import { WorkflowMediaTrimDialog } from "../WorkflowMediaTrimDialog";
 import { WorkflowNodeContextToolbar } from "./WorkflowNodeContextToolbar";
 
 export type ImageRefNodeData = {
@@ -140,6 +141,7 @@ export function ImageRefNode({ id, data }: NodeProps<ImageRefNodeType>) {
   const [titleDraft, setTitleDraft] = useState(data.label || "Upload");
   const [menuPos, setMenuPos] = useState<{ x: number; y: number } | null>(null);
   const [replacing, setReplacing] = useState(false);
+  const [trimState, setTrimState] = useState<{ open: boolean; file: File } | null>(null);
   const [frameExtractBusy, setFrameExtractBusy] = useState<"first" | "last" | null>(null);
   const replaceInputRef = useRef<HTMLInputElement>(null);
   const titleInputRef = useRef<HTMLInputElement>(null);
@@ -227,11 +229,8 @@ export function ImageRefNode({ id, data }: NodeProps<ImageRefNodeType>) {
     closeMenu();
   }, [closeMenu, getEdges, getNodes, id, setEdges, setNodes]);
 
-  const onReplaceFileChange = useCallback(
-    async (e: ChangeEvent<HTMLInputElement>) => {
-      const file = e.target.files?.[0];
-      e.target.value = "";
-      if (!file) return;
+  const replaceWithFile = useCallback(
+    async (file: File) => {
       const isVideo = isVideoFile(file);
       const mediaKind: "image" | "video" = isVideo ? "video" : "image";
       setReplacing(true);
@@ -240,6 +239,20 @@ export function ImageRefNode({ id, data }: NodeProps<ImageRefNodeType>) {
       const previousAspect = data.intrinsicAspect;
       const localPreviewUrl = URL.createObjectURL(file);
       try {
+        if (isVideo) {
+          const v = document.createElement("video");
+          v.preload = "metadata";
+          v.src = localPreviewUrl;
+          const duration = await new Promise<number>((resolve, reject) => {
+            v.onloadedmetadata = () => resolve(Number(v.duration || 0));
+            v.onerror = () => reject(new Error("Could not read video duration."));
+          });
+          if (Number.isFinite(duration) && duration > 15.01) {
+            URL.revokeObjectURL(localPreviewUrl);
+            setTrimState({ open: true, file });
+            return;
+          }
+        }
         let intrinsicAspect: number | undefined;
         try {
           intrinsicAspect = isVideo
@@ -314,6 +327,16 @@ export function ImageRefNode({ id, data }: NodeProps<ImageRefNodeType>) {
       }
     },
     [data.imageUrl, data.intrinsicAspect, data.mediaKind, id, setNodes],
+  );
+
+  const onReplaceFileChange = useCallback(
+    async (e: ChangeEvent<HTMLInputElement>) => {
+      const file = e.target.files?.[0];
+      e.target.value = "";
+      if (!file) return;
+      await replaceWithFile(file);
+    },
+    [replaceWithFile],
   );
 
   const onExtractVideoFrame = useCallback(
@@ -432,6 +455,24 @@ export function ImageRefNode({ id, data }: NodeProps<ImageRefNodeType>) {
   return (
     <>
       <WorkflowNodeContextToolbar nodeId={id} onRun={noop} variant="sticky" />
+
+      {trimState?.open && trimState.file ? (
+        <WorkflowMediaTrimDialog
+          open={true}
+          file={trimState.file}
+          kind="video"
+          maxDurationSec={15}
+          title="Trim video to 15s"
+          onOpenChange={(open) => {
+            if (open) return;
+            setTrimState(null);
+          }}
+          onTrimmed={(trimmed) => {
+            setTrimState(null);
+            void replaceWithFile(trimmed);
+          }}
+        />
+      ) : null}
 
       <div className="relative flex items-end gap-1">
         <div className="absolute left-0 -top-6 z-[6] flex min-w-0 items-center gap-2.5 pr-2">
