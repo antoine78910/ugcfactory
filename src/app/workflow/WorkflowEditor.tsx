@@ -3040,6 +3040,20 @@ function WorkflowFlowWorkspace({
       if (from && connectableFrom) {
         const allNodes = getNodes() as WorkflowCanvasNode[];
         const fromNode = allNodes.find((n) => n.id === from.nodeId);
+        const resolvedFromHandle = (() => {
+          const explicit = (from.handleId ?? "").trim();
+          if (explicit) return explicit;
+          if (!fromNode) return "out";
+          if (fromNode.type === "imageRef") return "out";
+          if (fromNode.type === "textPrompt" || fromNode.type === "stickyNote") return "out";
+          if (fromNode.type === "promptList") return "outText";
+          if (fromNode.type === "adAsset") {
+            const d = fromNode.data as AdAssetNodeData;
+            if (d.kind === "image" || d.kind === "variation" || d.kind === "upscale") return "generated";
+            return "out";
+          }
+          return "out";
+        })();
         const fromKind = sourceKindFromNodeHandle(fromNode, from.handleId);
         const defaultTargetHandle = targetHandleForNewNodeFromSourceKind(newNode as WorkflowCanvasNode, fromKind);
         if (!defaultTargetHandle) {
@@ -3055,7 +3069,7 @@ function WorkflowFlowWorkspace({
             {
               id: `e-${from.nodeId}-${newNode.id}-${crypto.randomUUID().slice(0, 8)}`,
               source: from.nodeId,
-              sourceHandle: from.handleId ?? undefined,
+              sourceHandle: resolvedFromHandle,
               target: newNode.id,
               targetHandle: defaultTargetHandle,
               style: { stroke: "rgba(167, 139, 250, 0.5)", strokeWidth: 2 },
