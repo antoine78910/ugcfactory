@@ -3343,32 +3343,35 @@ function WorkflowFlowWorkspace({
         if (handleId === "text" && kind === "website") replaceSameHandle = true;
         if (handleId === "references" && kind === "assistant") replaceSameHandle = true;
       }
-      setEdges((eds) => {
-        const base = replaceSameHandle
-          ? eds.filter((e) => !(e.target === target && (e.targetHandle ?? "") === handleId))
-          : eds;
-        const next = addEdge(
-          {
-            ...params,
-            id: `e-${source}-${target}-${crypto.randomUUID().slice(0, 8)}`,
-            targetHandle: resolvedTargetHandle ?? null,
-            style: { stroke: "rgba(167, 139, 250, 0.5)", strokeWidth: 2 },
-          },
-          base,
-        );
-        patchWorkflowVideoGeneratorPromptAfterConnect(
-          setNodes,
-          computeVideoGeneratorElementPromptAugmentation({
-            nodes: allNodes,
-            edges: next,
-            targetId: target,
-            targetHandle: resolvedTargetHandle,
-          }),
-        );
-        return next;
-      });
+      const currentEdges = getEdges();
+      const base = replaceSameHandle
+        ? currentEdges.filter((e) => !(e.target === target && (e.targetHandle ?? "") === handleId))
+        : currentEdges;
+      const next = addEdge(
+        {
+          ...params,
+          id: `e-${source}-${target}-${crypto.randomUUID().slice(0, 8)}`,
+          targetHandle: resolvedTargetHandle ?? null,
+          style: { stroke: "rgba(167, 139, 250, 0.5)", strokeWidth: 2 },
+        },
+        base,
+      );
+      setEdges(next);
+      patchWorkflowVideoGeneratorPromptAfterConnect(
+        setNodes,
+        computeVideoGeneratorElementPromptAugmentation({
+          nodes: allNodes,
+          edges: next,
+          targetId: target,
+          targetHandle: resolvedTargetHandle,
+        }),
+      );
+      // Bypass the 200ms autosave debounce: the connection lands in workflowProject
+      // (and therefore localStorage) instantly. Otherwise a fast reload right after
+      // making the connection would lose the new edge.
+      commitProjectSnapshotNow(allNodes, next);
     },
-    [readOnly, setEdges, setNodes, getNodes],
+    [readOnly, setEdges, setNodes, getNodes, getEdges, commitProjectSnapshotNow],
   );
   const isValidConnection: IsValidConnection<Edge> = useCallback(
     (params) => {
@@ -3414,51 +3417,53 @@ function WorkflowFlowWorkspace({
         const pair = suggestAutoConnectAfterNodeDrag(draggedId, getNodes, getInternalNode);
         if (!pair) return;
         const snapshot = getNodes() as WorkflowCanvasNode[];
-        setEdges((eds) => {
-          if (eds.some((e) => e.source === pair.source && e.target === pair.target)) return eds;
-          const srcNode = snapshot.find((n) => n.id === pair.source);
-          const tgtNode = snapshot.find((n) => n.id === pair.target);
-          const srcAdKind =
-            srcNode?.type === "adAsset" ? (srcNode.data as AdAssetNodeData).kind : undefined;
-          const srcHandle =
-            srcNode?.type === "adAsset" &&
-            (srcAdKind === "image" || srcAdKind === "variation" || srcAdKind === "upscale")
-              ? "generated"
-              : "out";
-          const srcKind = sourceKindFromNodeHandle(srcNode as WorkflowCanvasNode | undefined, srcHandle);
-          const targetHandleResolved =
-            tgtNode?.type === "adAsset"
-              ? targetHandleForNewNodeFromSourceKind(tgtNode as WorkflowCanvasNode, srcKind)
-              : tgtNode?.type === "imageRef"
-                ? "in"
-                : null;
-          if (!targetHandleResolved) return eds;
-          const next = addEdge(
-            {
-              id: `e-${pair.source}-${pair.target}-${crypto.randomUUID().slice(0, 8)}`,
-              source: pair.source,
-              sourceHandle: srcHandle,
-              target: pair.target,
-              targetHandle: targetHandleResolved,
-              style: { stroke: "rgba(167, 139, 250, 0.5)", strokeWidth: 2 },
-            },
-            eds,
-          );
-          patchWorkflowVideoGeneratorPromptAfterConnect(
-            setNodes,
-            computeVideoGeneratorElementPromptAugmentation({
-              nodes: snapshot,
-              edges: next,
-              targetId: pair.target,
-              targetHandle: targetHandleResolved,
-            }),
-          );
-          return next;
-        });
+        const eds = getEdges();
+        if (eds.some((e) => e.source === pair.source && e.target === pair.target)) return;
+        const srcNode = snapshot.find((n) => n.id === pair.source);
+        const tgtNode = snapshot.find((n) => n.id === pair.target);
+        const srcAdKind =
+          srcNode?.type === "adAsset" ? (srcNode.data as AdAssetNodeData).kind : undefined;
+        const srcHandle =
+          srcNode?.type === "adAsset" &&
+          (srcAdKind === "image" || srcAdKind === "variation" || srcAdKind === "upscale")
+            ? "generated"
+            : "out";
+        const srcKind = sourceKindFromNodeHandle(srcNode as WorkflowCanvasNode | undefined, srcHandle);
+        const targetHandleResolved =
+          tgtNode?.type === "adAsset"
+            ? targetHandleForNewNodeFromSourceKind(tgtNode as WorkflowCanvasNode, srcKind)
+            : tgtNode?.type === "imageRef"
+              ? "in"
+              : null;
+        if (!targetHandleResolved) return;
+        const next = addEdge(
+          {
+            id: `e-${pair.source}-${pair.target}-${crypto.randomUUID().slice(0, 8)}`,
+            source: pair.source,
+            sourceHandle: srcHandle,
+            target: pair.target,
+            targetHandle: targetHandleResolved,
+            style: { stroke: "rgba(167, 139, 250, 0.5)", strokeWidth: 2 },
+          },
+          eds,
+        );
+        setEdges(next);
+        patchWorkflowVideoGeneratorPromptAfterConnect(
+          setNodes,
+          computeVideoGeneratorElementPromptAugmentation({
+            nodes: snapshot,
+            edges: next,
+            targetId: pair.target,
+            targetHandle: targetHandleResolved,
+          }),
+        );
+        // Same reason as onConnect: persist immediately so we don't lose the auto-linked edge
+        // if the user reloads/navigates within the 200ms autosave window.
+        commitProjectSnapshotNow(snapshot, next);
       };
       requestAnimationFrame(() => requestAnimationFrame(tryLink));
     },
-    [readOnly, getInternalNode, getNodes, setEdges, setNodes, setAlignGuides],
+    [readOnly, getInternalNode, getNodes, getEdges, setEdges, setNodes, setAlignGuides, commitProjectSnapshotNow],
   );
 
   const onNodeDrag = useCallback(
@@ -5199,6 +5204,50 @@ export function WorkflowEditor({
       saveProjectForSpace(storageScope, resolvedSpaceId, workflowProject);
     }
   }, [workflowHydrated, storageScope, resolvedSpaceId, workflowProject, spaceSource]);
+
+  /**
+   * Last-chance flush before the page is hidden/unloaded.
+   *
+   * The canvas autosave is debounced (200ms) and so is the cloud sync (1500ms). If the
+   * user makes a connection or drags a node and then immediately reloads the tab, the
+   * pending change never reaches localStorage and the next load shows a stale state
+   * (manifests as "the nodes/edges I just added disappeared").
+   *
+   * `canvasProjectFlushRef` always holds the latest live React Flow snapshot, so we
+   * just synchronously write it to localStorage on pagehide/beforeunload.
+   */
+  useEffect(() => {
+    if (!workflowHydrated || storageScope === null) return;
+    if (spaceSource !== "local") return;
+
+    const flushNow = () => {
+      try {
+        const flushed = canvasProjectFlushRef.current?.();
+        if (flushed) {
+          saveProjectForSpace(storageScope, resolvedSpaceId, flushed);
+        }
+      } catch {
+        /* best-effort flush */
+      }
+    };
+
+    const onVisibility = () => {
+      if (document.visibilityState === "hidden") flushNow();
+    };
+
+    window.addEventListener("pagehide", flushNow);
+    window.addEventListener("beforeunload", flushNow);
+    document.addEventListener("visibilitychange", onVisibility);
+
+    return () => {
+      window.removeEventListener("pagehide", flushNow);
+      window.removeEventListener("beforeunload", flushNow);
+      document.removeEventListener("visibilitychange", onVisibility);
+      // The component itself is unmounting (e.g. user navigated to another route via Next.js client nav).
+      // Make sure the latest in-memory state hits localStorage before we tear down.
+      flushNow();
+    };
+  }, [workflowHydrated, storageScope, resolvedSpaceId, spaceSource]);
 
   /**
    * Mirror to the cloud (debounced) so:
