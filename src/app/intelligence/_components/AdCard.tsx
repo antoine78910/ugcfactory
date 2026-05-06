@@ -44,6 +44,7 @@ export function AdCard({
   const videoRef = useRef<HTMLVideoElement | null>(null);
   const [hoverPlay, setHoverPlay] = useState(false);
   const [videoBroken, setVideoBroken] = useState(false);
+  const [videoReady, setVideoReady] = useState(false);
   const [recreateOpen, setRecreateOpen] = useState(false);
 
   const stopVideo = useCallback(() => {
@@ -113,7 +114,8 @@ export function AdCard({
               className={cn(
                 "h-full w-full object-cover transition-transform duration-300",
                 clickable && "group-hover:scale-[1.02]",
-                videoSrc && playVideoOnHover && hoverPlay && !videoBroken && "opacity-0",
+                // Keep the existing thumb visible until the video is actually ready (avoid blank flashes).
+                videoSrc && playVideoOnHover && hoverPlay && !videoBroken && videoReady && "opacity-0",
               )}
             />
           ) : (
@@ -133,7 +135,11 @@ export function AdCard({
               playsInline
               loop
               preload="none"
-              onError={() => setVideoBroken(true)}
+              onLoadedData={() => setVideoReady(true)}
+              onError={() => {
+                setVideoBroken(true);
+                setVideoReady(false);
+              }}
             />
           ) : null}
           {typeof rank === "number" && Number.isFinite(rank) && rank > 0 ? (
