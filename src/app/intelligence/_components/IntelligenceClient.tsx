@@ -12,6 +12,7 @@ import { CompetitorDetail } from "./CompetitorDetail";
 import { RecreationsPanel } from "./RecreationsPanel";
 import { WelcomeOverlay } from "./WelcomeOverlay";
 import { IntelligenceOnboarding } from "./IntelligenceOnboarding";
+import { IntelligenceOverviewDashboard } from "./IntelligenceOverviewDashboard";
 
 export function IntelligenceClient({ ownTrackerIds }: { ownTrackerIds: string[] }) {
   const [ownTrackerIdsState, setOwnTrackerIdsState] = useState<string[]>(ownTrackerIds);
@@ -174,7 +175,7 @@ export function IntelligenceClient({ ownTrackerIds }: { ownTrackerIds: string[] 
         ) : competitorPick ? (
           <CompetitorDetail competitor={competitorPick.lookup} sortBy={competitorSortBy} />
         ) : (
-          <EmptyState />
+          <IntelligenceOverviewDashboard sortBy={competitorSortBy} />
         )}
 
         <Dialog.Root open={panel !== null} onOpenChange={(o) => !o && setPanel(null)}>
@@ -234,24 +235,6 @@ export function IntelligenceClient({ ownTrackerIds }: { ownTrackerIds: string[] 
           </Dialog.Portal>
         </Dialog.Root>
       </main>
-    </div>
-  );
-}
-
-function EmptyState() {
-  return (
-    <div className="flex h-full items-center justify-center p-10">
-      <div className="flex max-w-sm flex-col items-center gap-4 text-center">
-        <div className="flex h-14 w-14 items-center justify-center rounded-2xl border border-white/10 bg-white/[0.04] backdrop-blur-sm">
-          <div className="h-2 w-2 rounded-full bg-violet-400 shadow-[0_0_16px_rgba(167,139,250,0.9)]" />
-        </div>
-        <div className="flex flex-col gap-1">
-          <p className="text-sm font-medium text-white/80">Pick a tracker or search a brand</p>
-          <p className="text-xs text-white/40">
-            Search by name or domain to look up any advertiser. Save the ones you want to revisit.
-          </p>
-        </div>
-      </div>
     </div>
   );
 }
