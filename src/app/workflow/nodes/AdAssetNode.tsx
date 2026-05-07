@@ -2119,6 +2119,27 @@ export function AdAssetNode({ id, data, selected }: NodeProps<AdAssetNodeType>) 
     ),
   );
   const hasLinkedGeneratorTextInput = isGeneratorNode && generatorTextInputWireCount > 0;
+  const hasPromptListTextInput = useStore(
+    useCallback(
+      (s) => {
+        if (!isGeneratorNode) return false;
+        return s.edges.some((e) => {
+          if (e.target !== id) return false;
+          const h = e.targetHandle ?? "";
+          if (!WORKFLOW_TEXT_INPUT_HANDLES.includes(h as (typeof WORKFLOW_TEXT_INPUT_HANDLES)[number])) return false;
+          const src = s.nodes.find((n) => n.id === e.source);
+          if (!src || src.type !== "promptList") return false;
+          const srcHandle = e.sourceHandle ?? "out";
+          if (srcHandle === "outText") return true;
+          if (srcHandle !== "out") return false;
+          const d = src.data as PromptListNodeData;
+          const kind = d.contentKind ?? "text";
+          return kind === "text";
+        });
+      },
+      [id, isGeneratorNode],
+    ),
+  );
   const promptPreviewText = (data.lastRunPrompt ?? prompt).trim();
   const showPromptPreviewChip =
     hasPreviewMedia && promptPreviewText.length > 0 && !profile360ImageUi;
@@ -2127,6 +2148,12 @@ export function AdAssetNode({ id, data, selected }: NodeProps<AdAssetNodeType>) 
   const expandPromptEditorOnFocus = useWorkflowPromptOverlay;
   const openPromptEditor = useCallback(() => {
     if (!useWorkflowPromptOverlay) return;
+    if (hasPromptListTextInput) {
+      toast.info("Prompt edit is disabled while Prompt List is connected", {
+        description: "Edit each line directly in the Prompt List node to keep one video per prompt.",
+      });
+      return;
+    }
     const composedSeed = (() => {
       if (data.kind !== "image" && data.kind !== "video" && data.kind !== "motion") {
         return prompt;
@@ -2139,7 +2166,7 @@ export function AdAssetNode({ id, data, selected }: NodeProps<AdAssetNodeType>) 
     const seed = (data.lastRunPrompt ?? composedSeed ?? prompt).trim() || prompt;
     setPromptEditorDraft(seed);
     setPromptEditorOpen(true);
-  }, [data.kind, data.lastRunPrompt, getEdges, getNodes, id, prompt, useWorkflowPromptOverlay]);
+  }, [data.kind, data.lastRunPrompt, getEdges, getNodes, hasPromptListTextInput, id, prompt, useWorkflowPromptOverlay]);
 
   const closePromptEditor = useCallback(() => {
     patch(id, { prompt: promptEditorDraft });
@@ -4867,6 +4894,7 @@ export function AdAssetNode({ id, data, selected }: NodeProps<AdAssetNodeType>) 
               }}
               onPointerDown={(e) => e.stopPropagation()}
               title="Click to edit prompt"
+              disabled={hasPromptListTextInput}
             >
               <span className="line-clamp-2 whitespace-pre-wrap">
                 {promptPreviewText}
@@ -5165,13 +5193,17 @@ export function AdAssetNode({ id, data, selected }: NodeProps<AdAssetNodeType>) 
                 <textarea
                   ref={compactPromptTextareaRef}
                   value={prompt}
-                  onChange={(e) => patch(id, { prompt: e.target.value })}
+                  onChange={(e) => {
+                    if (hasPromptListTextInput) return;
+                    patch(id, { prompt: e.target.value });
+                  }}
                   placeholder={cfg.promptPlaceholder}
                   rows={data.kind === "video" ? 3 : 2}
+                  readOnly={hasPromptListTextInput}
                   onWheelCapture={keepWheelInsideScrollable}
                   onFocus={(e) => {
                     setPromptFocused(true);
-                    if (expandPromptEditorOnFocus) {
+                    if (expandPromptEditorOnFocus && !hasPromptListTextInput) {
                       openPromptEditor();
                       requestAnimationFrame(() => e.currentTarget.blur());
                     }
@@ -5184,6 +5216,11 @@ export function AdAssetNode({ id, data, selected }: NodeProps<AdAssetNodeType>) 
                       : "min-h-[34px] max-h-[72px] overflow-y-scroll studio-params-scroll",
                   )}
                 />
+              ) : null}
+              {hasPromptListTextInput ? (
+                <p className="mt-1 text-[10px] leading-snug text-white/55">
+                  Prompt editing is disabled while a Prompt List is connected. Edit prompts in the Prompt List node.
+                </p>
               ) : null}
               {data.kind === "video" && !videoModelSupportsElements && (prompt ?? "").includes("@") ? (
                 <p className="mt-1 text-[10px] leading-snug text-white/45">
