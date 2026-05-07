@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react";
 import type { TTTracker, TTLookupResult } from "@/lib/trendtrack";
+import { proxiedMediaSrc } from "@/lib/mediaProxyUrl";
 
 function Skeleton() {
   return (
@@ -16,6 +17,7 @@ function Skeleton() {
 function TrackerCard({
   name,
   logo,
+  domain,
   activeAds,
   newAdsLast7Days,
   isSelected,
@@ -23,11 +25,41 @@ function TrackerCard({
 }: {
   name: string;
   logo?: string;
+  domain?: string;
   activeAds?: number;
   newAdsLast7Days?: number;
   isSelected: boolean;
   onClick: () => void;
 }) {
+  const d = domain?.trim().replace(/^www\./i, "").toLowerCase() ?? "";
+  const hasDomain = Boolean(d && d.includes("."));
+  const remoteLogo = (logo ?? "").trim();
+  const proxiedLogo = remoteLogo ? proxiedMediaSrc(remoteLogo) || remoteLogo : "";
+  const clearbit = hasDomain ? `https://logo.clearbit.com/${encodeURIComponent(d)}` : "";
+  const googleFb = hasDomain ? `https://www.google.com/s2/favicons?domain=${encodeURIComponent(d)}&sz=64` : "";
+  const letter = (name || "?").charAt(0).toUpperCase();
+
+  const imgClass =
+    "relative z-[1] h-8 w-8 rounded-lg object-contain p-0.5";
+
+  const chainImageError = (e: { currentTarget: HTMLImageElement }) => {
+    const el = e.currentTarget;
+    const step = el.dataset.step ?? "api";
+    if (step === "api" && clearbit) {
+      el.dataset.step = "clearbit";
+      el.src = clearbit;
+      el.className = imgClass;
+      return;
+    }
+    if (step === "clearbit" && googleFb) {
+      el.dataset.step = "google";
+      el.src = googleFb;
+      return;
+    }
+    el.onerror = null;
+    el.style.visibility = "hidden";
+  };
+
   return (
     <button
       onClick={onClick}
@@ -37,15 +69,41 @@ function TrackerCard({
           : "border-white/10 bg-white/[0.04] hover:border-violet-400/35 hover:bg-white/[0.07] hover:shadow-[0_0_14px_rgba(139,92,246,0.10)]"
       }`}
     >
-      {logo ? (
-        <img
-          src={logo}
-          alt={name}
-          className="h-8 w-8 overflow-hidden rounded-lg border border-black/15 bg-white object-contain p-0.5 shadow-[0_0_0_1px_rgba(0,0,0,0.04)_inset]"
-        />
+      {proxiedLogo ? (
+        <span className="relative inline-flex h-8 w-8 shrink-0 overflow-hidden rounded-lg border border-black/15 bg-white shadow-[0_0_0_1px_rgba(0,0,0,0.04)_inset]">
+          <span className="absolute inset-0 z-0 flex items-center justify-center bg-neutral-100 text-[10px] font-bold text-neutral-500">
+            {letter}
+          </span>
+          {/* eslint-disable-next-line @next/next/no-img-element */}
+          <img
+            data-step="api"
+            src={proxiedLogo}
+            alt=""
+            loading="lazy"
+            decoding="async"
+            className={imgClass}
+            onError={chainImageError}
+          />
+        </span>
+      ) : hasDomain ? (
+        <span className="relative inline-flex h-8 w-8 shrink-0 overflow-hidden rounded-lg border border-black/15 bg-white shadow-[0_0_0_1px_rgba(0,0,0,0.04)_inset]">
+          <span className="absolute inset-0 z-0 flex items-center justify-center bg-neutral-100 text-[10px] font-bold text-neutral-500">
+            {letter}
+          </span>
+          {/* eslint-disable-next-line @next/next/no-img-element */}
+          <img
+            data-step="clearbit"
+            src={clearbit}
+            alt=""
+            loading="lazy"
+            decoding="async"
+            className={imgClass}
+            onError={chainImageError}
+          />
+        </span>
       ) : (
         <div className="flex h-8 w-8 shrink-0 items-center justify-center overflow-hidden rounded-lg border border-black/15 bg-white text-xs font-bold text-neutral-500 shadow-[0_0_0_1px_rgba(0,0,0,0.04)_inset]">
-          {name.charAt(0).toUpperCase()}
+          {letter}
         </div>
       )}
       <div className="flex min-w-0 flex-col">
@@ -136,6 +194,7 @@ export function TrackerList({
           <TrackerCard
             name={searchResult.name}
             logo={searchResult.logo ?? searchResult.logoUrl}
+            domain={searchResult.domain ?? undefined}
             isSelected={selectedId === searchResult.id}
             onClick={() =>
               onSelect({
@@ -210,6 +269,7 @@ export function TrackerList({
               key={`pinned:${p.advertiser_id}`}
               name={p.name}
               logo={p.logo ?? undefined}
+              domain={p.domain ?? undefined}
               isSelected={selectedId === p.advertiser_id}
               onClick={() =>
                 onSelect({
@@ -229,6 +289,7 @@ export function TrackerList({
           <TrackerCard
             name={t.name}
             logo={t.logo ?? t.logoUrl ?? t.favicon}
+            domain={t.domain}
             activeAds={t.activeAds}
             newAdsLast7Days={t.newAdsLast7Days}
             isSelected={selectedId === t.id}

@@ -14,16 +14,6 @@ import { Copy } from "lucide-react";
 
 type StepId = 1 | 2 | 3 | 4;
 
-const NICHES: Array<{ id: string; label: string }> = [
-  { id: "beauty", label: "Beauty" },
-  { id: "fitness", label: "Fitness" },
-  { id: "fashion", label: "Fashion" },
-  { id: "home", label: "Home" },
-  { id: "pets", label: "Pets" },
-  { id: "supplements", label: "Supplements" },
-  { id: "other", label: "Other" },
-];
-
 function Stepper({ step }: { step: StepId }) {
   const items: Array<{ id: StepId; label: string }> = [
     { id: 1, label: "Your brand" },
@@ -95,7 +85,6 @@ export function IntelligenceOnboarding({
 
   // Step 1 — brand
   const [brand, setBrand] = useState<TTLookupResult | null>(null);
-  const [niche, setNiche] = useState<string>("");
   const [savingBrand, setSavingBrand] = useState(false);
   const [brandError, setBrandError] = useState<string | null>(null);
 
@@ -112,9 +101,9 @@ export function IntelligenceOnboarding({
     void refreshSavedCompetitors();
   }, [refreshSavedCompetitors]);
 
-  const canContinueStep1 = Boolean(brand && niche);
+  const canContinueStep1 = Boolean(brand);
   const saveBrand = useCallback(async () => {
-    if (!brand || !niche || savingBrand) return;
+    if (!brand || savingBrand) return;
     setSavingBrand(true);
     setBrandError(null);
     try {
@@ -126,7 +115,6 @@ export function IntelligenceOnboarding({
           name: brand.name,
           logo: brand.logo ?? brand.logoUrl ?? null,
           domain: brand.domain ?? null,
-          niche,
         }),
       });
       const json = (await res.json().catch(() => ({}))) as { error?: string };
@@ -137,7 +125,7 @@ export function IntelligenceOnboarding({
     } finally {
       setSavingBrand(false);
     }
-  }, [brand, niche, savingBrand]);
+  }, [brand, savingBrand]);
 
   // Step 3 — top ads
   const [activeCompetitorId, setActiveCompetitorId] = useState<string | null>(null);
@@ -276,7 +264,7 @@ export function IntelligenceOnboarding({
               <div>
                 <p className="text-sm font-medium text-white/85">Your brand</p>
                 <p className="mt-1 text-xs text-white/45">
-                  Enter your brand domain or name, then pick a niche.
+                  Enter your brand domain or name to connect TrendTrack. If you don’t have it yet, you can skip and start with competitors.
                 </p>
               </div>
 
@@ -290,31 +278,19 @@ export function IntelligenceOnboarding({
                   <p className="mt-1 text-sm text-white/85">{brand ? brand.name : "—"}</p>
                   <p className="mt-0.5 text-xs text-white/45">{brand?.domain?.trim() || ""}</p>
                 </div>
-
-                <div className="rounded-xl border border-white/10 bg-black/20 p-3">
-                  <p className="text-[11px] font-semibold uppercase tracking-[0.12em] text-white/45">
-                    Niche
-                  </p>
-                  <select
-                    value={niche}
-                    onChange={(e) => setNiche(e.target.value)}
-                    className="mt-2 h-10 w-full rounded-xl border border-white/10 bg-black/30 px-3 text-sm text-white/85 outline-none focus:border-violet-500/50"
-                  >
-                    <option value="" disabled>
-                      Select a niche…
-                    </option>
-                    {NICHES.map((n) => (
-                      <option key={n.id} value={n.id}>
-                        {n.label}
-                      </option>
-                    ))}
-                  </select>
-                </div>
               </div>
 
               {brandError ? <p className="text-xs text-red-400">{brandError}</p> : null}
 
-              <div className="flex flex-wrap items-center justify-end gap-2">
+              <div className="flex flex-wrap items-center justify-between gap-2">
+                <button
+                  type="button"
+                  onClick={() => setStep(2)}
+                  className="rounded-xl border border-white/10 bg-white/[0.03] px-4 py-2 text-sm font-semibold text-white/70 transition hover:bg-white/[0.06]"
+                  title="Skip brand connection"
+                >
+                  Don’t have my Meta Ads Account right now
+                </button>
                 <button
                   type="button"
                   onClick={saveBrand}
