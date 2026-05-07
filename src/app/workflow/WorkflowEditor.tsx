@@ -684,6 +684,13 @@ type FlowWorkspaceProps = {
    * lags the canvas by ~200ms due to debounced sync.
    */
   canvasProjectFlushRef?: React.MutableRefObject<(() => WorkflowProjectStateV1) | null>;
+  /**
+   * Write-through persistence: invoked on every nodes/edges change with the merged
+   * project snapshot, so the parent can write directly to localStorage without
+   * waiting for the React state cycle / debounced sync. Critical for not losing
+   * connections when the user reloads quickly after wiring nodes.
+   */
+  onCanvasPersist?: (snapshot: WorkflowProjectStateV1) => void;
 };
 
 function WorkflowPagesPanel({
@@ -2595,6 +2602,7 @@ function WorkflowFlowWorkspace({
   onJoinShareWorkspace,
   joinShareWorkspaceBusy = false,
   canvasProjectFlushRef,
+  onCanvasPersist,
 }: FlowWorkspaceProps) {
   const { screenToFlowPosition, flowToScreenPosition, getInternalNode, getNodes, getEdges, getViewport } =
     useReactFlow();
@@ -3207,6 +3215,11 @@ function WorkflowFlowWorkspace({
     return sourceKindFromNodeHandle(fromNode, from.handleId);
   }, [placementPicker, nodes]);
 
+  /**
+   * Sync the live React Flow graph back into the parent `workflowProject` state.
+   * Debounced so we don't churn during multi-pixel drags. Kept tight (~80ms) to
+   * minimise the window where a fast reload could miss a pending connection.
+   */
   useEffect(() => {
     const id = project.activePageId;
     const t = window.setTimeout(() => {
@@ -3214,9 +3227,45 @@ function WorkflowFlowWorkspace({
         ...prev,
         pages: prev.pages.map((p) => (p.id === id ? { ...p, nodes, edges } : p)),
       }));
-    }, 200);
+    }, 80);
     return () => window.clearTimeout(t);
   }, [nodes, edges, project.activePageId, setProject]);
+
+  /**
+   * Write-through persistence: bypasses the debounced React state cycle and writes
+   * the canvas state straight to localStorage on every nodes/edges mutation. This is
+   * the safety net that guarantees connections / placements survive a fast reload
+   * (Cmd+R) even if `setProject` hasn't flushed yet and `pagehide` happens to be
+   * unreliable on the user's browser.
+   *
+   * Debounced to ~50ms to coalesce rapid changes (drag) without delaying long enough
+   * for users to lose work.
+   */
+  useEffect(() => {
+    if (!onCanvasPersist) return;
+    const id = project.activePageId;
+    const handle = window.setTimeout(() => {
+      const safeClone = <T,>(value: T): T => {
+        try {
+          return structuredClone(value);
+        } catch {
+          return JSON.parse(JSON.stringify(value)) as T;
+        }
+      };
+      const snapshot: WorkflowProjectStateV1 = {
+        ...project,
+        pages: project.pages.map((p) =>
+          p.id === id ? { ...p, nodes: safeClone(nodes), edges: safeClone(edges) } : p,
+        ),
+      };
+      try {
+        onCanvasPersist(snapshot);
+      } catch {
+        /* best-effort write-through */
+      }
+    }, 50);
+    return () => window.clearTimeout(handle);
+  }, [nodes, edges, project, onCanvasPersist]);
 
   useEffect(() => {
     if (!canvasProjectFlushRef) return;
@@ -5206,6 +5255,29 @@ export function WorkflowEditor({
   }, [workflowHydrated, storageScope, resolvedSpaceId, workflowProject, spaceSource]);
 
   /**
+   * Write-through persistence callback handed to `WorkflowFlowWorkspace`. The child
+   * invokes this on every nodes/edges mutation (debounced ~50ms) so the canvas
+   * lands in localStorage even before the parent `workflowProject` state has
+   * caught up via the debounced sync. Without this, fast Cmd+R reloads after
+   * making a connection would lose the new edge — pagehide is not a guarantee
+   * (some browsers / devtools workflows skip it).
+   *
+   * Viewers of shared workflows are read-only — never touch their localStorage.
+   */
+  const persistCanvasNow = useCallback(
+    (snapshot: WorkflowProjectStateV1) => {
+      if (storageScope === null) return;
+      if (spaceSource === "shared" && spaceRole === "viewer") return;
+      try {
+        saveProjectForSpace(storageScope, resolvedSpaceId, snapshot);
+      } catch {
+        /* best-effort, quota may have been exceeded */
+      }
+    },
+    [storageScope, resolvedSpaceId, spaceSource, spaceRole],
+  );
+
+  /**
    * Last-chance flush before the page is hidden/unloaded.
    *
    * The canvas autosave is debounced (200ms) and so is the cloud sync (1500ms). If the
@@ -5952,6 +6024,7 @@ export function WorkflowEditor({
                     readOnly={workspaceReadOnly}
                     onRunLog={appendRunHistory}
                     canvasProjectFlushRef={canvasProjectFlushRef}
+                    onCanvasPersist={persistCanvasNow}
                     showSharePreviewCta={loadedFromShareLink}
                     sharePreviewDuplicateLabel={
                       authUserId ? "Duplicate to my workflows" : "Sign up to duplicate"
