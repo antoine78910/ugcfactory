@@ -2889,29 +2889,21 @@ export function AdAssetNode({ id, data, selected }: NodeProps<AdAssetNodeType>) 
         }
         if (frameCacheWrites.size > 0) {
           nodesForVideoInputs = nodesForVideoInputs.map((n) => {
-            const patchData = frameCacheWrites.get(n.id);
-            if (!patchData) return n;
+            const patchVal = frameCacheWrites.get(n.id);
+            if (!patchVal) return n;
             return {
               ...n,
               data: {
                 ...(n.data as AdAssetNodeData),
-                ...patchData,
+                ...patchVal,
               },
             } as WorkflowCanvasNode;
           });
-          setNodes((prev) =>
-            prev.map((n) => {
-              const patchData = frameCacheWrites.get(n.id);
-              if (!patchData) return n;
-              return {
-                ...n,
-                data: {
-                  ...(n.data as AdAssetNodeData),
-                  ...patchData,
-                },
-              } as WorkflowCanvasNode;
-            }),
-          );
+          // Cross-page-safe: route through context patch so cached frames persist
+          // even if the user navigated to another workflow page mid-run.
+          for (const [nodeId, patchVal] of frameCacheWrites) {
+            patch(nodeId, patchVal);
+          }
         }
       }
       const linkedFromStartPortStrict = collectLinkedImageUrlsForHandles(nodesForVideoInputs, edges, id, ["startImage"]);

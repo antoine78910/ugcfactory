@@ -12,6 +12,7 @@ import { cloneWorkflowSelection } from "../workflowClone";
 import type { WorkflowCanvasNode } from "../workflowFlowTypes";
 import { isVideoFile, measureImageAspectFromObjectUrl, measureVideoAspectFromObjectUrl } from "../workflowMediaAspect";
 import { WorkflowMediaTrimDialog } from "../WorkflowMediaTrimDialog";
+import { useWorkflowNodePatch } from "../workflowNodePatchContext";
 import { WorkflowNodeContextToolbar } from "./WorkflowNodeContextToolbar";
 
 export type ImageRefNodeData = {
@@ -134,6 +135,12 @@ const noop = () => {};
 
 export function ImageRefNode({ id, data }: NodeProps<ImageRefNodeType>) {
   const { getNodes, getEdges, setNodes, setEdges } = useReactFlow();
+  /**
+   * Cross-page-safe data patch (works even if user navigates pages mid-upload).
+   * Falls back to a no-op outside the patch provider, but inside the workflow
+   * editor it patches `project.pages` directly.
+   */
+  const patchData = useWorkflowNodePatch();
   const [hovered, setHovered] = useState(false);
   const [lightbox, setLightbox] = useState(false);
   const [menuOpen, setMenuOpen] = useState(false);
@@ -167,20 +174,8 @@ export function ImageRefNode({ id, data }: NodeProps<ImageRefNodeType>) {
   const commitTitle = useCallback(() => {
     const next = titleDraft.trim() || "Upload";
     setTitleEditing(false);
-    setNodes((prev) =>
-      prev.map((n) =>
-        n.id === id
-          ? ({
-              ...n,
-              data: {
-                ...n.data,
-                label: next,
-              },
-            } as WorkflowCanvasNode)
-          : n,
-      ),
-    );
-  }, [id, setNodes, titleDraft]);
+    patchData(id, { label: next });
+  }, [id, patchData, titleDraft]);
 
   const clearLeave = () => {
     if (leaveTimer.current) {
@@ -262,63 +257,33 @@ export function ImageRefNode({ id, data }: NodeProps<ImageRefNodeType>) {
           // Keep localPreviewUrl alive until hosted media is written in node state.
         }
         // Show the newly selected media immediately while CDN upload runs.
-        setNodes((prev) =>
-          prev.map((n) =>
-            n.id === id
-              ? ({
-                  ...n,
-                  data: {
-                    ...n.data,
-                    imageUrl: localPreviewUrl,
-                    mediaKind,
-                    source: "upload",
-                    intrinsicAspect: intrinsicAspect && Number.isFinite(intrinsicAspect) ? intrinsicAspect : undefined,
-                    videoExtractedFirstFrameUrl: undefined,
-                    videoExtractedLastFrameUrl: undefined,
-                  },
-                } as WorkflowCanvasNode)
-              : n,
-          ),
-        );
+        patchData(id, {
+          imageUrl: localPreviewUrl,
+          mediaKind,
+          source: "upload",
+          intrinsicAspect: intrinsicAspect && Number.isFinite(intrinsicAspect) ? intrinsicAspect : undefined,
+          videoExtractedFirstFrameUrl: undefined,
+          videoExtractedLastFrameUrl: undefined,
+        });
         const hosted = await uploadFileToCdn(file, { kind: mediaKind });
-        setNodes((prev) =>
-          prev.map((n) =>
-            n.id === id
-              ? ({
-                  ...n,
-                  data: {
-                    ...n.data,
-                    imageUrl: hosted,
-                    mediaKind,
-                    source: "upload",
-                    intrinsicAspect: intrinsicAspect && Number.isFinite(intrinsicAspect) ? intrinsicAspect : undefined,
-                    videoExtractedFirstFrameUrl: undefined,
-                    videoExtractedLastFrameUrl: undefined,
-                  },
-                } as WorkflowCanvasNode)
-              : n,
-          ),
-        );
+        patchData(id, {
+          imageUrl: hosted,
+          mediaKind,
+          source: "upload",
+          intrinsicAspect: intrinsicAspect && Number.isFinite(intrinsicAspect) ? intrinsicAspect : undefined,
+          videoExtractedFirstFrameUrl: undefined,
+          videoExtractedLastFrameUrl: undefined,
+        });
         URL.revokeObjectURL(localPreviewUrl);
         toast.success("Media replaced");
       } catch (err) {
         URL.revokeObjectURL(localPreviewUrl);
         // Restore previous media if upload failed.
-        setNodes((prev) =>
-          prev.map((n) =>
-            n.id === id
-              ? ({
-                  ...n,
-                  data: {
-                    ...n.data,
-                    imageUrl: previousUrl,
-                    mediaKind: previousMediaKind,
-                    intrinsicAspect: previousAspect,
-                  },
-                } as WorkflowCanvasNode)
-              : n,
-          ),
-        );
+        patchData(id, {
+          imageUrl: previousUrl,
+          mediaKind: previousMediaKind,
+          intrinsicAspect: previousAspect,
+        });
         toast.error("Replace failed", {
           description: err instanceof Error ? err.message : "Please try another file.",
         });
@@ -326,7 +291,7 @@ export function ImageRefNode({ id, data }: NodeProps<ImageRefNodeType>) {
         setReplacing(false);
       }
     },
-    [data.imageUrl, data.intrinsicAspect, data.mediaKind, id, setNodes],
+    [data.imageUrl, data.intrinsicAspect, data.mediaKind, id, patchData],
   );
 
   const onReplaceFileChange = useCallback(
@@ -350,20 +315,11 @@ export function ImageRefNode({ id, data }: NodeProps<ImageRefNodeType>) {
       setFrameExtractBusy(which);
       try {
         const extracted = await extractVideoFrameJpegDataUrlFromUrl(src, which === "last");
-        setNodes((prev) =>
-          prev.map((n) =>
-            n.id === id
-              ? ({
-                  ...n,
-                  data: {
-                    ...n.data,
-                    ...(which === "first"
-                      ? { videoExtractedFirstFrameUrl: extracted }
-                      : { videoExtractedLastFrameUrl: extracted }),
-                  },
-                } as WorkflowCanvasNode)
-              : n,
-          ),
+        patchData(
+          id,
+          which === "first"
+            ? { videoExtractedFirstFrameUrl: extracted }
+            : { videoExtractedLastFrameUrl: extracted },
         );
         toast.success(which === "first" ? "Start image extracted" : "End image extracted");
       } catch (err) {
@@ -374,7 +330,7 @@ export function ImageRefNode({ id, data }: NodeProps<ImageRefNodeType>) {
         setFrameExtractBusy(null);
       }
     },
-    [data.imageUrl, id, isVideo, setNodes],
+    [data.imageUrl, id, isVideo, patchData],
   );
 
   /**
@@ -410,16 +366,7 @@ export function ImageRefNode({ id, data }: NodeProps<ImageRefNodeType>) {
           updates.videoExtractedLastFrameUrl = last;
         }
         if (Object.keys(updates).length === 0) return;
-        setNodes((prev) =>
-          prev.map((n) =>
-            n.id === id
-              ? ({
-                  ...n,
-                  data: { ...n.data, ...updates },
-                } as WorkflowCanvasNode)
-              : n,
-          ),
-        );
+        patchData(id, updates);
       } catch {
         // Silent: the user can still trigger extraction manually by double-clicking the bubbles.
         autoExtractedForUrlRef.current = null;
@@ -435,7 +382,7 @@ export function ImageRefNode({ id, data }: NodeProps<ImageRefNodeType>) {
     frameExtractBusy,
     id,
     isVideo,
-    setNodes,
+    patchData,
   ]);
 
   useEffect(() => {

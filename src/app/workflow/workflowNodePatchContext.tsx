@@ -3,6 +3,7 @@
 import { createContext, useContext, type ReactNode } from "react";
 
 import type { AdAssetNodeData } from "./nodes/AdAssetNode";
+import type { ImageRefNodeData } from "./nodes/ImageRefNode";
 import type { TextPromptNodeData } from "./nodes/TextPromptNode";
 import type { PromptListNodeData } from "./workflowPromptListTypes";
 import type { StickyNoteNodeData } from "./workflowStickyNoteTypes";
@@ -15,7 +16,8 @@ type PatchFn = (
       WorkflowGroupNodeData &
       StickyNoteNodeData &
       TextPromptNodeData &
-      PromptListNodeData
+      PromptListNodeData &
+      ImageRefNodeData
   >,
 ) => void;
 

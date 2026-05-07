@@ -857,6 +857,20 @@ type ChromeProps = {
   setEdges: React.Dispatch<React.SetStateAction<Edge[]>>;
   /** Immediately persist a nodes/edges snapshot into the parent `project` state (avoids debounce loss on refresh). */
   commitProjectSnapshotNow: (nodes: WorkflowCanvasNode[], edges: Edge[]) => void;
+  /** Patch a node's data on whichever page it lives on (cross-page-safe for async finalizers). */
+  patchNodeDataAcrossPages: (
+    nodeId: string,
+    patch: Partial<
+      AdAssetNodeData &
+        WorkflowGroupNodeData &
+        StickyNoteNodeData &
+        TextPromptNodeData &
+        PromptListNodeData &
+        ImageRefNodeData
+    >,
+  ) => void;
+  /** Remove a node and incident edges from any page (used to clean up failed-upload temp nodes). */
+  removeNodeAcrossPages: (nodeId: string) => void;
   activePageId: string;
   activeName: string;
   selectedNodes: WorkflowCanvasNode[];
@@ -895,6 +909,8 @@ function WorkflowReactFlowChrome({
   setNodes,
   setEdges,
   commitProjectSnapshotNow,
+  patchNodeDataAcrossPages,
+  removeNodeAcrossPages,
   activePageId,
   activeName,
   selectedNodes,
@@ -1386,37 +1402,37 @@ function WorkflowReactFlowChrome({
           setFrameOpen(false);
 
           const hostedUrl = await uploadFileToCdn(file, { kind: isVideo ? "video" : "image" });
-          setNodes((prev) =>
-            prev.map((n) => {
-              if (n.id !== tempNode.id || n.type !== "imageRef") return n;
-              const updatedNode: ImageRefNodeType = {
-                ...n,
-                data: {
-                  ...n.data,
-                  imageUrl: hostedUrl,
-                  label: baseName,
-                  source: "upload",
-                  mediaKind: isVideo ? "video" : "image",
-                  intrinsicAspect: ar,
-                },
-              };
-              return updatedNode;
-            }),
-          );
+          // Cross-page-safe finalize: works even if the user navigated to another page during upload.
+          patchNodeDataAcrossPages(tempNode.id, {
+            imageUrl: hostedUrl,
+            label: baseName,
+            source: "upload",
+            mediaKind: isVideo ? "video" : "image",
+            intrinsicAspect: ar,
+          });
           toast.success("Node added");
           URL.revokeObjectURL(objectUrl);
         } catch {
           updatePendingImageRefConnect(null);
           if (tempNodeId) {
-            setNodes((prev) => prev.filter((n) => n.id !== tempNodeId));
-            setEdges((eds) => eds.filter((e2) => e2.source !== tempNodeId && e2.target !== tempNodeId));
+            removeNodeAcrossPages(tempNodeId);
           }
           URL.revokeObjectURL(objectUrl);
           toast.error("Could not read file", { description: "Try another image or video." });
         }
       })();
     },
-    [screenToFlowPosition, getNodes, setEdges, setNodes, setAddOpen, setFrameOpen, updatePendingImageRefConnect],
+    [
+      screenToFlowPosition,
+      getNodes,
+      setEdges,
+      setNodes,
+      setAddOpen,
+      setFrameOpen,
+      updatePendingImageRefConnect,
+      patchNodeDataAcrossPages,
+      removeNodeAcrossPages,
+    ],
   );
 
   const onUploadFileChange = useCallback(
@@ -2254,22 +2270,13 @@ function WorkflowReactFlowChrome({
                 });
                 setNodes((prev) => [...prev, tempNode]);
                 const hostedUrl = await uploadFileToCdn(file, { kind: isVideo ? "video" : "image" });
-                setNodes((prev) =>
-                  prev.map((n) => {
-                    if (n.id !== tempNode.id || n.type !== "imageRef") return n;
-                    return {
-                      ...n,
-                      data: {
-                        ...(n.data as ImageRefNodeData),
-                        imageUrl: hostedUrl,
-                        label: baseName,
-                        source: "upload",
-                        mediaKind: isVideo ? "video" : "image",
-                        intrinsicAspect: ar,
-                      },
-                    } as WorkflowCanvasNode;
-                  }),
-                );
+                patchNodeDataAcrossPages(tempNode.id, {
+                  imageUrl: hostedUrl,
+                  label: baseName,
+                  source: "upload",
+                  mediaKind: isVideo ? "video" : "image",
+                  intrinsicAspect: ar,
+                });
                 URL.revokeObjectURL(objectUrl);
                 toast.success("Node added");
               } catch {
@@ -2680,6 +2687,86 @@ function WorkflowFlowWorkspace({
     [project, setProject, onCanvasPersist],
   );
 
+  /**
+   * Patch a node's `data` regardless of which page it currently lives on.
+   *
+   * Why: async tasks (CDN uploads, generation polling, frame extraction) often
+   * resolve AFTER the user has navigated to a different workflow page. A plain
+   * `setNodes((nds) => nds.map(...))` only sees the active page's React Flow
+   * state, so the target node is missing and the patch is silently dropped —
+   * leading to "lost" output URLs on upload nodes / image generator nodes when
+   * switching pages mid-run. This helper writes through `setProject` (which
+   * has every page) AND to React Flow live state when applicable.
+   */
+  const patchNodeDataAcrossPages = useCallback(
+    (
+      nodeId: string,
+      patch: Partial<
+        AdAssetNodeData &
+          WorkflowGroupNodeData &
+          StickyNoteNodeData &
+          TextPromptNodeData &
+          PromptListNodeData &
+          ImageRefNodeData
+      >,
+    ) => {
+      if (!nodeId || !patch || Object.keys(patch).length === 0) return;
+      setProject((prev) => {
+        let touched = false;
+        const nextPages = prev.pages.map((p) => {
+          const idx = p.nodes.findIndex((n) => n.id === nodeId);
+          if (idx === -1) return p;
+          touched = true;
+          const nextNodes = p.nodes.map((n, i) =>
+            i === idx ? ({ ...n, data: { ...n.data, ...patch } } as WorkflowCanvasNode) : n,
+          );
+          return { ...p, nodes: nextNodes };
+        });
+        if (!touched) return prev;
+        return { ...prev, pages: nextPages };
+      });
+      setNodes((nds) => {
+        if (!nds.some((n) => n.id === nodeId)) return nds;
+        return nds.map((n) =>
+          n.id === nodeId
+            ? ({ ...n, data: { ...n.data, ...patch } } as WorkflowCanvasNode)
+            : n,
+        );
+      });
+    },
+    [setProject, setNodes],
+  );
+
+  /**
+   * Remove a node and any incident edges, regardless of which page it lives on.
+   * Used when an async upload fails and we need to clean up a temp node that
+   * may now belong to a non-active page.
+   */
+  const removeNodeAcrossPages = useCallback(
+    (nodeId: string) => {
+      if (!nodeId) return;
+      setProject((prev) => {
+        let touched = false;
+        const nextPages = prev.pages.map((p) => {
+          const hasNode = p.nodes.some((n) => n.id === nodeId);
+          const hasEdge = p.edges.some((e) => e.source === nodeId || e.target === nodeId);
+          if (!hasNode && !hasEdge) return p;
+          touched = true;
+          return {
+            ...p,
+            nodes: p.nodes.filter((n) => n.id !== nodeId),
+            edges: p.edges.filter((e) => e.source !== nodeId && e.target !== nodeId),
+          };
+        });
+        if (!touched) return prev;
+        return { ...prev, pages: nextPages };
+      });
+      setNodes((nds) => nds.filter((n) => n.id !== nodeId));
+      setEdges((eds) => eds.filter((e) => e.source !== nodeId && e.target !== nodeId));
+    },
+    [setProject, setNodes, setEdges],
+  );
+
   useEffect(() => {
     if (prevActiveId.current === project.activePageId) return;
     prevActiveId.current = project.activePageId;
@@ -2812,22 +2899,13 @@ function WorkflowFlowWorkspace({
               });
               setNodes((prev) => [...prev, tempNode]);
               const hostedUrl = await uploadFileToCdn(file, { kind: isVideo ? "video" : "image" });
-              setNodes((prev) =>
-                prev.map((n) => {
-                  if (n.id !== tempNode.id || n.type !== "imageRef") return n;
-                  return {
-                    ...n,
-                    data: {
-                      ...(n.data as ImageRefNodeData),
-                      imageUrl: hostedUrl,
-                      label: baseName,
-                      source: "upload",
-                      mediaKind: isVideo ? "video" : "image",
-                      intrinsicAspect: ar,
-                    },
-                  } as WorkflowCanvasNode;
-                }),
-              );
+              patchNodeDataAcrossPages(tempNode.id, {
+                imageUrl: hostedUrl,
+                label: baseName,
+                source: "upload",
+                mediaKind: isVideo ? "video" : "image",
+                intrinsicAspect: ar,
+              });
               URL.revokeObjectURL(objectUrl);
               added += 1;
             } catch {
@@ -2867,7 +2945,7 @@ function WorkflowFlowWorkspace({
         return;
       }
     },
-    [readOnly, screenToFlowPosition, setNodes],
+    [readOnly, screenToFlowPosition, setNodes, setUploadTrimState, patchNodeDataAcrossPages],
   );
 
   useEffect(() => {
@@ -3790,7 +3868,8 @@ function WorkflowFlowWorkspace({
           WorkflowGroupNodeData &
           StickyNoteNodeData &
           TextPromptNodeData &
-          PromptListNodeData
+          PromptListNodeData &
+          ImageRefNodeData
       >,
     ) => {
       const blockedAdAssetParamKeys: (keyof AdAssetNodeData)[] = [
@@ -3812,36 +3891,43 @@ function WorkflowFlowWorkspace({
         "motionAutoSettings",
         "motionBackgroundSource",
       ];
-      let blocked = false;
-      setNodes((nds) =>
-        nds.map((n) =>
-          n.id === nodeId
-            ? (() => {
-                if (runFromHereParamLock && n.type === "adAsset") {
-                  const hasBlockedKey = blockedAdAssetParamKeys.some((k) =>
-                    Object.prototype.hasOwnProperty.call(patch, k),
-                  );
-                  if (hasBlockedKey) {
-                    blocked = true;
-                    return n;
-                  }
-                }
-                return { ...n, data: { ...n.data, ...patch } } as WorkflowCanvasNode;
-              })()
-            : n,
-        ),
-      );
-      if (blocked) {
-        const now = Date.now();
-        if (now - runFromHereLockToastAtRef.current > 1400) {
-          runFromHereLockToastAtRef.current = now;
-          toast.message("Parameters locked during Run from here", {
-            description: "Wait for the chain to finish before editing module settings.",
-          });
+      // Honor the run-from-here parameter lock for adAsset modules: when active,
+      // skip patches that touch blocked keys on `adAsset` nodes (regardless of
+      // which page they live on).
+      if (runFromHereParamLock) {
+        let blocked = false;
+        // Find the node anywhere in the project to check its type.
+        const liveNodes = nodesEdgesRef.current?.nodes ?? [];
+        let targetNode: WorkflowCanvasNode | undefined = liveNodes.find((n) => n.id === nodeId);
+        if (!targetNode) {
+          for (const p of project.pages) {
+            const found = p.nodes.find((n) => n.id === nodeId);
+            if (found) {
+              targetNode = found as WorkflowCanvasNode;
+              break;
+            }
+          }
+        }
+        if (targetNode?.type === "adAsset") {
+          const hasBlockedKey = blockedAdAssetParamKeys.some((k) =>
+            Object.prototype.hasOwnProperty.call(patch, k),
+          );
+          if (hasBlockedKey) blocked = true;
+        }
+        if (blocked) {
+          const now = Date.now();
+          if (now - runFromHereLockToastAtRef.current > 1400) {
+            runFromHereLockToastAtRef.current = now;
+            toast.message("Parameters locked during Run from here", {
+              description: "Wait for the chain to finish before editing module settings.",
+            });
+          }
+          return;
         }
       }
+      patchNodeDataAcrossPages(nodeId, patch);
     },
-    [runFromHereParamLock, setNodes],
+    [runFromHereParamLock, project.pages, patchNodeDataAcrossPages],
   );
 
   const cloneSelection = useCallback(
@@ -4076,29 +4162,18 @@ function WorkflowFlowWorkspace({
             setFrameOpen(false);
 
             const hostedUrl = await uploadFileToCdn(file, { kind: isVideo ? "video" : "image" });
-            setNodes((prev) =>
-              prev.map((n) => {
-                if (n.id !== tempNode.id || n.type !== "imageRef") return n;
-                const updatedNode: ImageRefNodeType = {
-                  ...n,
-                  data: {
-                    ...n.data,
-                    imageUrl: hostedUrl,
-                    label: baseName,
-                    source: "upload",
-                    mediaKind: isVideo ? "video" : "image",
-                    intrinsicAspect: ar,
-                  },
-                };
-                return updatedNode;
-              }),
-            );
+            patchNodeDataAcrossPages(tempNode.id, {
+              imageUrl: hostedUrl,
+              label: baseName,
+              source: "upload",
+              mediaKind: isVideo ? "video" : "image",
+              intrinsicAspect: ar,
+            });
             toast.success("Image pasted to canvas");
             URL.revokeObjectURL(objectUrl);
           } catch {
             if (tempNodeId) {
-              setNodes((prev) => prev.filter((n) => n.id !== tempNodeId));
-              setEdges((eds) => eds.filter((e2) => e2.source !== tempNodeId && e2.target !== tempNodeId));
+              removeNodeAcrossPages(tempNodeId);
             }
             URL.revokeObjectURL(objectUrl);
             toast.error("Could not paste image", { description: "Try copying another image." });
@@ -4114,7 +4189,17 @@ function WorkflowFlowWorkspace({
     };
     window.addEventListener("paste", onPaste);
     return () => window.removeEventListener("paste", onPaste);
-  }, [readOnly, applyWorkflowPaste, screenToFlowPosition, setNodes, setEdges, setAddOpen, setFrameOpen]);
+  }, [
+    readOnly,
+    applyWorkflowPaste,
+    screenToFlowPosition,
+    setNodes,
+    setEdges,
+    setAddOpen,
+    setFrameOpen,
+    patchNodeDataAcrossPages,
+    removeNodeAcrossPages,
+  ]);
 
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
@@ -4508,6 +4593,8 @@ function WorkflowFlowWorkspace({
             setNodes={setNodes}
             setEdges={setEdges}
             commitProjectSnapshotNow={commitProjectSnapshotNow}
+            patchNodeDataAcrossPages={patchNodeDataAcrossPages}
+            removeNodeAcrossPages={removeNodeAcrossPages}
             activePageId={project.activePageId}
             activeName={activeName}
             selectedNodes={selectedNodes}
