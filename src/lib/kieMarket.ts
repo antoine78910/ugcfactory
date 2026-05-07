@@ -341,13 +341,27 @@ export async function kieMarketRecordInfo(taskId: string, overrideApiKey?: strin
       msg,
     );
 
+    /**
+     * Provider rate-limit messages (e.g. "Your call frequency is too high. Please try again later.")
+     * are surfaced verbatim by KIE. We *intentionally* do NOT retry these inside this short loop:
+     * the inner backoff (0 / 400 / 900 ms) is too tight and would amplify a 6-prompt batch into
+     * ~18 calls in 1.3 s, worsening the throttle. The outer poll loop has its own (much longer)
+     * backoff and is the right place to wait — and the route handler now translates this case to
+     * a "still pending" body so the run no longer aborts.
+     */
+    const isFrequencyThrottle = /\b(call )?frequency is too high\b|\bcall frequency\b/i.test(msg);
+
     lastError = new Error(
       msg
         ? msg
         : `Task status check failed (HTTP ${res.status}${code != null ? `, KIE code ${code}` : ""}).`,
     );
 
-    if ((retryableHttp || retryableCode || retryableMsg) && attempt < maxAttempts - 1) {
+    if (
+      (retryableHttp || retryableCode || retryableMsg) &&
+      !isFrequencyThrottle &&
+      attempt < maxAttempts - 1
+    ) {
       continue;
     }
 

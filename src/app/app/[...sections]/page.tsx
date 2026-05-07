@@ -3048,12 +3048,33 @@ export default function AppBrandWizard() {
       try {
         const pk = getPersonalApiKey();
         const qs = pk ? `&personalApiKey=${encodeURIComponent(pk)}` : "";
-        const res = await fetch(`/api/nanobanana/task?taskId=${encodeURIComponent(taskId)}${qs}`, {
-          method: "GET",
-          cache: "no-store",
-        });
-        const json = (await res.json()) as any;
-        if (!res.ok || !json.data) throw new Error(json.error || "Polling failed");
+        let res: Response;
+        try {
+          res = await fetch(`/api/nanobanana/task?taskId=${encodeURIComponent(taskId)}${qs}`, {
+            method: "GET",
+            cache: "no-store",
+          });
+        } catch {
+          // Network blip — wait for the next tick.
+          return;
+        }
+        // Transient HTTP failures (rate-limit / gateway errors): keep polling, do NOT abort.
+        if (
+          !res.ok &&
+          (res.status === 429 || res.status === 502 || res.status === 503 || res.status === 504)
+        ) {
+          return;
+        }
+        let json: any = null;
+        try {
+          json = await res.json();
+        } catch {
+          // Unparseable transient body — wait for the next tick.
+          if (!res.ok && res.status >= 500) return;
+          throw new Error(`Polling failed (HTTP ${res.status}).`);
+        }
+        if (!res.ok) throw new Error(json?.error || `Polling failed (HTTP ${res.status}).`);
+        if (!json?.data) return;
         if (cancelled) return;
 
         const s = json.data.successFlag ?? 0;

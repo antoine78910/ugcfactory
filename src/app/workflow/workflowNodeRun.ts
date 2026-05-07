@@ -649,10 +649,51 @@ export function mapWorkflowImageResolutionToStudio(res: string): "1K" | "2K" | "
 
 const WORKFLOW_STATUS_FETCH_TIMEOUT_MS = 90_000;
 const WORKFLOW_COMPLETE_TIMEOUT_MS = 8_000;
+/**
+ * Image poll interval, with jitter to desync parallel batches (a 6-prompt batch with
+ * a fixed 2 s interval used to hammer Kie at ~3 req/s and trigger
+ * "Your call frequency is too high. Please try again later." even though every job
+ * succeeded server-side. We back off progressively and add randomness so concurrent
+ * polls don't lock-step.
+ */
+const WORKFLOW_IMAGE_POLL_BASE_MS = 3_000;
+const WORKFLOW_IMAGE_POLL_MAX_MS = 9_000;
+const WORKFLOW_IMAGE_POLL_JITTER = 0.25;
+/**
+ * Total budget = ~12 minutes (90 polls × ~8 s avg incl. backoff). Way above the longest
+ * known nano-banana / pro generation, but still bounded so a truly-stuck job ends.
+ */
+const WORKFLOW_IMAGE_POLL_MAX_ROUNDS = 90;
+
+function imagePollDelayMs(attempt: number): number {
+  const grow = Math.min(WORKFLOW_IMAGE_POLL_MAX_MS, WORKFLOW_IMAGE_POLL_BASE_MS + attempt * 250);
+  const jitter = grow * WORKFLOW_IMAGE_POLL_JITTER;
+  return Math.max(1500, Math.floor(grow + (Math.random() * 2 - 1) * jitter));
+}
+
+function isImagePollTransientMessage(raw: string): boolean {
+  const m = raw.toLowerCase();
+  return (
+    /\bcall frequency\b/.test(m) ||
+    /frequency is too high/.test(m) ||
+    /\btoo many (requests|calls)\b/.test(m) ||
+    /\brate ?limit/.test(m) ||
+    /\bthrottl/.test(m) ||
+    /\b429\b|\b502\b|\b503\b|\b504\b/.test(m) ||
+    /try again later/.test(m) ||
+    /temporar/.test(m) ||
+    /timeout|timed out|deadline exceeded|gateway time/.test(m) ||
+    /fetch failed|failed to fetch|networkerror|load failed|econnreset|socket|und_err_socket|other side closed|aborted?/.test(
+      m,
+    ) ||
+    /service unavailable|bad gateway|server exception|internal error|busy|overload/.test(m)
+  );
+}
 
 async function pollNanoBananaTask(taskId: string, personalApiKey?: string): Promise<string> {
   const keyParam = personalApiKey ? `&personalApiKey=${encodeURIComponent(personalApiKey)}` : "";
-  for (let i = 0; i < 120; i++) {
+  let consecutiveTransient = 0;
+  for (let i = 0; i < WORKFLOW_IMAGE_POLL_MAX_ROUNDS; i++) {
     const ac = new AbortController();
     const timer = setTimeout(() => ac.abort(), WORKFLOW_STATUS_FETCH_TIMEOUT_MS);
     let res: Response | null = null;
@@ -663,13 +704,14 @@ async function pollNanoBananaTask(taskId: string, personalApiKey?: string): Prom
       });
     } catch {
       // Network hiccup or local timeout on one poll attempt shouldn't fail the whole generation.
-      await new Promise((r) => setTimeout(r, 1600));
+      consecutiveTransient = Math.min(consecutiveTransient + 1, 12);
+      await new Promise((r) => setTimeout(r, imagePollDelayMs(i + consecutiveTransient)));
       continue;
     } finally {
       clearTimeout(timer);
     }
     if (!res) {
-      await new Promise((r) => setTimeout(r, 1600));
+      await new Promise((r) => setTimeout(r, imagePollDelayMs(i)));
       continue;
     }
     const text = await res.text();
@@ -685,20 +727,57 @@ async function pollNanoBananaTask(taskId: string, personalApiKey?: string): Prom
       json = text.trim() ? (JSON.parse(text) as typeof json) : {};
     } catch {
       const snippet = text.slice(0, 200).replace(/\s+/g, " ");
+      // Treat unparseable bodies as transient when the HTTP status is also transient,
+      // otherwise surface to the user.
+      if (!res.ok && (res.status === 429 || res.status >= 500)) {
+        consecutiveTransient = Math.min(consecutiveTransient + 1, 12);
+        await new Promise((r) => setTimeout(r, imagePollDelayMs(i + consecutiveTransient)));
+        continue;
+      }
       throw new Error(
         res.ok ? `Invalid image task JSON: ${snippet}` : `Image status error (HTTP ${res.status}): ${snippet}`,
       );
     }
-    if (!res.ok) throw new Error(json.error?.trim() || `Image status failed (HTTP ${res.status}).`);
+    if (!res.ok) {
+      const errMsg = (json.error ?? "").trim();
+      // Transient HTTP from our own route or upstream: keep polling, the task usually completes.
+      if (
+        res.status === 429 ||
+        res.status === 502 ||
+        res.status === 503 ||
+        res.status === 504 ||
+        isImagePollTransientMessage(errMsg)
+      ) {
+        consecutiveTransient = Math.min(consecutiveTransient + 1, 12);
+        await new Promise((r) => setTimeout(r, imagePollDelayMs(i + consecutiveTransient)));
+        continue;
+      }
+      throw new Error(errMsg || `Image status failed (HTTP ${res.status}).`);
+    }
+    consecutiveTransient = 0;
     const d = json.data;
-    if (!d) throw new Error("No task data");
+    if (!d) {
+      // Server returned 200 but no `data`: treat as still pending rather than failing the whole run.
+      await new Promise((r) => setTimeout(r, imagePollDelayMs(i)));
+      continue;
+    }
     if (d.successFlag === 1) {
       const u = d.response?.resultImageUrl ?? d.response?.resultUrls?.[0];
       if (!u?.trim()) throw new Error("No image URL from provider");
       return u.trim();
     }
-    if (d.successFlag === -1) throw new Error(d.errorMessage?.trim() || "Image generation failed.");
-    await new Promise((r) => setTimeout(r, 2000));
+    if (d.successFlag === -1) {
+      const errMsg = d.errorMessage?.trim() ?? "";
+      // Some providers report rate-limit messages on a "failed" envelope even when the task
+      // is actually still running. If the message is transient-shaped, keep polling.
+      if (errMsg && isImagePollTransientMessage(errMsg)) {
+        consecutiveTransient = Math.min(consecutiveTransient + 1, 12);
+        await new Promise((r) => setTimeout(r, imagePollDelayMs(i + consecutiveTransient)));
+        continue;
+      }
+      throw new Error(errMsg || "Image generation failed.");
+    }
+    await new Promise((r) => setTimeout(r, imagePollDelayMs(i)));
   }
   throw new Error("Image generation timed out. Please try again.");
 }

@@ -148,12 +148,40 @@ async function pollNanoTask(taskId: string, personalApiKey?: string): Promise<st
   const max = 90;
   const keyParam = personalApiKey ? `&personalApiKey=${encodeURIComponent(personalApiKey)}` : "";
   for (let i = 0; i < max; i++) {
-    const res = await fetch(`/api/nanobanana/task?taskId=${encodeURIComponent(taskId)}${keyParam}`, { cache: "no-store" });
-    const json = (await res.json()) as {
+    let res: Response;
+    try {
+      res = await fetch(`/api/nanobanana/task?taskId=${encodeURIComponent(taskId)}${keyParam}`, {
+        cache: "no-store",
+      });
+    } catch {
+      // Network blip: keep polling.
+      await new Promise((r) => setTimeout(r, 3000));
+      continue;
+    }
+    let json: {
       data?: { successFlag?: number; response?: Record<string, unknown>; errorMessage?: string };
       error?: string;
-    };
-    if (!res.ok || !json.data) throw new Error(json.error || "Poll failed");
+    } = {};
+    try {
+      json = (await res.json()) as typeof json;
+    } catch {
+      if (!res.ok && res.status >= 500) {
+        await new Promise((r) => setTimeout(r, 3000));
+        continue;
+      }
+      throw new Error(`Poll failed (HTTP ${res.status}).`);
+    }
+    if (!res.ok) {
+      if (res.status === 429 || res.status === 502 || res.status === 503 || res.status === 504) {
+        await new Promise((r) => setTimeout(r, 3000));
+        continue;
+      }
+      throw new Error(json.error || `Poll failed (HTTP ${res.status}).`);
+    }
+    if (!json.data) {
+      await new Promise((r) => setTimeout(r, 2000));
+      continue;
+    }
     const s = json.data.successFlag ?? 0;
     if (s === 0) {
       await new Promise((r) => setTimeout(r, 1800));

@@ -128,12 +128,42 @@ function writeLocalAvatarHistory(items: StudioHistoryItem[]) {
 async function pollNanoTask(taskId: string, personalApiKey?: string): Promise<string[]> {
   const keyParam = personalApiKey ? `&personalApiKey=${encodeURIComponent(personalApiKey)}` : "";
   for (let i = 0; i < 90; i++) {
-    const res = await fetch(`/api/nanobanana/task?taskId=${encodeURIComponent(taskId)}${keyParam}`, { cache: "no-store" });
-    const json = (await res.json()) as {
+    let res: Response;
+    try {
+      res = await fetch(`/api/nanobanana/task?taskId=${encodeURIComponent(taskId)}${keyParam}`, {
+        cache: "no-store",
+      });
+    } catch {
+      // Network blip: keep polling instead of failing.
+      await new Promise((r) => setTimeout(r, 3000));
+      continue;
+    }
+    let json: {
       data?: { successFlag?: number; response?: Record<string, unknown>; errorMessage?: string };
       error?: string;
-    };
-    if (!res.ok || !json.data) throw new Error(json.error || "Poll failed");
+    } = {};
+    try {
+      json = (await res.json()) as typeof json;
+    } catch {
+      // Treat unparseable transient bodies as "still pending".
+      if (!res.ok && res.status >= 500) {
+        await new Promise((r) => setTimeout(r, 3000));
+        continue;
+      }
+      throw new Error(`Poll failed (HTTP ${res.status}).`);
+    }
+    if (!res.ok) {
+      // Transient upstream errors should not kill the run; the image usually still generates server-side.
+      if (res.status === 429 || res.status === 502 || res.status === 503 || res.status === 504) {
+        await new Promise((r) => setTimeout(r, 3000));
+        continue;
+      }
+      throw new Error(json.error || `Poll failed (HTTP ${res.status}).`);
+    }
+    if (!json.data) {
+      await new Promise((r) => setTimeout(r, 2500));
+      continue;
+    }
     if (json.data.successFlag === 0) {
       await new Promise((r) => setTimeout(r, 2500));
       continue;
