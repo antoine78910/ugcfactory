@@ -12,6 +12,7 @@ import {
 
 import { WORKFLOW_IMAGE_TO_JSON_USER_PROMPT } from "./workflowImageToJsonPreset";
 import { WORKFLOW_AVATAR_360_PROFILE_PROMPT } from "./workflowProfile360Preset";
+import { WORKFLOW_VIDEO_TO_PROMPT_USER_PROMPT } from "./workflowVideoToPromptPreset";
 
 const EDGE_STYLE = { stroke: "rgba(167, 139, 250, 0.5)", strokeWidth: 2 };
 
@@ -86,6 +87,30 @@ export function buildWorkflowImageToJsonBranch(origin: XYPosition): {
       label: "Image → JSON",
       prompt: WORKFLOW_IMAGE_TO_JSON_USER_PROMPT,
       assistantVisionPreset: "image_to_json",
+    },
+  );
+
+  return { nodes: [assistant], edges: [] };
+}
+
+/**
+ * Assistant (vision) preset that reads extracted video frames and returns one
+ * high-fidelity recreation prompt.
+ */
+export function buildWorkflowVideoToPromptBranch(origin: XYPosition): {
+  nodes: WorkflowCanvasNode[];
+  edges: Edge[];
+} {
+  const ox = origin.x;
+  const oy = origin.y;
+
+  const assistant = buildAdAssetNode(
+    "assistant",
+    { x: ox + 40, y: oy },
+    {
+      label: "Video → Prompt",
+      prompt: WORKFLOW_VIDEO_TO_PROMPT_USER_PROMPT,
+      assistantVisionPreset: "video_to_prompt",
     },
   );
 

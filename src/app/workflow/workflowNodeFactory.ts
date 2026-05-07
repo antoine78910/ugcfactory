@@ -30,7 +30,7 @@ export type BuildAdAssetNodeOptions = {
   /** Image-only preset flows (hides text prompt UI on the canvas). */
   imageWorkflowPreset?: "profile_360";
   /** Assistant: use vision API + preset developer instructions when set. */
-  assistantVisionPreset?: "image_to_json";
+  assistantVisionPreset?: "image_to_json" | "video_to_prompt";
   /** Video node was created from an upstream video output picker. */
   videoInputMode?: "seedance_only";
 };

@@ -545,7 +545,7 @@ export function PromptListNode({ id, data: rawData, selected }: NodeProps<Prompt
             </div>
           </>
           ) : editorOpen ? (
-            <div className="relative p-2.5">
+            <div className="relative min-h-[320px] p-2.5">
               <div className="space-y-1.5 opacity-35 blur-[1.5px]">
                 {nonEmptyLines.map((line, i) => (
                   <div
@@ -559,7 +559,7 @@ export function PromptListNode({ id, data: rawData, selected }: NodeProps<Prompt
                   </div>
                 ))}
               </div>
-              <div className="absolute inset-x-2.5 top-2.5 rounded-xl border border-violet-400/45 bg-[#15151a]/96 p-3 shadow-[0_18px_40px_rgba(0,0,0,0.45)] backdrop-blur-sm">
+              <div className="absolute inset-2.5 flex min-h-0 flex-col rounded-xl border border-violet-400/45 bg-[#15151a]/96 p-3 shadow-[0_18px_40px_rgba(0,0,0,0.45)] backdrop-blur-sm">
                 <textarea
                   value={text}
                   onChange={(e) => setText(e.target.value)}
@@ -576,7 +576,7 @@ export function PromptListNode({ id, data: rawData, selected }: NodeProps<Prompt
                   }}
                   placeholder="Type text here... (Ctrl/Cmd + Enter to save)"
                   rows={6}
-                  className="nodrag nopan nowheel mb-3 min-h-[150px] w-full resize-y border-none bg-transparent px-0 text-[13px] leading-relaxed text-white/90 placeholder:text-white/30 outline-none studio-params-scroll"
+                  className="nodrag nopan nowheel mb-3 min-h-[150px] w-full flex-1 resize-none border-none bg-transparent px-0 text-[13px] leading-relaxed text-white/90 placeholder:text-white/30 outline-none studio-params-scroll"
                 />
                 <div className="flex items-center justify-between">
                   <span className="inline-flex h-7 items-center justify-center rounded-full border border-white/12 bg-white/[0.06] px-2 text-[12px] font-semibold text-white/70">
@@ -601,17 +601,6 @@ export function PromptListNode({ id, data: rawData, selected }: NodeProps<Prompt
                     </button>
                   </div>
                 </div>
-              </div>
-              <div className="mt-2 flex justify-end">
-                <button
-                  type="button"
-                  className="nodrag nopan inline-flex h-8 items-center rounded-full border border-white/12 bg-white/[0.06] px-3 text-[11px] font-semibold text-white/80 hover:bg-white/[0.1]"
-                  onClick={() => {
-                    saveEditorText();
-                  }}
-                >
-                  Save
-                </button>
               </div>
             </div>
           ) : (

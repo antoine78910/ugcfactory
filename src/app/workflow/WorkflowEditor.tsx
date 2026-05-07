@@ -157,8 +157,10 @@ import {
 import {
   buildWorkflow360ProfileBranch,
   buildWorkflowImageToJsonBranch,
+  buildWorkflowVideoToPromptBranch,
 } from "./workflowProjectPipeline";
 import { WORKFLOW_IMAGE_TO_JSON_USER_PROMPT } from "./workflowImageToJsonPreset";
+import { WORKFLOW_VIDEO_TO_PROMPT_USER_PROMPT } from "./workflowVideoToPromptPreset";
 import {
   isVideoFile,
   measureImageAspectFromObjectUrl,
@@ -481,6 +483,7 @@ function targetHandleForNewNodeFromSourceKind(
       if (sourceKind === "text") return "text";
       if (sourceKind === "image")
         return d.assistantVisionPreset === "image_to_json" ? "references" : "startImage";
+      if (sourceKind === "video") return d.assistantVisionPreset === "video_to_prompt" ? "inVideo" : null;
       return null;
     }
     if (kind === "website") {
@@ -1234,6 +1237,24 @@ function WorkflowReactFlowChrome({
     toast.success("Image → JSON assistant added — connect an HTTPS image.");
   }, [commitProjectSnapshotNow, getEdges, getNodes, screenToFlowPosition, setNodes, setEdges, setAddOpen, setFrameOpen]);
 
+  const addWorkflowVideoToPromptBranch = useCallback(() => {
+    const position = screenToFlowPosition({
+      x: window.innerWidth / 2,
+      y: window.innerHeight / 2,
+    });
+    const built = buildWorkflowVideoToPromptBranch(position);
+    const nodesSnap = getNodes() as WorkflowCanvasNode[];
+    const edgesSnap = getEdges();
+    const nextNodes = [...nodesSnap, ...built.nodes];
+    const nextEdges = [...edgesSnap, ...built.edges];
+    setNodes((prev) => [...prev, ...built.nodes]);
+    setEdges((prev) => [...prev, ...built.edges]);
+    commitProjectSnapshotNow(nextNodes, nextEdges);
+    setAddOpen(false);
+    setFrameOpen(false);
+    toast.success("Video → Prompt assistant added — connect a video and run.");
+  }, [commitProjectSnapshotNow, getEdges, getNodes, screenToFlowPosition, setNodes, setEdges, setAddOpen, setFrameOpen]);
+
   const [addPlusTab, setAddPlusTab] = useState<"basics" | "upload">("basics");
   const [avatarPickerOpen, setAvatarPickerOpen] = useState(false);
   const [avatarUrls, setAvatarUrls] = useState<string[]>([]);
@@ -1871,6 +1892,13 @@ function WorkflowReactFlowChrome({
                       iconShellClass="border-emerald-500/45 bg-emerald-950/80"
                       isNew
                       onClick={() => addWorkflowImageToJsonBranch()}
+                    />
+                    <WorkflowAddPaletteRow
+                      icon={Clapperboard}
+                      label="Video → Prompt (recreate)"
+                      iconShellClass="border-emerald-500/45 bg-emerald-950/80"
+                      isNew
+                      onClick={() => addWorkflowVideoToPromptBranch()}
                     />
                     <WorkflowAddPaletteRow
                       icon={Sparkles}
@@ -4941,6 +4969,19 @@ function WorkflowFlowWorkspace({
                   Video generator (from video output) is limited to Seedance 2 / Seedance 2 Fast. Seedance 2 Fast is
                   preselected.
                 </p>
+                <button
+                  type="button"
+                  className="rounded-lg border border-white/10 bg-white/[0.06] px-3 py-2 text-left text-[13px] font-medium text-white/90 transition hover:border-emerald-400/40 hover:bg-emerald-500/15"
+                  onClick={() =>
+                    placeNodeAtPicker("assistant", {
+                      label: "Video → Prompt",
+                      prompt: WORKFLOW_VIDEO_TO_PROMPT_USER_PROMPT,
+                      assistantVisionPreset: "video_to_prompt",
+                    })
+                  }
+                >
+                  Video → Prompt
+                </button>
                 <button
                   type="button"
                   className="rounded-lg border border-white/10 bg-white/[0.06] px-3 py-2 text-left text-[13px] font-medium text-white/90 transition hover:border-violet-400/35 hover:bg-violet-500/15"

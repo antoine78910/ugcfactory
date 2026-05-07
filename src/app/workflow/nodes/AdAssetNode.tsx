@@ -53,6 +53,7 @@ import {
 import { refundPlatformCredits } from "@/lib/refundPlatformCredits";
 import { studioVideoDurationSecOptions } from "@/lib/studioVideoModelCapabilities";
 import { uploadFileToCdn } from "@/lib/uploadBlobUrlToCdn";
+import { uploadBlobUrlToCdn } from "@/lib/uploadBlobUrlToCdn";
 import { parseWorkflowRunCorrelationFromLabel } from "@/lib/workflowRunCorrelation";
 
 import {
@@ -72,6 +73,7 @@ import {
   WORKFLOW_AVATAR_360_PROFILE_DEFAULT_MODEL,
   WORKFLOW_AVATAR_360_PROFILE_PROMPT,
 } from "../workflowProfile360Preset";
+import { WORKFLOW_VIDEO_TO_PROMPT_USER_PROMPT } from "../workflowVideoToPromptPreset";
 import { keepWheelInsideScrollable } from "../workflowWheelScroll";
 import type { WorkflowCanvasNode } from "../workflowFlowTypes";
 import {
@@ -139,8 +141,8 @@ export type AdAssetNodeData = {
   assistantMode?: "input" | "output";
   /** Assistant run export behavior. */
   assistantExportMode?: "text" | "list";
-  /** When set, `/api/gpt/workflow-assistant-chat` uses vision + preset developer copy. */
-  assistantVisionPreset?: "image_to_json";
+  /** When set, assistant uses a dedicated vision preset. */
+  assistantVisionPreset?: "image_to_json" | "video_to_prompt";
   /** Website module URL input. */
   websiteUrl?: string;
   /** Website module output behavior after run. */
@@ -305,6 +307,7 @@ const WORKFLOW_ASSISTANT_CREDITS_BY_MODEL: Record<"claude-sonnet-4-5" | "gpt-5o"
   "claude-sonnet-4-5": 2,
   "gpt-5o": 0,
 };
+const WORKFLOW_ASSISTANT_VIDEO_TO_PROMPT_CREDITS = 2;
 /** Match Video Generator sidebar text ports only (legacy center `in` handle removed). */
 const WORKFLOW_TEXT_INPUT_HANDLES = ["text", "inText"] as const;
 const WORKFLOW_PENDING_MEDIA_PREFIX = "__workflow_pending_media__:";
@@ -454,10 +457,10 @@ async function waitVideoMetadata(video: HTMLVideoElement): Promise<void> {
   });
 }
 
-async function extractVideoFrameJpegDataUrl(video: HTMLVideoElement, end: boolean): Promise<string> {
+async function extractVideoFrameJpegDataUrlAtTime(video: HTMLVideoElement, targetSec: number): Promise<string> {
   await waitVideoMetadata(video);
   const duration = video.duration;
-  const targetT = end ? Math.max(0, duration - 1 / 30) : 0;
+  const targetT = Math.min(Math.max(0, Number.isFinite(targetSec) ? targetSec : 0), Math.max(0, duration - 1 / 30));
 
   await new Promise<void>((resolve, reject) => {
     const onSeeked = () => {
@@ -517,6 +520,13 @@ async function extractVideoFrameJpegDataUrl(video: HTMLVideoElement, end: boolea
   return canvas.toDataURL("image/jpeg", 0.88);
 }
 
+async function extractVideoFrameJpegDataUrl(video: HTMLVideoElement, end: boolean): Promise<string> {
+  await waitVideoMetadata(video);
+  const duration = video.duration;
+  const targetT = end ? Math.max(0, duration - 1 / 30) : 0;
+  return extractVideoFrameJpegDataUrlAtTime(video, targetT);
+}
+
 /**
  * Load a video URL in a detached element and capture a JPEG frame.
  *
@@ -565,6 +575,57 @@ async function extractVideoFrameJpegDataUrlFromUrl(videoUrl: string, end: boolea
     URL.revokeObjectURL(objectUrl);
   }
 }
+
+async function extractVideoFrameJpegDataUrlsFromUrlFractions(
+  videoUrl: string,
+  fractions: number[],
+): Promise<string[]> {
+  const trimmed = videoUrl.trim();
+  if (!trimmed) throw new Error("Missing video URL");
+
+  let blob: Blob | null = null;
+  if (/^blob:|^data:/i.test(trimmed)) {
+    const r = await fetch(trimmed, { cache: "no-store" });
+    if (!r.ok) throw new Error(`Could not read video (${r.status})`);
+    blob = await r.blob();
+  } else {
+    try {
+      const r = await fetch(`/api/download?url=${encodeURIComponent(trimmed)}`, { cache: "no-store" });
+      if (r.ok) blob = await r.blob();
+    } catch {
+      // fall through to direct fetch
+    }
+    if (!blob) {
+      const r = await fetch(trimmed, { mode: "cors", cache: "no-store" });
+      if (!r.ok) throw new Error(`Could not download video (${r.status})`);
+      blob = await r.blob();
+    }
+  }
+
+  const objectUrl = URL.createObjectURL(blob);
+  const v = document.createElement("video");
+  v.preload = "auto";
+  v.muted = true;
+  v.playsInline = true;
+  v.src = objectUrl;
+  try {
+    await waitVideoMetadata(v);
+    const duration = Math.max(0, Number(v.duration) || 0);
+    const out: string[] = [];
+    for (const f of fractions) {
+      const fraction = Math.min(1, Math.max(0, Number.isFinite(f) ? f : 0));
+      const t = duration <= 0 ? 0 : duration * fraction;
+      const frame = await extractVideoFrameJpegDataUrlAtTime(v, t);
+      out.push(frame);
+    }
+    return out;
+  } finally {
+    v.pause();
+    v.removeAttribute("src");
+    v.load();
+    URL.revokeObjectURL(objectUrl);
+  }
+}
 /** Horizontal padding from `px-3` on the card (left + right). */
 const CARD_PAD_X_PX = 0;
 
@@ -597,6 +658,12 @@ function outputFrameDimensions(ratio: string, intrinsicAspect?: number): { width
   return { width, height };
 }
 
+function adAssetNodeLooksLikeImageUrl(s: string): boolean {
+  const u = s.trim().toLowerCase();
+  if (!u.startsWith("http")) return false;
+  return /\.(png|jpe?g|webp|gif)(\?|$)/i.test(u) || u.includes("/image");
+}
+
 export function AdAssetNode({ id, data, selected }: NodeProps<AdAssetNodeType>) {
   const patch = useWorkflowNodePatch();
   const { getNodes, getEdges, setNodes, setEdges } = useReactFlow();
@@ -611,6 +678,8 @@ export function AdAssetNode({ id, data, selected }: NodeProps<AdAssetNodeType>) 
   const [assistantDescribe, setAssistantDescribe] = useState("");
   const [assistantResult, setAssistantResult] = useState("");
   const [assistantLoading, setAssistantLoading] = useState(false);
+  const [assistantPromptDraft, setAssistantPromptDraft] = useState("");
+  const [assistantPromptFocused, setAssistantPromptFocused] = useState(false);
   const [runChoiceOpen, setRunChoiceOpen] = useState(false);
   const [cardHovered, setCardHovered] = useState(false);
   const [generating, setGenerating] = useState(false);
@@ -1109,6 +1178,22 @@ export function AdAssetNode({ id, data, selected }: NodeProps<AdAssetNodeType>) 
             if (!u || seen.has(u)) continue;
             seen.add(u);
             out.push(u);
+            continue;
+          }
+          if (src.type === "promptList") {
+            const d = src.data as { lines?: string[]; contentKind?: "text" | "media" };
+            const sourceHandle = (e.sourceHandle ?? "out").trim();
+            const lines = Array.isArray(d.lines) ? d.lines : [];
+            const imageLines = lines
+              .map((x) => (typeof x === "string" ? x.trim() : ""))
+              .filter((u) => u.length > 0 && adAssetNodeLooksLikeImageUrl(u));
+            // Allow explicit image output handle OR generic output when list contains image URLs.
+            if (sourceHandle !== "outImage" && sourceHandle !== "out" && sourceHandle !== "") continue;
+            for (const u of imageLines) {
+              if (seen.has(u)) continue;
+              seen.add(u);
+              out.push(u);
+            }
           }
         }
         return out;
@@ -1660,6 +1745,9 @@ export function AdAssetNode({ id, data, selected }: NodeProps<AdAssetNodeType>) 
     if (data.kind === "image" || data.kind === "variation" || data.kind === "assistant" || data.kind === "upscale") {
       validTargets.add("references");
       validTargets.add("inImage");
+      if (data.kind === "assistant" && data.assistantVisionPreset === "video_to_prompt") {
+        validTargets.add("inVideo");
+      }
     }
 
     setEdges((prev) =>
@@ -1673,6 +1761,7 @@ export function AdAssetNode({ id, data, selected }: NodeProps<AdAssetNodeType>) 
   }, [
     data.kind,
     id,
+    data.assistantVisionPreset,
     seedance2ProLike,
     setEdges,
     videoModelHasEndFrame,
@@ -1990,8 +2079,12 @@ export function AdAssetNode({ id, data, selected }: NodeProps<AdAssetNodeType>) 
   );
   const runFromHereEstimatedCredits = runFromHerePlan.estimatedCredits;
   const assistantEstimatedCredits = useMemo(
-    () => (data.kind === "assistant" ? WORKFLOW_ASSISTANT_CREDITS_BY_MODEL[assistantModel] ?? 5 : 0),
-    [assistantModel, data.kind],
+    () => {
+      if (data.kind !== "assistant") return 0;
+      if (data.assistantVisionPreset === "video_to_prompt") return WORKFLOW_ASSISTANT_VIDEO_TO_PROMPT_CREDITS;
+      return WORKFLOW_ASSISTANT_CREDITS_BY_MODEL[assistantModel] ?? 5;
+    },
+    [assistantModel, data.assistantVisionPreset, data.kind],
   );
   const hasGeneratedOutput = Boolean(data.outputPreviewUrl?.trim());
   const hasAssistantOutput = Boolean(assistantOutput.trim());
@@ -2057,6 +2150,12 @@ export function AdAssetNode({ id, data, selected }: NodeProps<AdAssetNodeType>) 
   }, [promptEditorOpen]);
 
   useEffect(() => {
+    if (data.kind !== "assistant") return;
+    if (assistantPromptFocused) return;
+    setAssistantPromptDraft(prompt);
+  }, [assistantPromptFocused, data.kind, prompt]);
+
+  useEffect(() => {
     if (data.kind !== "video") return;
     if (data.videoDurationSec === undefined) return;
     const coerced = coerceWorkflowVideoDurationSec(model, data.videoDurationSec);
@@ -2081,6 +2180,7 @@ export function AdAssetNode({ id, data, selected }: NodeProps<AdAssetNodeType>) 
 
     const nodes = getNodes();
     const edges = getEdges();
+    const promptForRunBase = data.kind === "assistant" ? assistantPromptDraft : prompt;
     const profile360Preset = data.kind === "image" && data.imageWorkflowPreset === "profile_360";
     const linkedPrompts =
       profile360Preset
@@ -2099,12 +2199,18 @@ export function AdAssetNode({ id, data, selected }: NodeProps<AdAssetNodeType>) 
               : ["references", "startImage", "inImage"],
           )
         : [];
-    const effectivePrompt = profile360Preset ? WORKFLOW_AVATAR_360_PROFILE_PROMPT : composeWorkflowPrompt(prompt, linkedPrompts);
+    const linkedAssistantVideoRefs =
+      data.kind === "assistant"
+        ? collectLinkedVideoUrlsForHandles(nodes, edges, id, ["inVideo", "references", "startImage", "inImage"])
+        : [];
+    const effectivePrompt = profile360Preset
+      ? WORKFLOW_AVATAR_360_PROFILE_PROMPT
+      : composeWorkflowPrompt(promptForRunBase, linkedPrompts);
     const batchContext =
       data.kind === "image" || data.kind === "video" || data.kind === "motion"
         ? profile360Preset
           ? { batch: null, composedSingle: WORKFLOW_AVATAR_360_PROFILE_PROMPT, fromPromptList: false }
-          : collectWorkflowBatchPrompts(nodes, edges, id, [...WORKFLOW_TEXT_INPUT_HANDLES], prompt)
+          : collectWorkflowBatchPrompts(nodes, edges, id, [...WORKFLOW_TEXT_INPUT_HANDLES], promptForRunBase)
         : { batch: null, composedSingle: effectivePrompt, fromPromptList: false };
     const batchPrompts = batchContext.batch?.map((x) => x.trim()).filter(Boolean) ?? null;
     const singlePrompt = (batchContext.composedSingle || effectivePrompt).trim();
@@ -2125,15 +2231,23 @@ export function AdAssetNode({ id, data, selected }: NodeProps<AdAssetNodeType>) 
     if (promptUsedForPreview) {
       patch(id, { lastRunPrompt: promptUsedForPreview });
     }
+    if (data.kind === "assistant" && prompt !== assistantPromptDraft) {
+      patch(id, { prompt: assistantPromptDraft });
+    }
 
     if (data.kind === "assistant") {
       emitRunLog("info", "Assistant run started.");
       const assistantListLabel = `${(data.label || cfg.title || "Assistant").trim() || "Assistant"} prompts`;
+      const assistantVisionPreset =
+        data.assistantVisionPreset === "image_to_json"
+          ? "image_to_json"
+          : data.assistantVisionPreset === "video_to_prompt"
+            ? "video_to_prompt"
+            : undefined;
       const httpsVisionUrls = linkedAssistantImageRefs
         .map((u) => (typeof u === "string" ? u.trim() : ""))
         .filter((u) => /^https:\/\//i.test(u))
         .slice(0, 12);
-      const assistantVisionPreset = data.assistantVisionPreset === "image_to_json" ? "image_to_json" : undefined;
       if (assistantVisionPreset === "image_to_json" && httpsVisionUrls.length === 0) {
         toast.error("Connect an image", {
           description:
@@ -2141,6 +2255,17 @@ export function AdAssetNode({ id, data, selected }: NodeProps<AdAssetNodeType>) 
         });
         emitRunFinished(false);
         emitRunLog("error", "Assistant (image→JSON): no HTTPS reference image URLs.");
+        return;
+      }
+      const primaryVideoUrl = linkedAssistantVideoRefs
+        .map((u) => (typeof u === "string" ? u.trim() : ""))
+        .find((u) => /^https?:\/\//i.test(u));
+      if (assistantVisionPreset === "video_to_prompt" && !primaryVideoUrl) {
+        toast.error("Connect a video", {
+          description: "Video → Prompt needs a wired video input on the video bubble.",
+        });
+        emitRunFinished(false);
+        emitRunLog("error", "Assistant (video→prompt): no video URL connected.");
         return;
       }
 
@@ -2151,23 +2276,68 @@ export function AdAssetNode({ id, data, selected }: NodeProps<AdAssetNodeType>) 
             ? `${singlePrompt.trim()}\n\nReference image URLs:\n${linkedAssistantImageRefs.map((u) => `- ${u}`).join("\n")}`
             : singlePrompt.trim();
 
+      const assistantCharge =
+        assistantVisionPreset === "video_to_prompt"
+          ? WORKFLOW_ASSISTANT_VIDEO_TO_PROMPT_CREDITS
+          : WORKFLOW_ASSISTANT_CREDITS_BY_MODEL[assistantModel] ?? 0;
+      const creditBypass = isPlatformCreditBypassActive();
+      if (!creditBypass && assistantCharge > 0 && creditsRef.current < assistantCharge) {
+        toast.error("Not enough credits", {
+          description: `You need ${assistantCharge} credits for this run.`,
+        });
+        emitRunFinished(false);
+        emitRunLog("error", `Assistant blocked: not enough credits (${assistantCharge}).`);
+        return;
+      }
+      if (!creditBypass && assistantCharge > 0) {
+        spendCredits(assistantCharge);
+        creditsRef.current = Math.max(0, creditsRef.current - assistantCharge);
+      }
+
       setGenerating(true);
       let ok = false;
       try {
-        const res = await fetch("/api/gpt/workflow-assistant-chat", {
+        let endpoint = "/api/gpt/workflow-assistant-chat";
+        const payload: Record<string, unknown> = {
+          prompt:
+            assistantVisionPreset === "image_to_json" && !promptForApi
+              ? "Return the structured JSON analysis for the attached image per your instructions."
+              : promptForApi,
+          model: assistantModel,
+          ...(httpsVisionUrls.length > 0 ? { imageUrls: httpsVisionUrls } : {}),
+          ...(assistantVisionPreset === "image_to_json" ? { visionPreset: "image_to_json" as const } : {}),
+        };
+
+        if (assistantVisionPreset === "video_to_prompt" && primaryVideoUrl) {
+          const FRACTIONS = [0.0, 0.16, 0.34, 0.52, 0.72, 0.9];
+          const frameDataUrls = await extractVideoFrameJpegDataUrlsFromUrlFractions(primaryVideoUrl, FRACTIONS);
+          const frameImageUrls = (
+            await Promise.all(
+              frameDataUrls.map((dataUrl, idx) =>
+                uploadBlobUrlToCdn(
+                  dataUrl,
+                  `workflow-video-to-prompt-frame-${idx + 1}.jpg`,
+                  "image/jpeg",
+                  { kind: "image" },
+                ),
+              ),
+            )
+          ).filter((u): u is string => Boolean(u && u.trim()));
+          if (frameImageUrls.length === 0) {
+            throw new Error("Could not extract/upload video frames for analysis.");
+          }
+          endpoint = "/api/gpt/workflow-video-to-prompt";
+          payload.prompt = promptForApi || WORKFLOW_VIDEO_TO_PROMPT_USER_PROMPT;
+          payload.frameImageUrls = frameImageUrls;
+          delete payload.model;
+          delete payload.imageUrls;
+          delete payload.visionPreset;
+        }
+
+        const res = await fetch(endpoint, {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            prompt:
-              assistantVisionPreset === "image_to_json" && !promptForApi
-                ? "Return the structured JSON analysis for the attached image per your instructions."
-                : promptForApi,
-            model: assistantModel,
-            ...(httpsVisionUrls.length > 0 ? { imageUrls: httpsVisionUrls } : {}),
-            ...(assistantVisionPreset === "image_to_json"
-              ? { visionPreset: "image_to_json" as const }
-              : {}),
-          }),
+          body: JSON.stringify(payload),
         });
         const json = (await res.json()) as { output?: string; error?: string };
         if (!res.ok || !json.output?.trim()) {
@@ -2238,6 +2408,10 @@ export function AdAssetNode({ id, data, selected }: NodeProps<AdAssetNodeType>) 
         ok = true;
         emitRunLog("success", "Assistant run finished.");
       } catch (e) {
+        if (!creditBypass && assistantCharge > 0) {
+          grantCredits(assistantCharge);
+          creditsRef.current += assistantCharge;
+        }
         toast.error("Assistant failed", {
           description: e instanceof Error ? e.message : "Try again.",
         });
@@ -3257,6 +3431,7 @@ export function AdAssetNode({ id, data, selected }: NodeProps<AdAssetNodeType>) 
     }
   }, [
     cfg,
+    assistantPromptDraft,
     data.assistantVisionPreset,
     data.imageWorkflowPreset,
     data.kind,
@@ -3570,6 +3745,7 @@ export function AdAssetNode({ id, data, selected }: NodeProps<AdAssetNodeType>) 
 
   if (data.kind === "assistant") {
     const assistantImageToJson = data.assistantVisionPreset === "image_to_json";
+    const assistantVideoToPromptPreset = data.assistantVisionPreset === "video_to_prompt";
     const assistantCardWidth = Math.max(cardWidthPx, 420);
     const assistantBodyHeightPx = Math.max(248, assistantCardWidth - 114);
     return (
@@ -3641,7 +3817,7 @@ export function AdAssetNode({ id, data, selected }: NodeProps<AdAssetNodeType>) 
                 <Type className="h-3.5 w-3.5" strokeWidth={2} aria-hidden="true" />
               </span>
             </div>
-            {!assistantImageToJson ? (
+            {!assistantImageToJson && !assistantVideoToPromptPreset ? (
               <div className={cn(workflowPortBubbleShellClass, "nodrag nopan")}>
                 <Handle
                   id="startImage"
@@ -3654,6 +3830,22 @@ export function AdAssetNode({ id, data, selected }: NodeProps<AdAssetNodeType>) 
                 />
                 <span className={workflowPortBubbleIconClass} aria-hidden>
                   <ImageIcon className="h-4 w-4" strokeWidth={2} aria-hidden="true" />
+                </span>
+              </div>
+            ) : null}
+            {assistantVideoToPromptPreset ? (
+              <div className={cn(workflowPortBubbleShellClass, "nodrag nopan")}>
+                <Handle
+                  id="inVideo"
+                  type="target"
+                  position={Position.Left}
+                  className={workflowPortTargetBubbleHandleClass}
+                  aria-label="Reference video input"
+                  title="Reference video for frame analysis."
+                  onPointerDown={(e) => handleInputBubblePointerDown(e, "inVideo")}
+                />
+                <span className={workflowPortBubbleIconClass} title="Reference video input." aria-hidden>
+                  <Clapperboard className="h-4 w-4" strokeWidth={2} aria-hidden="true" />
                 </span>
               </div>
             ) : null}
@@ -3677,7 +3869,9 @@ export function AdAssetNode({ id, data, selected }: NodeProps<AdAssetNodeType>) 
               <span
                 className={workflowPortBubbleIconClass}
                 title={
-                  assistantImageToJson
+                  assistantVideoToPromptPreset
+                    ? "Optional reference images (primary analysis uses the connected video)."
+                    : assistantImageToJson
                     ? "Reference image for vision (HTTPS URL after upload)."
                     : "Additional reference images for Assistant context."
                 }
@@ -3768,19 +3962,32 @@ export function AdAssetNode({ id, data, selected }: NodeProps<AdAssetNodeType>) 
                 <p className="nodrag nopan mb-2 rounded-lg border border-white/10 bg-black/30 px-2 py-1.5 text-[10px] leading-snug text-white/52">
                   Image → JSON uses vision on your wired HTTPS image. The Result tab holds one JSON object (no markdown). Add optional notes in the brief below.
                 </p>
+              ) : assistantVideoToPromptPreset ? (
+                <p className="nodrag nopan mb-2 rounded-lg border border-white/10 bg-black/30 px-2 py-1.5 text-[10px] leading-snug text-white/52">
+                  Video → Prompt extracts key frames from your wired video, analyzes them with Claude, and outputs one recreation-ready prompt.
+                </p>
               ) : null}
             <textarea
-              value={prompt}
-              onChange={(e) => patch(id, { prompt: e.target.value })}
+              value={assistantPromptDraft}
+              onChange={(e) => setAssistantPromptDraft(e.target.value)}
               placeholder={
                 assistantImageToJson
                   ? "Optional extra instructions (preset already requests structured JSON)…"
+                  : assistantVideoToPromptPreset
+                    ? "Optional direction (e.g. preserve hook, pacing, CTA style)..."
                   : "Type your prompt for the assistant..."
               }
               rows={4}
               onWheelCapture={keepWheelInsideScrollable}
-              onFocus={() => setPromptFocused(true)}
-              onBlur={() => setPromptFocused(false)}
+              onFocus={() => {
+                setPromptFocused(true);
+                setAssistantPromptFocused(true);
+              }}
+              onBlur={() => {
+                setPromptFocused(false);
+                setAssistantPromptFocused(false);
+                if (prompt !== assistantPromptDraft) patch(id, { prompt: assistantPromptDraft });
+              }}
               style={{ minHeight: assistantBodyHeightPx }}
               className="nodrag nopan nowheel w-full resize-y rounded-xl border border-white/12 bg-black/35 px-2.5 py-2 text-[12px] leading-relaxed text-white/92 placeholder:text-white/30 caret-white outline-none focus:border-violet-500/40 focus:ring-1 focus:ring-violet-500/25"
             />
@@ -3814,21 +4021,30 @@ export function AdAssetNode({ id, data, selected }: NodeProps<AdAssetNodeType>) 
                 ))}
               </SelectContent>
             </Select>
-            <Select
-              value={assistantModel}
-              onValueChange={(v) => patch(id, { assistantModel: v as AdAssetNodeData["assistantModel"] })}
-            >
-              <SelectTrigger size="sm" className={cn(selectTriggerClass, "h-7 min-w-0 max-w-[6.25rem] px-2 text-[10px]")}>
-                <SelectValue placeholder="Assistant model" />
-              </SelectTrigger>
-              <SelectContent className={selectContentClass} position="popper">
-                {ASSISTANT_MODELS.map((m) => (
-                  <SelectItem key={m.value} value={m.value} className="text-[12px] focus:bg-violet-500/20">
-                    {m.label}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
+            {!assistantVideoToPromptPreset ? (
+              <Select
+                value={assistantModel}
+                onValueChange={(v) => patch(id, { assistantModel: v as AdAssetNodeData["assistantModel"] })}
+              >
+                <SelectTrigger size="sm" className={cn(selectTriggerClass, "h-7 min-w-0 max-w-[6.25rem] px-2 text-[10px]")}>
+                  <SelectValue placeholder="Assistant model" />
+                </SelectTrigger>
+                <SelectContent className={selectContentClass} position="popper">
+                  {ASSISTANT_MODELS.map((m) => (
+                    <SelectItem key={m.value} value={m.value} className="text-[12px] focus:bg-violet-500/20">
+                      {m.label}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            ) : (
+              <span
+                className="inline-flex h-7 items-center rounded-full border border-white/10 bg-white/[0.04] px-2 text-[10px] font-medium text-white/80"
+                title="Video → Prompt preset uses Claude."
+              >
+                Claude
+              </span>
+            )}
             <span
               className="inline-flex h-7 items-center gap-1 rounded-full border border-violet-400/35 bg-violet-500/12 px-2 text-[10px] font-semibold tabular-nums text-white shadow-[0_8px_24px_rgba(0,0,0,0.35)]"
               title="Estimated credits for this run"
@@ -3836,7 +4052,13 @@ export function AdAssetNode({ id, data, selected }: NodeProps<AdAssetNodeType>) 
               <Coins className="h-3 w-3 text-violet-200" strokeWidth={2.2} aria-hidden />
               {assistantEstimatedCredits}
             </span>
-            <div className="relative ml-auto">
+            <div className="relative ml-auto flex items-center gap-2">
+              {generating ? (
+                <span className="inline-flex h-7 items-center gap-1.5 rounded-full border border-violet-400/35 bg-violet-500/18 px-2.5 text-[10px] font-semibold text-violet-100 shadow-[0_8px_24px_rgba(0,0,0,0.35)]">
+                  <Loader2 className="h-3 w-3 animate-spin" aria-hidden />
+                  Generating...
+                </span>
+              ) : null}
               <button
                 type="button"
                 title={
@@ -3847,11 +4069,17 @@ export function AdAssetNode({ id, data, selected }: NodeProps<AdAssetNodeType>) 
                       : "Run assistant"
                 }
                 disabled={generating}
-                className="nodrag nopan flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-white text-zinc-900 shadow-md transition hover:bg-white/95 disabled:cursor-not-allowed disabled:opacity-55"
+                className={cn(
+                  "nodrag nopan flex h-7 shrink-0 items-center justify-center rounded-full bg-white text-zinc-900 shadow-md transition hover:bg-white/95 disabled:cursor-not-allowed disabled:opacity-55",
+                  generating ? "min-w-[84px] gap-1.5 px-2.5" : "w-7",
+                )}
                 onClick={onGenerateButtonClick}
               >
                 {generating ? (
-                  <Loader2 className="h-3.5 w-3.5 animate-spin text-zinc-900" aria-hidden />
+                  <>
+                    <Loader2 className="h-3.5 w-3.5 animate-spin text-zinc-900" aria-hidden />
+                    <span className="text-[10px] font-semibold">Generating</span>
+                  </>
                 ) : hasAssistantOutput ? (
                   <RotateCcw className="h-3.5 w-3.5 text-zinc-900" strokeWidth={2.25} />
                 ) : (
