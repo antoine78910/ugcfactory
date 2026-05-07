@@ -1698,6 +1698,40 @@ export function AdAssetNode({ id, data, selected }: NodeProps<AdAssetNodeType>) 
   );
 
   /**
+   * Connected reference image URLs for Image Generator inputs (references/start + node-local upload),
+   * in a stable order so users can reason about which image is "primary" vs extra context.
+   */
+  const imageInputRefSignature = useStore(
+    useCallback(
+      (s) => {
+        if (data.kind !== "image") return "";
+        const startUrls = collectLinkedImageUrlsForHandles(s.nodes, s.edges, id, ["startImage"]);
+        const refUrls = collectLinkedImageUrlsForHandles(s.nodes, s.edges, id, ["references"]);
+        const legacyImg = collectLinkedImageUrlsForHandles(s.nodes, s.edges, id, ["inImage"]);
+        const nodeRef =
+          data.referenceMediaKind === "image" && data.referencePreviewUrl?.trim()
+            ? [data.referencePreviewUrl.trim()]
+            : [];
+        const all = [...nodeRef, ...startUrls, ...refUrls, ...legacyImg];
+        const seen = new Set<string>();
+        const out: string[] = [];
+        for (const u of all) {
+          const t = u.trim();
+          if (!t || seen.has(t)) continue;
+          seen.add(t);
+          out.push(t);
+        }
+        return out.join("|");
+      },
+      [data.kind, data.referenceMediaKind, data.referencePreviewUrl, id],
+    ),
+  );
+  const imageInputRefUrls = useMemo(
+    () => (imageInputRefSignature ? imageInputRefSignature.split("|").filter(Boolean) : []),
+    [imageInputRefSignature],
+  );
+
+  /**
    * Connected reference image URLs (start frame + references port + node-local upload), in the
    * order PiAPI binds them to `@image1, @image2, …`. We feed this to the chip strip below the
    * prompt so users can see the auto-naming and type matching `@imageN` mentions.
@@ -1739,6 +1773,21 @@ export function AdAssetNode({ id, data, selected }: NodeProps<AdAssetNodeType>) 
   const videoElementRefUrls = useMemo(
     () => (videoElementRefSignature ? videoElementRefSignature.split("|").filter(Boolean) : []),
     [videoElementRefSignature],
+  );
+
+  /**
+   * Video generator inputs as thumbnails (ordered), for quick visual validation.
+   * Matches the same pool as `videoElementRefUrls`, but we also track explicit end-frame.
+   */
+  const videoEndFrameUrl = useStore(
+    useCallback(
+      (s) => {
+        if (data.kind !== "video") return "";
+        const linkedFromEndPort = collectLinkedImageUrlsForHandles(s.nodes, s.edges, id, ["endImage"]);
+        return (data.videoEndImageUrl?.trim() || linkedFromEndPort[0] || "").trim();
+      },
+      [data.kind, data.videoEndImageUrl, id],
+    ),
   );
 
   /** Seedance 2 / Fast: connected video refs (omni motion reference). */
@@ -4369,12 +4418,22 @@ export function AdAssetNode({ id, data, selected }: NodeProps<AdAssetNodeType>) 
                             }}
                             className="flex shrink-0 items-center gap-1 rounded-full border border-violet-400/30 bg-violet-500/12 pl-0.5 pr-1.5 py-0.5 text-[9px] font-semibold text-violet-100 transition hover:border-violet-300/60 hover:bg-violet-500/22"
                           >
-                            {/* eslint-disable-next-line @next/next/no-img-element */}
-                            <img
-                              src={url}
-                              alt=""
-                              className="h-4 w-4 rounded-full object-cover ring-1 ring-violet-300/30"
-                            />
+                            <span className="relative">
+                              {/* eslint-disable-next-line @next/next/no-img-element */}
+                              <img
+                                src={url}
+                                alt=""
+                                className="h-4 w-4 rounded-full object-cover ring-1 ring-violet-300/30"
+                              />
+                              {idx === 0 ? (
+                                <span
+                                  className="absolute -right-1 -top-1 inline-flex h-3 min-w-3 items-center justify-center rounded-full bg-white text-[8px] font-black text-zinc-900 shadow"
+                                  title="Start image"
+                                >
+                                  S
+                                </span>
+                              ) : null}
+                            </span>
                             <span className="tabular-nums">{tag}</span>
                           </button>
                         </HoverCard.Trigger>
@@ -4406,6 +4465,134 @@ export function AdAssetNode({ id, data, selected }: NodeProps<AdAssetNodeType>) 
                   {videoElementRefUrls.length > 6 ? (
                     <span className="shrink-0 text-[9px] font-semibold text-white/45">
                       +{videoElementRefUrls.length - 6}
+                    </span>
+                  ) : null}
+                </div>
+              ) : null}
+              {data.kind === "video" && videoElementRefUrls.length > 0 ? (
+                <div
+                  className="mb-1 flex w-full items-center gap-1 overflow-x-auto pb-0.5 nowheel"
+                  title="Input images (ordered). S = start, E = end."
+                >
+                  {videoElementRefUrls.slice(0, 8).map((url, idx) => {
+                    const label = `Image ${idx + 1}`;
+                    const isStart = idx === 0;
+                    const isEnd = Boolean(videoEndFrameUrl && url === videoEndFrameUrl);
+                    return (
+                      <HoverCard.Root key={`${label}-${url}`} openDelay={140} closeDelay={80}>
+                        <HoverCard.Trigger asChild>
+                          <button
+                            type="button"
+                            onPointerDown={(e) => e.stopPropagation()}
+                            className="relative h-7 w-7 shrink-0 overflow-hidden rounded-lg border border-white/10 bg-black/20"
+                            aria-label={label}
+                            title={`${label}${isStart ? " (start)" : ""}${isEnd ? " (end)" : ""}`}
+                          >
+                            {/* eslint-disable-next-line @next/next/no-img-element */}
+                            <img src={url} alt="" className="h-full w-full object-cover" />
+                            <span className="absolute left-0.5 top-0.5 rounded bg-black/60 px-1 text-[9px] font-bold tabular-nums text-white">
+                              {idx + 1}
+                            </span>
+                            {isStart ? (
+                              <span className="absolute bottom-0.5 right-0.5 rounded bg-white px-1 text-[8px] font-black text-zinc-900 shadow">
+                                S
+                              </span>
+                            ) : isEnd ? (
+                              <span className="absolute bottom-0.5 right-0.5 rounded bg-white px-1 text-[8px] font-black text-zinc-900 shadow">
+                                E
+                              </span>
+                            ) : null}
+                          </button>
+                        </HoverCard.Trigger>
+                        <HoverCard.Portal>
+                          <HoverCard.Content
+                            side="top"
+                            align="center"
+                            sideOffset={10}
+                            collisionPadding={16}
+                            className={cn(
+                              "nodrag nopan z-[520] max-w-[min(92vw,22rem)] rounded-xl border border-white/15 bg-[#141418] p-2.5 shadow-[0_24px_64px_rgba(0,0,0,0.75)] outline-none",
+                              "data-[state=open]:animate-in data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=open]:fade-in-0 data-[state=closed]:zoom-out-95 data-[state=open]:zoom-in-95",
+                            )}
+                          >
+                            {/* eslint-disable-next-line @next/next/no-img-element */}
+                            <img
+                              src={url}
+                              alt=""
+                              className="mx-auto block max-h-[min(72vh,20rem)] w-auto max-w-full rounded-lg object-contain"
+                            />
+                            <div className="mt-2 text-center text-[10px] font-semibold uppercase tracking-wide text-white/55">
+                              {isStart ? "Start image" : isEnd ? "End image" : label}
+                            </div>
+                          </HoverCard.Content>
+                        </HoverCard.Portal>
+                      </HoverCard.Root>
+                    );
+                  })}
+                  {videoElementRefUrls.length > 8 ? (
+                    <span className="shrink-0 text-[9px] font-semibold text-white/45">
+                      +{videoElementRefUrls.length - 8}
+                    </span>
+                  ) : null}
+                </div>
+              ) : null}
+              {data.kind === "image" && imageInputRefUrls.length > 0 ? (
+                <div
+                  className="mb-1 flex w-full items-center gap-1 overflow-x-auto pb-0.5 nowheel"
+                  title="Reference images (ordered). The first one is treated as primary."
+                >
+                  {imageInputRefUrls.slice(0, 8).map((url, idx) => {
+                    const label = `Image ${idx + 1}`;
+                    return (
+                      <HoverCard.Root key={`${label}-${url}`} openDelay={140} closeDelay={80}>
+                        <HoverCard.Trigger asChild>
+                          <button
+                            type="button"
+                            onPointerDown={(e) => e.stopPropagation()}
+                            className="relative h-7 w-7 shrink-0 overflow-hidden rounded-lg border border-white/10 bg-black/20"
+                            aria-label={label}
+                            title={idx === 0 ? `${label} (start)` : label}
+                          >
+                            {/* eslint-disable-next-line @next/next/no-img-element */}
+                            <img src={url} alt="" className="h-full w-full object-cover" />
+                            <span className="absolute left-0.5 top-0.5 rounded bg-black/60 px-1 text-[9px] font-bold tabular-nums text-white">
+                              {idx + 1}
+                            </span>
+                            {idx === 0 ? (
+                              <span className="absolute bottom-0.5 right-0.5 rounded bg-white px-1 text-[8px] font-black text-zinc-900 shadow">
+                                S
+                              </span>
+                            ) : null}
+                          </button>
+                        </HoverCard.Trigger>
+                        <HoverCard.Portal>
+                          <HoverCard.Content
+                            side="top"
+                            align="center"
+                            sideOffset={10}
+                            collisionPadding={16}
+                            className={cn(
+                              "nodrag nopan z-[520] max-w-[min(92vw,22rem)] rounded-xl border border-white/15 bg-[#141418] p-2.5 shadow-[0_24px_64px_rgba(0,0,0,0.75)] outline-none",
+                              "data-[state=open]:animate-in data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=open]:fade-in-0 data-[state=closed]:zoom-out-95 data-[state=open]:zoom-in-95",
+                            )}
+                          >
+                            {/* eslint-disable-next-line @next/next/no-img-element */}
+                            <img
+                              src={url}
+                              alt=""
+                              className="mx-auto block max-h-[min(72vh,20rem)] w-auto max-w-full rounded-lg object-contain"
+                            />
+                            <div className="mt-2 text-center text-[10px] font-semibold uppercase tracking-wide text-white/55">
+                              {idx === 0 ? "Start image" : label}
+                            </div>
+                          </HoverCard.Content>
+                        </HoverCard.Portal>
+                      </HoverCard.Root>
+                    );
+                  })}
+                  {imageInputRefUrls.length > 8 ? (
+                    <span className="shrink-0 text-[9px] font-semibold text-white/45">
+                      +{imageInputRefUrls.length - 8}
                     </span>
                   ) : null}
                 </div>

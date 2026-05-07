@@ -5217,8 +5217,8 @@ export function WorkflowEditor({
    * just synchronously write it to localStorage on pagehide/beforeunload.
    */
   useEffect(() => {
-    if (!workflowHydrated || storageScope === null) return;
-    if (spaceSource !== "local") return;
+    if (storageScope === null) return;
+    if (spaceSource === "shared" && spaceRole === "viewer") return;
 
     const flushNow = () => {
       try {
@@ -5247,7 +5247,7 @@ export function WorkflowEditor({
       // Make sure the latest in-memory state hits localStorage before we tear down.
       flushNow();
     };
-  }, [workflowHydrated, storageScope, resolvedSpaceId, spaceSource]);
+  }, [storageScope, resolvedSpaceId, spaceSource, spaceRole]);
 
   /**
    * Mirror to the cloud (debounced) so:
