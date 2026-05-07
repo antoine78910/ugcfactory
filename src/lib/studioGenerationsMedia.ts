@@ -54,16 +54,26 @@ function sleep(ms: number): Promise<void> {
   return new Promise((r) => setTimeout(r, ms));
 }
 
-async function fetchMediaBytes(url: string): Promise<{ buffer: Buffer; contentType: string } | null> {
+/**
+ * Hard ceiling per single asset to keep us well under Vercel function memory.
+ * Anything bigger is left as a provider URL; cron will retry with a fatter budget.
+ */
+const MAX_LIVE_ARCHIVAL_BYTES_PER_ASSET = 60 * 1024 * 1024; // 60 MB
+const MAX_CRON_ARCHIVAL_BYTES_PER_ASSET = 200 * 1024 * 1024; // 200 MB
+
+async function fetchMediaBytes(
+  url: string,
+  maxBytes: number,
+): Promise<{ buffer: Buffer; contentType: string } | null> {
   let lastStatus = 0;
-  for (let attempt = 0; attempt < 5; attempt++) {
+  for (let attempt = 0; attempt < 3; attempt++) {
     if (attempt > 0) await sleep(400 * attempt);
     try {
       const target = new URL(url);
       const res = await fetch(url, {
         redirect: "follow",
         cache: "no-store",
-        signal: AbortSignal.timeout(180_000),
+        signal: AbortSignal.timeout(120_000),
         headers: {
           Accept: "*/*",
           "User-Agent": "Mozilla/5.0 (compatible; YouryStudio/1.0; archival)",
@@ -73,11 +83,64 @@ async function fetchMediaBytes(url: string): Promise<{ buffer: Buffer; contentTy
         },
       });
       lastStatus = res.status;
-      if (!res.ok) continue;
-      const bytes = await res.arrayBuffer();
-      const buffer = Buffer.from(bytes);
-      if (buffer.length === 0) continue;
+      if (!res.ok || !res.body) continue;
+
+      const declaredLengthRaw = res.headers.get("content-length");
+      const declaredLength = declaredLengthRaw ? Number(declaredLengthRaw) : NaN;
+      if (Number.isFinite(declaredLength) && declaredLength > maxBytes) {
+        // Skip oversized assets entirely; they will keep the provider URL and be
+        // retried later by the cron with a fatter budget (or kept as-is forever
+        // if the URL is stable).
+        try {
+          await res.body.cancel();
+        } catch {
+          /* ignore */
+        }
+        return null;
+      }
+
+      // Stream-read so we can early-abort once we cross the soft cap, instead
+      // of letting `arrayBuffer()` allocate the entire buffer up-front. This
+      // keeps peak memory bounded under high concurrency.
+      const reader = res.body.getReader();
+      const chunks: Uint8Array[] = [];
+      let total = 0;
+      let oversized = false;
+      try {
+        // eslint-disable-next-line no-constant-condition
+        while (true) {
+          const { done, value } = await reader.read();
+          if (done) break;
+          if (!value) continue;
+          total += value.byteLength;
+          if (total > maxBytes) {
+            oversized = true;
+            break;
+          }
+          chunks.push(value);
+        }
+      } finally {
+        try {
+          reader.releaseLock();
+        } catch {
+          /* ignore */
+        }
+      }
+
+      if (oversized) {
+        try {
+          await res.body.cancel();
+        } catch {
+          /* ignore */
+        }
+        return null;
+      }
+      if (total === 0) continue;
+
       const contentType = res.headers.get("content-type") ?? "";
+      const buffer = Buffer.concat(chunks, total);
+      // Help GC: drop refs to the per-chunk views we just concatenated.
+      chunks.length = 0;
       return { buffer, contentType };
     } catch {
       /* retry */
@@ -94,16 +157,50 @@ export type PersistStudioMediaResult = {
 };
 
 /**
+ * Mutable cross-call accounting so a single HTTP request that polls many rows can
+ * cap how much it spends on Supabase Storage archival. Exhausting the budget
+ * makes subsequent calls return provider URLs unchanged (cron will catch up).
+ */
+export type StudioMediaArchivalBudget = {
+  /** Max number of inline (live) archivals across all calls sharing this budget. */
+  remainingArchivals: number;
+  /** Optional total-bytes ceiling. */
+  remainingBytes?: number;
+};
+
+export type PersistStudioMediaMode = "live" | "cron";
+
+export function createLivePollArchivalBudget(): StudioMediaArchivalBudget {
+  // Live (per HTTP request) budget. Empirically sized to fit comfortably inside
+  // a 1024 MB Vercel function while concurrent invocations share the instance.
+  return {
+    remainingArchivals: 4,
+    remainingBytes: 200 * 1024 * 1024, // 200 MB total per request
+  };
+}
+
+/**
  * Re-upload remote media into `studio-media`. URLs already pointing at this bucket are kept as-is.
+ *
+ * In `"live"` mode (default), only **truly ephemeral** URLs are archived inline; stable
+ * provider URLs (Kling/Veo/Kie/etc.) are returned unchanged so the request stays cheap
+ * and the cron can archive them in the background.
+ *
+ * In `"cron"` mode, all non-bucket URLs are archived (cron has bigger memory budget).
  */
 export async function persistStudioMediaUrls(opts: {
   admin: SupabaseClient;
   userId: string;
   rowId: string;
   urls: string[];
+  mode?: PersistStudioMediaMode;
+  budget?: StudioMediaArchivalBudget;
 }): Promise<PersistStudioMediaResult> {
   const out: string[] = [];
   const inputs = opts.urls.map((u) => u.trim()).filter((u) => /^https?:\/\//i.test(u));
+  const mode: PersistStudioMediaMode = opts.mode ?? "live";
+  const maxBytesPerAsset =
+    mode === "cron" ? MAX_CRON_ARCHIVAL_BYTES_PER_ASSET : MAX_LIVE_ARCHIVAL_BYTES_PER_ASSET;
 
   for (let i = 0; i < inputs.length; i++) {
     const src = inputs[i]!;
@@ -112,7 +209,29 @@ export async function persistStudioMediaUrls(opts: {
       continue;
     }
 
-    const downloaded = await fetchMediaBytes(src);
+    // Live mode: only archive provider URLs that are known to expire fast.
+    // Stable URLs are kept as-is; the cron will archive them in background.
+    if (mode === "live" && !isEphemeralOrUnstableMediaUrl(src)) {
+      out.push(src);
+      continue;
+    }
+
+    // Honor per-request budgets (live mode). When exhausted, keep originals.
+    if (opts.budget) {
+      if (opts.budget.remainingArchivals <= 0) {
+        out.push(src);
+        continue;
+      }
+      if (
+        typeof opts.budget.remainingBytes === "number" &&
+        opts.budget.remainingBytes <= 0
+      ) {
+        out.push(src);
+        continue;
+      }
+    }
+
+    const downloaded = await fetchMediaBytes(src, maxBytesPerAsset);
     if (!downloaded) {
       // Keep original URL as fallback, cron backfill will retry archival later.
       out.push(src);
@@ -128,6 +247,14 @@ export async function persistStudioMediaUrls(opts: {
       contentType: contentType || undefined,
       upsert: false,
     });
+
+    if (opts.budget) {
+      opts.budget.remainingArchivals = Math.max(0, opts.budget.remainingArchivals - 1);
+      if (typeof opts.budget.remainingBytes === "number") {
+        opts.budget.remainingBytes = Math.max(0, opts.budget.remainingBytes - buffer.length);
+      }
+    }
+
     if (error || !data?.path) {
       console.error(`[persistStudioMedia] upload error:`, error?.message ?? error);
       // Keep original URL as fallback rather than silently dropping it.

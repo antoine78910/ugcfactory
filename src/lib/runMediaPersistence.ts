@@ -18,6 +18,8 @@ import {
   isEphemeralOrUnstableMediaUrl,
   isStudioMediaPublicUrl,
   persistStudioMediaUrls,
+  type PersistStudioMediaMode,
+  type StudioMediaArchivalBudget,
 } from "@/lib/studioGenerationsMedia";
 
 /** Marker for any object served by our Supabase Storage (public or signed, any bucket). */
@@ -128,6 +130,16 @@ export async function mirrorRunMediaUrls(opts: {
   userId: string;
   rowId: string;
   payload: RunMediaPayload;
+  /**
+   * Defaults to `"live"` — only inline-archive ephemeral provider URLs and let cron handle
+   * stable ones. The cron backfill helpers explicitly pass `"cron"` to archive everything.
+   *
+   * IMPORTANT: live mode is what protects user-facing routes (/api/runs/list,
+   * /api/runs/finalize-kling, /api/runs/upsert, /api/runs/get) from OOMing the
+   * Vercel function on big videos.
+   */
+  mode?: PersistStudioMediaMode;
+  budget?: StudioMediaArchivalBudget;
 }): Promise<MirrorRunMediaResult> {
   const candidates = [...collectUrls(opts.payload)];
   if (candidates.length === 0) {
@@ -139,6 +151,8 @@ export async function mirrorRunMediaUrls(opts: {
     userId: opts.userId,
     rowId: opts.rowId,
     urls: candidates,
+    mode: opts.mode ?? "live",
+    budget: opts.budget,
   });
 
   const replacement = new Map<string, string>();

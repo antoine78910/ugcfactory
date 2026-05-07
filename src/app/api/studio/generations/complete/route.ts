@@ -51,11 +51,18 @@ export async function POST(req: Request) {
     const admin = createSupabaseServiceClient();
     if (admin) {
       try {
+        // Live mode: only inline-archive truly ephemeral URLs (theapi.app etc.)
+        // to keep memory bounded under heavy concurrency. Stable provider URLs
+        // (Kling/Veo/Kie) are returned as-is and the cron will archive them
+        // shortly. This is what prevents Vercel "instance ran out of memory"
+        // 500s when 100 video generations finish simultaneously and the client
+        // concurrently calls /complete for each.
         const { urls, complete } = await persistStudioMediaUrls({
           admin,
           userId: user.id,
           rowId,
           urls: [resultUrl],
+          mode: "live",
         });
         if (complete && urls[0]) finalUrl = urls[0];
         else if (urls[0] && isStudioMediaPublicUrl(urls[0])) finalUrl = urls[0];

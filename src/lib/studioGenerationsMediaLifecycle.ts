@@ -44,6 +44,7 @@ export async function backfillEphemeralStudioResults(
       userId: row.user_id,
       rowId: row.id,
       urls,
+      mode: "cron",
     });
 
     // Save if at least one URL was successfully archived to studio-media.
@@ -155,6 +156,7 @@ export async function backfillEphemeralUgcRunMedia(
           packshot_urls: row.packshot_urls,
           extracted: row.extracted,
         },
+        mode: "cron",
       });
       if (!mirrored.changed) continue;
 

@@ -537,7 +537,7 @@ export function collectLinkedImageUrlsForHandles(
     const targetHandle = e.targetHandle ?? "in";
 
     /** Video modules: frame outputs / double-click extraction feed start, end, and reference image ports. */
-    const videoFrameImageTargets = new Set(["startImage", "endImage", "references", "inImage"]);
+    const videoFrameImageTargets = new Set(["startImage", "startImageAlt", "endImage", "references", "inImage"]);
     if (d.kind === "video" && kind === "video" && videoFrameImageTargets.has(targetHandle)) {
       const last = d.videoExtractedLastFrameUrl?.trim();
       const first = d.videoExtractedFirstFrameUrl?.trim();
@@ -1327,7 +1327,10 @@ export function workflowVideoOrderedElementImageRefs(params: {
 
   const { nodes, edges, videoNodeId, data } = params;
 
-  const linkedFromStartPortStrict = collectLinkedImageUrlsForHandles(nodes, edges, videoNodeId, ["startImage"]);
+  const linkedFromStartPortStrict = collectLinkedImageUrlsForHandles(nodes, edges, videoNodeId, [
+    "startImage",
+    "startImageAlt",
+  ]);
   const linkedFromEndPort = collectLinkedImageUrlsForHandles(nodes, edges, videoNodeId, ["endImage"]);
   const linkedFromReferencesPortStrict = collectLinkedImageUrlsForHandles(nodes, edges, videoNodeId, [
     "references",

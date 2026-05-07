@@ -1741,6 +1741,7 @@ export function AdAssetNode({ id, data, selected }: NodeProps<AdAssetNodeType>) 
     if (data.kind === "video") {
       if (videoModelHasStartFrame) {
         validTargets.add("startImage");
+        validTargets.add("startImageAlt");
         if (!videoModelHasReferences) validTargets.add("inImage");
       }
       if (videoModelHasEndFrame) validTargets.add("endImage");
@@ -1863,7 +1864,7 @@ export function AdAssetNode({ id, data, selected }: NodeProps<AdAssetNodeType>) 
     useCallback(
       (s) => {
         if (data.kind !== "video") return "";
-        const startUrls = collectLinkedImageUrlsForHandles(s.nodes, s.edges, id, ["startImage"]);
+        const startUrls = collectLinkedImageUrlsForHandles(s.nodes, s.edges, id, ["startImage", "startImageAlt"]);
         const refUrls = collectLinkedImageUrlsForHandles(s.nodes, s.edges, id, ["references"]);
         const legacyImg = collectLinkedImageUrlsForHandles(s.nodes, s.edges, id, ["inImage"]);
         const nodeRef =
@@ -3132,7 +3133,11 @@ export function AdAssetNode({ id, data, selected }: NodeProps<AdAssetNodeType>) 
     try {
       let nodesForVideoInputs = nodes;
       const incomingVideoFrameEdges = edges.filter(
-        (e) => e.target === id && ((e.targetHandle ?? "") === "startImage" || (e.targetHandle ?? "") === "endImage"),
+        (e) =>
+          e.target === id &&
+          ((e.targetHandle ?? "") === "startImage" ||
+            (e.targetHandle ?? "") === "startImageAlt" ||
+            (e.targetHandle ?? "") === "endImage"),
       );
       let frameExtractionFailed = false;
       if (incomingVideoFrameEdges.length > 0) {
@@ -3194,7 +3199,10 @@ export function AdAssetNode({ id, data, selected }: NodeProps<AdAssetNodeType>) 
           }
         }
       }
-      const linkedFromStartPortStrict = collectLinkedImageUrlsForHandles(nodesForVideoInputs, edges, id, ["startImage"]);
+      const linkedFromStartPortStrict = collectLinkedImageUrlsForHandles(nodesForVideoInputs, edges, id, [
+        "startImage",
+        "startImageAlt",
+      ]);
       const linkedFromEndPort = collectLinkedImageUrlsForHandles(nodesForVideoInputs, edges, id, ["endImage"]);
       const linkedFromReferencesPortStrict = collectLinkedImageUrlsForHandles(
         nodesForVideoInputs,
@@ -4306,23 +4314,33 @@ export function AdAssetNode({ id, data, selected }: NodeProps<AdAssetNodeType>) 
             </span>
           </div>
 
-          {data.kind === "motion" || (data.kind === "video" && seedance2ProLike) ? (
-            <div className={cn(workflowPortBubbleShellClass, "nodrag nopan")}>
-              <Handle
-                id="inVideo"
-                type="target"
-                position={Position.Left}
-                className={workflowPortTargetBubbleHandleClass}
-                aria-label={
-                  data.kind === "motion" ? "Motion reference video input" : "Seedance reference video input"
-                }
-                title={
-                  data.kind === "motion"
-                    ? "Motion reference video — click to add upload, list, or video generator."
-                    : "Seedance 2 / Fast: optional motion reference video for omni_reference."
-                }
-                onPointerDown={(e) => handleInputBubblePointerDown(e, "inVideo")}
-              />
+          {data.kind === "motion" || data.kind === "video" ? (
+            <div
+              className={cn(
+                workflowPortBubbleShellClass,
+                "nodrag nopan",
+                data.kind === "video" && !seedance2ProLike && "opacity-35",
+              )}
+              title={
+                data.kind === "motion"
+                  ? "Motion reference video — click to add upload, list, or video generator."
+                  : seedance2ProLike
+                    ? "Seedance 2 / Fast: optional motion reference video for omni_reference."
+                    : "Video input is disabled for this model."
+              }
+            >
+              {data.kind === "motion" || seedance2ProLike ? (
+                <Handle
+                  id="inVideo"
+                  type="target"
+                  position={Position.Left}
+                  className={workflowPortTargetBubbleHandleClass}
+                  aria-label={
+                    data.kind === "motion" ? "Motion reference video input" : "Seedance reference video input"
+                  }
+                  onPointerDown={(e) => handleInputBubblePointerDown(e, "inVideo")}
+                />
+              ) : null}
               <span className={workflowPortBubbleIconClass} aria-hidden>
                 <Play className="h-4 w-4" strokeWidth={2} aria-hidden="true" />
               </span>
@@ -4343,7 +4361,7 @@ export function AdAssetNode({ id, data, selected }: NodeProps<AdAssetNodeType>) 
                     onPointerDown={(e) => handleInputBubblePointerDown(e, "startImage")}
                   />
                   <Handle
-                    id="inImage"
+                    id="startImageAlt"
                     type="target"
                     position={Position.Left}
                     className={workflowPortTargetBubbleHandleRightHalfClass}
@@ -4369,47 +4387,71 @@ export function AdAssetNode({ id, data, selected }: NodeProps<AdAssetNodeType>) 
             </div>
           ) : null}
 
-          {data.kind === "video" && videoModelHasEndFrame ? (
-          <div className={cn(workflowPortBubbleShellClass, "nodrag nopan")}>
-            <Handle
-              id="endImage"
-              type="target"
-              position={Position.Left}
-              className={workflowPortTargetBubbleHandleClass}
-              aria-label="End frame image input"
-              title="End frame image, one incoming image (last frame when the model supports it)."
-              onPointerDown={(e) => handleInputBubblePointerDown(e, "endImage")}
-            />
+          {data.kind === "video" ? (
+          <div
+            className={cn(
+              workflowPortBubbleShellClass,
+              "nodrag nopan",
+              !videoModelHasEndFrame && "opacity-35",
+            )}
+            title={
+              videoModelHasEndFrame
+                ? "End frame image, one incoming image (last frame when the model supports it)."
+                : "End frame input is disabled for this model."
+            }
+          >
+            {videoModelHasEndFrame ? (
+              <Handle
+                id="endImage"
+                type="target"
+                position={Position.Left}
+                className={workflowPortTargetBubbleHandleClass}
+                aria-label="End frame image input"
+                onPointerDown={(e) => handleInputBubblePointerDown(e, "endImage")}
+              />
+            ) : null}
             <span className={workflowPortBubbleIconClass} aria-hidden>
               <ImageIcon className="h-4 w-4" strokeWidth={2} aria-hidden="true" />
             </span>
           </div>
           ) : null}
 
-          {data.kind === "video" && videoModelHasReferences ? (
-          <div className={cn(workflowPortBubbleShellClass, "nodrag nopan")}>
-            <Handle
-              id="references"
-              type="target"
-              position={Position.Left}
-              className={workflowPortTargetBubbleHandleLeftHalfClass}
-              aria-label="Reference images input"
-              onPointerDown={(e) => handleInputBubblePointerDown(e, "references")}
-            />
-            <Handle
-              id="inImage"
-              type="target"
-              position={Position.Left}
-              className={workflowPortTargetBubbleHandleRightHalfClass}
-              aria-label="Alternate reference images port"
-              onPointerDown={(e) => handleInputBubblePointerDown(e, "references")}
-            />
+          {data.kind === "video" ? (
+          <div
+            className={cn(
+              workflowPortBubbleShellClass,
+              "nodrag nopan",
+              !videoModelHasReferences && "opacity-35",
+            )}
+          >
+            {videoModelHasReferences ? (
+              <>
+                <Handle
+                  id="references"
+                  type="target"
+                  position={Position.Left}
+                  className={workflowPortTargetBubbleHandleLeftHalfClass}
+                  aria-label="Reference images input"
+                  onPointerDown={(e) => handleInputBubblePointerDown(e, "references")}
+                />
+                <Handle
+                  id="inImage"
+                  type="target"
+                  position={Position.Left}
+                  className={workflowPortTargetBubbleHandleRightHalfClass}
+                  aria-label="Alternate reference images port"
+                  onPointerDown={(e) => handleInputBubblePointerDown(e, "references")}
+                />
+              </>
+            ) : null}
             <span
               className={workflowPortBubbleIconClass}
               title={
-                videoModelSupportsElements
-                  ? "Reference images. Type @image1, @image2, … in the prompt to bind them."
-                  : "Reference images, multiple incoming images supported by this model."
+                videoModelHasReferences
+                  ? videoModelSupportsElements
+                    ? "Reference images. Type @image1, @image2, … in the prompt to bind them."
+                    : "Reference images, multiple incoming images supported by this model."
+                  : "Reference image input is disabled for this model."
               }
               aria-hidden
             >
@@ -5418,7 +5460,7 @@ export function AdAssetNode({ id, data, selected }: NodeProps<AdAssetNodeType>) 
                     data.kind === "image" || data.kind === "video" ? (
                       <X className="h-3.5 w-3.5" strokeWidth={2.5} aria-hidden />
                     ) : (
-                      <Loader2 className="h-3.5 w-3.5 animate-spin text-zinc-900" aria-hidden />
+                      <Loader2 className="h-4 w-4 animate-spin text-zinc-900" aria-hidden />
                     )
                   ) : hasGeneratedOutput ? (
                     <RotateCcw className="h-3.5 w-3.5 text-zinc-900" strokeWidth={2.25} />

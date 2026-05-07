@@ -17,7 +17,11 @@ import {
   WAVESPEED_CHAIN_PROVIDER,
   WAVESPEED_PROVIDER,
 } from "@/lib/wavespeedChain";
-import { persistStudioMediaUrls, isStudioMediaPublicUrl } from "@/lib/studioGenerationsMedia";
+import {
+  persistStudioMediaUrls,
+  isStudioMediaPublicUrl,
+  type StudioMediaArchivalBudget,
+} from "@/lib/studioGenerationsMedia";
 
 /** DB rows we still poll until Kie/PiAPI reports terminal state. */
 export const STUDIO_GENERATION_IN_PROGRESS_STATUSES = [
@@ -64,6 +68,12 @@ export async function pollStudioGenerationRow(
   personalApiKey: string | undefined,
   piapiApiKey: string | undefined,
   supabase: SupabaseClient,
+  archivalOpts?: {
+    /** Defaults to "live" — only archive ephemeral URLs inline, defer stable ones to cron. */
+    mode?: "live" | "cron";
+    /** Optional shared budget so a single HTTP request bounds total archival memory. */
+    budget?: StudioMediaArchivalBudget;
+  },
 ): Promise<void> {
   const status = String(row.status ?? "").toLowerCase();
   if (!isStudioGenerationInProgressStatus(status)) return;
@@ -213,6 +223,14 @@ export async function pollStudioGenerationRow(
 
     // Archive to Supabase Storage immediately when possible (prevents ephemeral URL expiry).
     // Falls back to saving provider URLs, cron backfill will retry later.
+    //
+    // Memory note: under heavy concurrency (e.g. 100 generations finishing at once on
+    // a Vercel Fluid Compute instance shared between many invocations), buffering full
+    // videos here used to OOM the entire warm instance — taking down unrelated requests
+    // (subscription / auth / spaces) running on the same instance. The archival path
+    // now restricts itself to truly ephemeral URLs in "live" mode and honors a shared
+    // per-request budget; stable provider URLs (Kling/Veo/Kie) are passed through and
+    // archived later by the cron, which has a fatter budget.
     if (resultUrls.length > 0 && !resultUrls.every(isStudioMediaPublicUrl)) {
       try {
         const { urls: archived } = await persistStudioMediaUrls({
@@ -220,6 +238,8 @@ export async function pollStudioGenerationRow(
           userId: row.user_id,
           rowId: row.id,
           urls: resultUrls,
+          mode: archivalOpts?.mode ?? "live",
+          budget: archivalOpts?.budget,
         });
         if (archived.length > 0) resultUrls = archived;
       } catch (e) {

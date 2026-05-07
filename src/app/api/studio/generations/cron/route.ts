@@ -75,9 +75,12 @@ export async function POST(req: Request) {
     const rows = [...(upscaleRows ?? []), ...(otherRows ?? [])] as StudioGenerationRow[];
 
     let pollErrors = 0;
+    // Cron has a fatter budget (3008 MB) and processes rows sequentially,
+    // so we let it archive everything inline rather than only the ephemeral
+    // subset (no risk of taking down concurrent web traffic).
     for (const row of rows) {
       try {
-        await pollStudioGenerationRow(row, undefined, undefined, admin);
+        await pollStudioGenerationRow(row, undefined, undefined, admin, { mode: "cron" });
       } catch {
         pollErrors++;
       }

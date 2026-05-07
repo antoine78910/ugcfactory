@@ -11,6 +11,7 @@ import {
   STUDIO_GENERATION_IN_PROGRESS_STATUSES,
   sweepStudioRefundHints,
 } from "@/lib/studioGenerationsPoll";
+import { createLivePollArchivalBudget } from "@/lib/studioGenerationsMedia";
 import { serverLog } from "@/lib/serverLog";
 import { markStaleInProgressStudioGenerationsFailedForUser } from "@/lib/studioGenerationsStale";
 import {
@@ -45,9 +46,13 @@ const LIBRARY_KINDS = STUDIO_LIBRARY_KINDS;
 
 /**
  * Cap per request to stay under serverless limits. Too low starves newer jobs when many rows are
- * in-flight (always ordering by oldest `created_at` first).
+ * in-flight (always ordering by oldest `created_at` first); too high blows up the warm Vercel
+ * instance memory when many rows finish at once and trigger inline archival.
+ *
+ * 16 rows × ~live archival budget keeps peak memory well under 1024 MB even when several
+ * just-finished video rows are returned in the same tick.
  */
-const MAX_ROWS_TO_POLL_PER_REQUEST = 28;
+const MAX_ROWS_TO_POLL_PER_REQUEST = 16;
 
 const ALLOWED_POLL_KINDS = new Set<string>(LIBRARY_KINDS);
 const POLL_KIND_DEFAULT = "avatar";
@@ -149,9 +154,17 @@ export async function POST(req: Request) {
     const processingRows = (processing ?? []) as StudioGenerationRow[];
     const admin = createSupabaseServiceClient();
     const pollDbClient = admin ?? supabase;
+    // Single budget shared across every row in this HTTP request. Once exhausted,
+    // remaining rows still get their statuses updated but keep provider URLs;
+    // the cron backfill will archive them later. This is the key guard against
+    // OOM-induced cascading 500s on /api/studio/generations/poll.
+    const liveArchivalBudget = createLivePollArchivalBudget();
     for (const row of processingRows) {
       try {
-        await pollStudioGenerationRow(row, personalApiKey, piapiApiKey, pollDbClient);
+        await pollStudioGenerationRow(row, personalApiKey, piapiApiKey, pollDbClient, {
+          mode: "live",
+          budget: liveArchivalBudget,
+        });
       } catch {
         /* one bad poll should not block others */
       }

@@ -5,6 +5,7 @@ import { supabaseErrMessage } from "@/lib/supabaseErrMessage";
 import { requireSupabaseUser } from "@/lib/supabase/requireUser";
 import { createSupabaseServiceClient } from "@/lib/supabase/admin";
 import { mirrorRunMediaUrls, rowHasUnpersistedMedia } from "@/lib/runMediaPersistence";
+import { createLivePollArchivalBudget } from "@/lib/studioGenerationsMedia";
 import { serverLog } from "@/lib/serverLog";
 
 export async function GET() {
@@ -35,6 +36,9 @@ export async function GET() {
       if (admin) {
         const MAX_MIRROR_PER_LIST = 6;
         const toMirror = candidates.slice(0, MAX_MIRROR_PER_LIST);
+        // Shared budget across all mirror calls in this request keeps total
+        // archival memory bounded even when several rows have ephemeral media.
+        const sharedBudget = createLivePollArchivalBudget();
         void Promise.all(
           toMirror.map(async (r) => {
             const runId = String(r.id ?? "").trim();
@@ -51,6 +55,8 @@ export async function GET() {
                   packshot_urls: r.packshot_urls,
                   extracted: r.extracted,
                 },
+                mode: "live",
+                budget: sharedBudget,
               });
               if (!mirrored.changed) return;
 
