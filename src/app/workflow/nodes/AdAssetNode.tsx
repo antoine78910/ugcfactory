@@ -723,6 +723,7 @@ export function AdAssetNode({ id, data, selected }: NodeProps<AdAssetNodeType>) 
       : null,
   );
   const previousReferenceSignatureRef = useRef<string | null>(null);
+  const autoExtractedFromReferenceVideoRef = useRef<string | null>(null);
 
   useEffect(() => {
     if (data.kind !== "image" && data.kind !== "video" && data.kind !== "motion") return;
@@ -761,6 +762,78 @@ export function AdAssetNode({ id, data, selected }: NodeProps<AdAssetNodeType>) 
     data.referenceSource,
     data.videoStartImageUrl,
     data.videoEndImageUrl,
+    id,
+    patch,
+  ]);
+
+  /**
+   * Video Generator reference upload auto-fill:
+   * when a video is uploaded as node-local reference (`referenceMediaKind=video`), extract
+   * first/last frames once and seed both:
+   *  - `videoExtractedFirstFrameUrl` / `videoExtractedLastFrameUrl` (S/E bubble thumbnails)
+   *  - `videoStartImageUrl` / `videoEndImageUrl` (actual start/end inputs used by run pipeline)
+   *
+   * This removes the need to manually double-click S/E bubbles after every video upload and
+   * fixes cases where users wire a video as frame source but generation starts with no
+   * resolved start/end image.
+   */
+  useEffect(() => {
+    if (data.kind !== "video") return;
+    if (data.referenceMediaKind !== "video") return;
+    const src = (data.referencePreviewUrl ?? "").trim();
+    if (!src) return;
+    if (frameExtractBusy) return;
+    if (autoExtractedFromReferenceVideoRef.current === src) return;
+    if (
+      data.videoStartImageUrl?.trim() &&
+      data.videoEndImageUrl?.trim() &&
+      data.videoExtractedFirstFrameUrl?.trim() &&
+      data.videoExtractedLastFrameUrl?.trim()
+    ) {
+      autoExtractedFromReferenceVideoRef.current = src;
+      return;
+    }
+
+    let cancelled = false;
+    autoExtractedFromReferenceVideoRef.current = src;
+    void (async () => {
+      setFrameExtractBusy("first");
+      try {
+        const first =
+          data.videoStartImageUrl?.trim() ||
+          data.videoExtractedFirstFrameUrl?.trim() ||
+          (await extractVideoFrameJpegDataUrlFromUrl(src, false));
+        if (cancelled) return;
+        const last =
+          data.videoEndImageUrl?.trim() ||
+          data.videoExtractedLastFrameUrl?.trim() ||
+          (await extractVideoFrameJpegDataUrlFromUrl(src, true));
+        if (cancelled) return;
+        patch(id, {
+          videoStartImageUrl: first,
+          videoEndImageUrl: last,
+          videoExtractedFirstFrameUrl: first,
+          videoExtractedLastFrameUrl: last,
+        });
+      } catch {
+        // Keep manual extraction available; allow retry on next render/update.
+        autoExtractedFromReferenceVideoRef.current = null;
+      } finally {
+        if (!cancelled) setFrameExtractBusy(null);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [
+    data.kind,
+    data.referenceMediaKind,
+    data.referencePreviewUrl,
+    data.videoStartImageUrl,
+    data.videoEndImageUrl,
+    data.videoExtractedFirstFrameUrl,
+    data.videoExtractedLastFrameUrl,
+    frameExtractBusy,
     id,
     patch,
   ]);
