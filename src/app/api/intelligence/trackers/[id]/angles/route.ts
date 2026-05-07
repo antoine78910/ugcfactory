@@ -2,7 +2,7 @@ export const runtime = "nodejs";
 
 import { NextResponse } from "next/server";
 import { requireSupabaseUser } from "@/lib/supabase/requireUser";
-import { ttGetTopAds, type TTAd } from "@/lib/trendtrack";
+import { ttGetTopAds, ttListAdvertiserAds, type TTAd } from "@/lib/trendtrack";
 import { getCached, setCached, deleteCached } from "@/lib/trendtrackCache";
 import { claudeMessagesText } from "@/lib/claudeResponses";
 import { respondTrendTrackError } from "@/app/api/intelligence/_errors";
@@ -51,6 +51,17 @@ function parseAngles(raw: string): Angle[] {
   }
 }
 
+/** TrendTrack brandtracker endpoints require a canonical UUID (v4/v7). */
+function isCanonicalUuid(s: string): boolean {
+  return /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(s.trim());
+}
+
+async function fetchAdsForId(id: string): Promise<TTAd[]> {
+  return isCanonicalUuid(id)
+    ? ttGetTopAds(id, 10)
+    : ttListAdvertiserAds(id, { limit: 10, sortBy: "reach", order: "desc" });
+}
+
 export async function GET(
   req: Request,
   { params }: { params: Promise<{ id: string }> }
@@ -70,7 +81,7 @@ export async function GET(
   let ads = await getCached<TTAd[]>(topAdsKey);
   if (!ads) {
     try {
-      ads = await ttGetTopAds(id, 10);
+      ads = await fetchAdsForId(id);
       await setCached(topAdsKey, ads, TOPADS_TTL);
     } catch (err) {
       return respondTrendTrackError(err, topAdsKey);

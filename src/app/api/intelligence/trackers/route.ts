@@ -48,9 +48,23 @@ export async function GET(req: Request) {
     const workspaceById = new Map(
       Array.isArray(workspace) ? workspace.map((t) => [t.id, t] as const) : []
     );
+    // Secondary index: match by domain for trackers saved with a numeric advertiser ID.
+    const workspaceByDomain = new Map(
+      Array.isArray(workspace)
+        ? workspace
+            .filter((t) => t.domain?.trim())
+            .map((t) => [t.domain!.trim().toLowerCase().replace(/^https?:\/\//, "").replace(/^www\./, "").replace(/\/$/, ""), t] as const)
+        : []
+    );
 
     const out = savedRows.map((r) => {
-      const tt = workspaceById.get(r.tracker_id);
+      const tt =
+        workspaceById.get(r.tracker_id) ??
+        (r.domain
+          ? workspaceByDomain.get(
+              r.domain.trim().toLowerCase().replace(/^https?:\/\//, "").replace(/^www\./, "").replace(/\/$/, ""),
+            )
+          : undefined);
       if (tt) {
         return {
           ...tt,

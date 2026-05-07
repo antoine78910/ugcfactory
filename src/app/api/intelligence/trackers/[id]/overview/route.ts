@@ -23,6 +23,16 @@ export async function GET(
   const cached = await getCached(key);
   if (cached) return NextResponse.json(cached);
 
+  // The brandtrackers overview endpoint requires a canonical UUID (v4/v7).
+  // For brands saved with a numeric advertiser/lookup id, we have no equivalent
+  // overview endpoint — return empty stats instead of a TrendTrack 400.
+  const isCanonicalUuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(id.trim());
+  if (!isCanonicalUuid) {
+    const empty = {};
+    await setCached(key, empty, TTL);
+    return NextResponse.json(empty);
+  }
+
   try {
     const data = await ttGetOverview(id);
     await setCached(key, data, TTL);
