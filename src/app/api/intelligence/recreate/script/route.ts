@@ -30,7 +30,7 @@ type Body = {
    * When provided it is the FIRST image sent to Claude (before any reference thumbnails)
    * and used as the visual composition / opening-shot reference.
    */
-  videoFirstFrameUrl?: string;
+  videoFirstFrameUrl?: string | null;
   /** Reference image / preview / thumbnail of the original ad. */
   referenceImageUrls?: string[];
   /** User's product images (1–3). The first image is the canonical product shot. */
@@ -190,7 +190,7 @@ export async function POST(req: Request) {
 
   const safeBody: Required<Body> = {
     ad: body.ad ?? {},
-    videoFirstFrameUrl: videoFirstFrameUrl ?? undefined,
+    videoFirstFrameUrl: videoFirstFrameUrl ?? null,
     referenceImageUrls,
     productImageUrls,
     productDescription,
