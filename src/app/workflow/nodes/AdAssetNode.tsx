@@ -15,6 +15,7 @@ import {
   AlertTriangle,
   Coins,
   ArrowRight,
+  HelpCircle,
   Clapperboard,
   ImageIcon,
   Images,
@@ -1884,11 +1885,11 @@ export function AdAssetNode({ id, data, selected }: NodeProps<AdAssetNodeType>) 
     motionDetectedInputDurationSec,
   ]);
 
-  const runFromHereEstimatedCredits = useStore(
+  const runFromHerePlan = useStore(
     useCallback(
       (s) => {
         const byId = new Map(s.nodes.map((n) => [n.id, n]));
-        if (!byId.has(id)) return 0;
+        if (!byId.has(id)) return { steps: [] as { id: string; label: string; kind: string; credits: number; parents: number[] }[], estimatedCredits: 0 };
         const outgoing = new Map<string, string[]>();
         for (const e of s.edges) {
           if (!outgoing.has(e.source)) outgoing.set(e.source, []);
@@ -1896,24 +1897,76 @@ export function AdAssetNode({ id, data, selected }: NodeProps<AdAssetNodeType>) 
         }
         const seen = new Set<string>();
         const queue = [id];
-        let total = 0;
+        const reachable: string[] = [];
         while (queue.length) {
           const cur = queue.shift()!;
           if (seen.has(cur)) continue;
           seen.add(cur);
-          const n = byId.get(cur);
-          if (n?.type === "adAsset") {
-            total += estimateWorkflowAdAssetRunCredits(n.data as AdAssetNodeData, n.id, s.nodes, s.edges);
-          }
-          for (const nxt of outgoing.get(cur) ?? []) {
-            if (!seen.has(nxt)) queue.push(nxt);
+          reachable.push(cur);
+          for (const nxt of outgoing.get(cur) ?? []) if (!seen.has(nxt)) queue.push(nxt);
+        }
+        const runIds = reachable.filter((nid) => {
+          const n = byId.get(nid);
+          if (!n || n.type !== "adAsset") return false;
+          const k = (n.data as AdAssetNodeData).kind;
+          return k === "image" || k === "video" || k === "motion" || k === "assistant" || k === "website";
+        });
+        if (!runIds.length) return { steps: [] as { id: string; label: string; kind: string; credits: number; parents: number[] }[], estimatedCredits: 0 };
+        const runSet = new Set(runIds);
+        const indegree = new Map<string, number>();
+        const children = new Map<string, string[]>();
+        const parentsById = new Map<string, string[]>();
+        const reachOrder = new Map<string, number>(reachable.map((nid, idx) => [nid, idx]));
+        for (const rid of runIds) {
+          indegree.set(rid, 0);
+          children.set(rid, []);
+          parentsById.set(rid, []);
+        }
+        for (const e of s.edges) {
+          if (!runSet.has(e.source) || !runSet.has(e.target)) continue;
+          children.get(e.source)!.push(e.target);
+          parentsById.get(e.target)!.push(e.source);
+          indegree.set(e.target, (indegree.get(e.target) ?? 0) + 1);
+        }
+        const ready = runIds.filter((rid) => (indegree.get(rid) ?? 0) === 0);
+        ready.sort((a, b) => (reachOrder.get(a) ?? 0) - (reachOrder.get(b) ?? 0));
+        const orderedRunIds: string[] = [];
+        while (ready.length) {
+          const cur = ready.shift()!;
+          orderedRunIds.push(cur);
+          for (const nxt of children.get(cur) ?? []) {
+            const nextDeg = (indegree.get(nxt) ?? 0) - 1;
+            indegree.set(nxt, nextDeg);
+            if (nextDeg === 0) {
+              ready.push(nxt);
+              ready.sort((a, b) => (reachOrder.get(a) ?? 0) - (reachOrder.get(b) ?? 0));
+            }
           }
         }
-        return Math.max(0, Math.round(total));
+        if (orderedRunIds.length !== runIds.length) {
+          for (const rid of runIds) if (!orderedRunIds.includes(rid)) orderedRunIds.push(rid);
+        }
+        const indexOf = new Map(orderedRunIds.map((rid, idx) => [rid, idx]));
+        let estimatedCredits = 0;
+        const steps = orderedRunIds.map((rid) => {
+          const n = byId.get(rid);
+          const d = (n?.data as AdAssetNodeData) ?? ({ kind: "image" } as AdAssetNodeData);
+          const credits = n?.type === "adAsset" ? estimateWorkflowAdAssetRunCredits(d, rid, s.nodes, s.edges) : 0;
+          estimatedCredits += credits;
+          const label = (d.label ?? "").trim() || d.kind || "module";
+          const kind = d.kind || "module";
+          const parents = (parentsById.get(rid) ?? [])
+            .map((pid) => indexOf.get(pid))
+            .filter((v): v is number => typeof v === "number")
+            .sort((a, b) => a - b);
+          return { id: rid, label, kind, credits, parents };
+        });
+        return { steps, estimatedCredits: Math.max(0, Math.round(estimatedCredits)) };
       },
       [id],
     ),
   );
+  const runFromHereEstimatedCredits = runFromHerePlan.estimatedCredits;
   const assistantEstimatedCredits = useMemo(
     () => (data.kind === "assistant" ? WORKFLOW_ASSISTANT_CREDITS_BY_MODEL[assistantModel] ?? 5 : 0),
     [assistantModel, data.kind],
@@ -3418,14 +3471,71 @@ export function AdAssetNode({ id, data, selected }: NodeProps<AdAssetNodeType>) 
                     >
                       This node only
                     </button>
-                    <button
-                      type="button"
-                      className="flex w-full items-center rounded-lg px-2.5 py-2 text-left text-[12px] font-medium text-white/90 transition hover:bg-white/[0.08]"
-                      onClick={runFromHere}
-                    >
-                      Run from here
-                      {runFromHereEstimatedCredits > 0 ? ` (${runFromHereEstimatedCredits} cr)` : ""}
-                    </button>
+                    <div className="flex w-full items-center gap-1 rounded-lg px-2 py-1 transition hover:bg-white/[0.08]">
+                      <button
+                        type="button"
+                        className="flex flex-1 items-center rounded-lg px-0.5 py-1 text-left text-[12px] font-medium text-white/90"
+                        onClick={runFromHere}
+                      >
+                        Run from here
+                        {runFromHereEstimatedCredits > 0 ? ` (${runFromHereEstimatedCredits} cr)` : ""}
+                      </button>
+                      {runFromHerePlan.steps.length ? (
+                        <HoverCard.Root openDelay={120} closeDelay={120}>
+                          <HoverCard.Trigger asChild>
+                            <button
+                              type="button"
+                              className="inline-flex h-7 w-7 items-center justify-center rounded-md border border-white/10 bg-black/20 text-white/70 transition hover:bg-black/35 hover:text-white"
+                              aria-label="Show run plan"
+                              title="Show run plan"
+                              onClick={(e) => e.preventDefault()}
+                              onPointerDown={(e) => e.stopPropagation()}
+                            >
+                              <HelpCircle className="h-3.5 w-3.5" strokeWidth={2.2} aria-hidden />
+                            </button>
+                          </HoverCard.Trigger>
+                          <HoverCard.Portal>
+                            <HoverCard.Content
+                              side="left"
+                              align="start"
+                              sideOffset={10}
+                              className="z-[220] w-[360px] rounded-xl border border-white/12 bg-[#101018]/95 p-3 shadow-[0_18px_55px_rgba(0,0,0,0.65)] backdrop-blur-md"
+                              onPointerDown={(e) => e.stopPropagation()}
+                            >
+                              <div className="text-[12px] font-semibold text-white/90">Run from here plan</div>
+                              <div className="mt-0.5 text-[11px] text-white/60">
+                                {runFromHerePlan.steps.length} step{runFromHerePlan.steps.length > 1 ? "s" : ""} • ~
+                                {runFromHereEstimatedCredits} credits
+                              </div>
+                              <div className="mt-2 max-h-[260px] space-y-1.5 overflow-y-auto pr-1">
+                                {runFromHerePlan.steps.map((step, idx) => (
+                                  <div
+                                    key={step.id}
+                                    className="rounded-lg border border-white/10 bg-white/[0.03] px-2 py-1.5"
+                                  >
+                                    <div className="flex items-center justify-between gap-2">
+                                      <div className="truncate text-[11px] font-semibold text-white/85">
+                                        {idx + 1}. {step.label}
+                                      </div>
+                                      <div className="inline-flex items-center gap-1 rounded border border-white/10 bg-white/[0.04] px-1.5 py-[1px] text-[10px] text-white/75">
+                                        <Coins className="h-2.5 w-2.5 text-amber-200" strokeWidth={2.4} aria-hidden />
+                                        {step.credits > 0 ? `~${Math.round(step.credits)}` : "—"}
+                                      </div>
+                                    </div>
+                                    <div className="mt-[1px] text-[10px] text-white/45">
+                                      {step.kind}
+                                      {step.parents.length
+                                        ? ` ← from ${step.parents.map((p) => `#${p + 1}`).join(", ")}`
+                                        : " • starts chain"}
+                                    </div>
+                                  </div>
+                                ))}
+                              </div>
+                            </HoverCard.Content>
+                          </HoverCard.Portal>
+                        </HoverCard.Root>
+                      ) : null}
+                    </div>
                   </div>
                 ) : null}
               </div>
@@ -3750,14 +3860,71 @@ export function AdAssetNode({ id, data, selected }: NodeProps<AdAssetNodeType>) 
                   >
                     This node only
                   </button>
-                  <button
-                    type="button"
-                    className="flex w-full items-center rounded-lg px-2.5 py-2 text-left text-[12px] font-medium text-white/90 transition hover:bg-white/[0.08]"
-                    onClick={runFromHere}
-                  >
-                    Run from here
-                    {runFromHereEstimatedCredits > 0 ? ` (${runFromHereEstimatedCredits} cr)` : ""}
-                  </button>
+                  <div className="flex w-full items-center gap-1 rounded-lg px-2 py-1 transition hover:bg-white/[0.08]">
+                    <button
+                      type="button"
+                      className="flex flex-1 items-center rounded-lg px-0.5 py-1 text-left text-[12px] font-medium text-white/90"
+                      onClick={runFromHere}
+                    >
+                      Run from here
+                      {runFromHereEstimatedCredits > 0 ? ` (${runFromHereEstimatedCredits} cr)` : ""}
+                    </button>
+                    {runFromHerePlan.steps.length ? (
+                      <HoverCard.Root openDelay={120} closeDelay={120}>
+                        <HoverCard.Trigger asChild>
+                          <button
+                            type="button"
+                            className="inline-flex h-7 w-7 items-center justify-center rounded-md border border-white/10 bg-black/20 text-white/70 transition hover:bg-black/35 hover:text-white"
+                            aria-label="Show run plan"
+                            title="Show run plan"
+                            onClick={(e) => e.preventDefault()}
+                            onPointerDown={(e) => e.stopPropagation()}
+                          >
+                            <HelpCircle className="h-3.5 w-3.5" strokeWidth={2.2} aria-hidden />
+                          </button>
+                        </HoverCard.Trigger>
+                        <HoverCard.Portal>
+                          <HoverCard.Content
+                            side="left"
+                            align="start"
+                            sideOffset={10}
+                            className="z-[220] w-[360px] rounded-xl border border-white/12 bg-[#101018]/95 p-3 shadow-[0_18px_55px_rgba(0,0,0,0.65)] backdrop-blur-md"
+                            onPointerDown={(e) => e.stopPropagation()}
+                          >
+                            <div className="text-[12px] font-semibold text-white/90">Run from here plan</div>
+                            <div className="mt-0.5 text-[11px] text-white/60">
+                              {runFromHerePlan.steps.length} step{runFromHerePlan.steps.length > 1 ? "s" : ""} • ~
+                              {runFromHereEstimatedCredits} credits
+                            </div>
+                            <div className="mt-2 max-h-[260px] space-y-1.5 overflow-y-auto pr-1">
+                              {runFromHerePlan.steps.map((step, idx) => (
+                                <div
+                                  key={step.id}
+                                  className="rounded-lg border border-white/10 bg-white/[0.03] px-2 py-1.5"
+                                >
+                                  <div className="flex items-center justify-between gap-2">
+                                    <div className="truncate text-[11px] font-semibold text-white/85">
+                                      {idx + 1}. {step.label}
+                                    </div>
+                                    <div className="inline-flex items-center gap-1 rounded border border-white/10 bg-white/[0.04] px-1.5 py-[1px] text-[10px] text-white/75">
+                                      <Coins className="h-2.5 w-2.5 text-amber-200" strokeWidth={2.4} aria-hidden />
+                                      {step.credits > 0 ? `~${Math.round(step.credits)}` : "—"}
+                                    </div>
+                                  </div>
+                                  <div className="mt-[1px] text-[10px] text-white/45">
+                                    {step.kind}
+                                    {step.parents.length
+                                      ? ` ← from ${step.parents.map((p) => `#${p + 1}`).join(", ")}`
+                                      : " • starts chain"}
+                                  </div>
+                                </div>
+                              ))}
+                            </div>
+                          </HoverCard.Content>
+                        </HoverCard.Portal>
+                      </HoverCard.Root>
+                    ) : null}
+                  </div>
                 </div>
               ) : null}
             </div>
@@ -4914,14 +5081,71 @@ export function AdAssetNode({ id, data, selected }: NodeProps<AdAssetNodeType>) 
                     >
                       This node only
                     </button>
-                    <button
-                      type="button"
-                      className="flex w-full items-center rounded-lg px-2.5 py-2 text-left text-[12px] font-medium text-white/90 transition hover:bg-white/[0.08]"
-                      onClick={runFromHere}
-                    >
-                      Run from here
-                      {runFromHereEstimatedCredits > 0 ? ` (${runFromHereEstimatedCredits} cr)` : ""}
-                    </button>
+                    <div className="flex w-full items-center gap-1 rounded-lg px-2 py-1 transition hover:bg-white/[0.08]">
+                      <button
+                        type="button"
+                        className="flex flex-1 items-center rounded-lg px-0.5 py-1 text-left text-[12px] font-medium text-white/90"
+                        onClick={runFromHere}
+                      >
+                        Run from here
+                        {runFromHereEstimatedCredits > 0 ? ` (${runFromHereEstimatedCredits} cr)` : ""}
+                      </button>
+                      {runFromHerePlan.steps.length ? (
+                        <HoverCard.Root openDelay={120} closeDelay={120}>
+                          <HoverCard.Trigger asChild>
+                            <button
+                              type="button"
+                              className="inline-flex h-7 w-7 items-center justify-center rounded-md border border-white/10 bg-black/20 text-white/70 transition hover:bg-black/35 hover:text-white"
+                              aria-label="Show run plan"
+                              title="Show run plan"
+                              onClick={(e) => e.preventDefault()}
+                              onPointerDown={(e) => e.stopPropagation()}
+                            >
+                              <HelpCircle className="h-3.5 w-3.5" strokeWidth={2.2} aria-hidden />
+                            </button>
+                          </HoverCard.Trigger>
+                          <HoverCard.Portal>
+                            <HoverCard.Content
+                              side="left"
+                              align="start"
+                              sideOffset={10}
+                              className="z-[220] w-[360px] rounded-xl border border-white/12 bg-[#101018]/95 p-3 shadow-[0_18px_55px_rgba(0,0,0,0.65)] backdrop-blur-md"
+                              onPointerDown={(e) => e.stopPropagation()}
+                            >
+                              <div className="text-[12px] font-semibold text-white/90">Run from here plan</div>
+                              <div className="mt-0.5 text-[11px] text-white/60">
+                                {runFromHerePlan.steps.length} step{runFromHerePlan.steps.length > 1 ? "s" : ""} • ~
+                                {runFromHereEstimatedCredits} credits
+                              </div>
+                              <div className="mt-2 max-h-[260px] space-y-1.5 overflow-y-auto pr-1">
+                                {runFromHerePlan.steps.map((step, idx) => (
+                                  <div
+                                    key={step.id}
+                                    className="rounded-lg border border-white/10 bg-white/[0.03] px-2 py-1.5"
+                                  >
+                                    <div className="flex items-center justify-between gap-2">
+                                      <div className="truncate text-[11px] font-semibold text-white/85">
+                                        {idx + 1}. {step.label}
+                                      </div>
+                                      <div className="inline-flex items-center gap-1 rounded border border-white/10 bg-white/[0.04] px-1.5 py-[1px] text-[10px] text-white/75">
+                                        <Coins className="h-2.5 w-2.5 text-amber-200" strokeWidth={2.4} aria-hidden />
+                                        {step.credits > 0 ? `~${Math.round(step.credits)}` : "—"}
+                                      </div>
+                                    </div>
+                                    <div className="mt-[1px] text-[10px] text-white/45">
+                                      {step.kind}
+                                      {step.parents.length
+                                        ? ` ← from ${step.parents.map((p) => `#${p + 1}`).join(", ")}`
+                                        : " • starts chain"}
+                                    </div>
+                                  </div>
+                                ))}
+                              </div>
+                            </HoverCard.Content>
+                          </HoverCard.Portal>
+                        </HoverCard.Root>
+                      ) : null}
+                    </div>
                   </div>
                 ) : null}
                 </div>
