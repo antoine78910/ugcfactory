@@ -28,6 +28,8 @@ export const STUDIO_GENERATION_KIND_WORKFLOW_VIDEO = "workflow_video" as const;
  * but they are filtered out of Create → Video history (Ads Studio is its own surface).
  */
 export const STUDIO_GENERATION_KIND_ADS_STUDIO_VIDEO = "ads_studio_video" as const;
+/** Intelligence-surface final videos (e.g. Recreate in Intelligence modal). */
+export const STUDIO_GENERATION_KIND_INTELLIGENCE_VIDEO = "intelligence_video" as const;
 
 /**
  * Kinds owned by the Workflow editor: rows survive page reload / navigation so the in-flight
@@ -61,6 +63,7 @@ export const STUDIO_LIBRARY_KINDS = [
   "studio_video",
   STUDIO_GENERATION_KIND_LINK_TO_AD_VIDEO,
   STUDIO_GENERATION_KIND_ADS_STUDIO_VIDEO,
+  STUDIO_GENERATION_KIND_INTELLIGENCE_VIDEO,
   "studio_audio",
   "studio_upscale",
   "motion_control",
@@ -73,6 +76,11 @@ export const STUDIO_LIBRARY_KINDS = [
 export const STUDIO_IMAGE_TAB_KINDS = [STUDIO_GENERATION_KIND_STUDIO_IMAGE] as const;
 
 /** Kinds shown in Create → Video history (excludes Link to Ad). */
-export const STUDIO_VIDEO_TAB_KINDS = ["studio_video", "studio_watermark"] as const;
+export const STUDIO_VIDEO_TAB_KINDS = [
+  "studio_video",
+  "studio_watermark",
+  STUDIO_GENERATION_KIND_ADS_STUDIO_VIDEO,
+  STUDIO_GENERATION_KIND_INTELLIGENCE_VIDEO,
+] as const;
 
 export type StudioLibraryKind = (typeof STUDIO_LIBRARY_KINDS)[number];

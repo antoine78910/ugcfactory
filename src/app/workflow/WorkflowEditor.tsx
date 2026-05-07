@@ -2638,6 +2638,13 @@ function WorkflowFlowWorkspace({
   const redoStackRef = useRef<WorkflowCanvasSnapshot[]>([]);
   const lastSnapshotRef = useRef<WorkflowCanvasSnapshot | null>(null);
   const skipHistoryCommitRef = useRef(false);
+  /**
+   * Page-switch guard: when `activePageId` changes, React Flow still holds the previous page's
+   * nodes/edges for one render tick. Without this guard, write-back effects can overwrite the
+   * newly selected page with stale graph data (manifesting as lost/disconnected links).
+   * We skip both sync effects once during that transition.
+   */
+  const skipCanvasSyncPassesRef = useRef(0);
   const [historyUiTick, setHistoryUiTick] = useState(0);
   const bumpHistoryUi = useCallback(() => setHistoryUiTick((n) => n + 1), []);
 
@@ -2678,6 +2685,9 @@ function WorkflowFlowWorkspace({
     prevActiveId.current = project.activePageId;
     const p = project.pages.find((x) => x.id === project.activePageId);
     if (p) {
+      // Skip both "setProject from nodes/edges" and write-through persist effects once.
+      // They run before React Flow has applied the new page canvas state.
+      skipCanvasSyncPassesRef.current = 2;
       skipHistoryCommitRef.current = true;
       undoStackRef.current = [];
       redoStackRef.current = [];
@@ -3191,6 +3201,10 @@ function WorkflowFlowWorkspace({
    * No debounce: users expect node/link edits to persist like text input.
    */
   useEffect(() => {
+    if (skipCanvasSyncPassesRef.current > 0) {
+      skipCanvasSyncPassesRef.current -= 1;
+      return;
+    }
     const id = project.activePageId;
     setProject((prev) => ({
       ...prev,
@@ -3203,6 +3217,10 @@ function WorkflowFlowWorkspace({
    * Intentionally immediate (no debounce) to match "typed text is saved right away".
    */
   useEffect(() => {
+    if (skipCanvasSyncPassesRef.current > 0) {
+      skipCanvasSyncPassesRef.current -= 1;
+      return;
+    }
     if (!onCanvasPersist) return;
     const id = project.activePageId;
     const safeClone = <T,>(value: T): T => {

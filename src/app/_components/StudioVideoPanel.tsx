@@ -976,6 +976,9 @@ export default function StudioVideoPanel({
   const [wideVideoPreview, setWideVideoPreview] = useState(false);
   const [historyItems, setHistoryItems] = useState<StudioHistoryItem[]>([]);
   const [historySourceFilter, setHistorySourceFilter] = useState<"all" | "workflow" | "studio">("all");
+  const [videoHistoryKindFilter, setVideoHistoryKindFilter] = useState<"all" | "studio" | "ads" | "intelligence">(
+    "all",
+  );
 
   const extractLastFrameDataUrl = useCallback(async (videoUrl: string): Promise<string> => {
     const trimmed = (videoUrl ?? "").trim();
@@ -4129,10 +4132,18 @@ export default function StudioVideoPanel({
     () =>
       historyItems.filter((item) => {
         if (historySourceFilter === "workflow") return item.workflowGenerated === true;
-        if (historySourceFilter === "studio") return item.workflowGenerated !== true;
-        return true;
+        if (historySourceFilter === "studio") {
+          if (item.workflowGenerated === true) return false;
+          if (videoHistoryKindFilter === "all") return true;
+          const kind = (item.studioGenerationKind ?? "").trim();
+          if (videoHistoryKindFilter === "studio") return kind === "studio_video" || kind === "studio_watermark";
+          if (videoHistoryKindFilter === "ads") return kind === "ads_studio_video";
+          if (videoHistoryKindFilter === "intelligence") return kind === "intelligence_video";
+          return true;
+        }
+        return videoHistoryKindFilter === "all";
       }),
-    [historyItems, historySourceFilter],
+    [historyItems, historySourceFilter, videoHistoryKindFilter],
   );
 
   const outputHistoryColumn = (
@@ -4148,7 +4159,10 @@ export default function StudioVideoPanel({
             type="button"
             size="sm"
             variant="secondary"
-            onClick={() => setHistorySourceFilter("all")}
+            onClick={() => {
+              setHistorySourceFilter("all");
+              setVideoHistoryKindFilter("all");
+            }}
             className={cn(
               "h-8 rounded-lg border px-2.5 text-[11px] font-medium",
               historySourceFilter === "all"
@@ -4162,7 +4176,10 @@ export default function StudioVideoPanel({
             type="button"
             size="sm"
             variant="secondary"
-            onClick={() => setHistorySourceFilter("workflow")}
+            onClick={() => {
+              setHistorySourceFilter("workflow");
+              setVideoHistoryKindFilter("all");
+            }}
             className={cn(
               "h-8 rounded-lg border px-2.5 text-[11px] font-medium",
               historySourceFilter === "workflow"
@@ -4187,6 +4204,66 @@ export default function StudioVideoPanel({
             Non-workflow
           </Button>
         </div>
+        {historySourceFilter === "studio" ? (
+          <div className="flex items-center gap-1.5">
+            <Button
+              type="button"
+              size="sm"
+              variant="secondary"
+              onClick={() => setVideoHistoryKindFilter("all")}
+              className={cn(
+                "h-8 rounded-lg border px-2.5 text-[11px] font-medium",
+                videoHistoryKindFilter === "all"
+                  ? "border-white/35 bg-white/15 text-white"
+                  : "border-white/15 bg-white/5 text-white/75 hover:bg-white/10",
+              )}
+            >
+              All video types
+            </Button>
+            <Button
+              type="button"
+              size="sm"
+              variant="secondary"
+              onClick={() => setVideoHistoryKindFilter("studio")}
+              className={cn(
+                "h-8 rounded-lg border px-2.5 text-[11px] font-medium",
+                videoHistoryKindFilter === "studio"
+                  ? "border-blue-300/55 bg-blue-400/20 text-blue-100"
+                  : "border-white/15 bg-white/5 text-white/75 hover:bg-white/10",
+              )}
+            >
+              Studio
+            </Button>
+            <Button
+              type="button"
+              size="sm"
+              variant="secondary"
+              onClick={() => setVideoHistoryKindFilter("ads")}
+              className={cn(
+                "h-8 rounded-lg border px-2.5 text-[11px] font-medium",
+                videoHistoryKindFilter === "ads"
+                  ? "border-violet-300/55 bg-violet-400/20 text-violet-100"
+                  : "border-white/15 bg-white/5 text-white/75 hover:bg-white/10",
+              )}
+            >
+              Ads Studio
+            </Button>
+            <Button
+              type="button"
+              size="sm"
+              variant="secondary"
+              onClick={() => setVideoHistoryKindFilter("intelligence")}
+              className={cn(
+                "h-8 rounded-lg border px-2.5 text-[11px] font-medium",
+                videoHistoryKindFilter === "intelligence"
+                  ? "border-emerald-300/55 bg-emerald-400/20 text-emerald-100"
+                  : "border-white/15 bg-white/5 text-white/75 hover:bg-white/10",
+              )}
+            >
+              Intelligence
+            </Button>
+          </div>
+        ) : null}
         <Button
           type="button"
           variant="secondary"

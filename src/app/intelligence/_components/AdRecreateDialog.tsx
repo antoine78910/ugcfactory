@@ -30,13 +30,15 @@ import { compressImageFileForUpload } from "@/lib/compressImageFileForUpload";
 import { uploadFileToCdn } from "@/lib/uploadBlobUrlToCdn";
 import { STUDIO_IMAGE_FILE_ACCEPT } from "@/lib/studioUploadValidation";
 import { guardedFetch } from "@/lib/guardedFetch";
-import { pollKlingVideo } from "@/lib/studioKlingClientPoll";
+import { completeStudioTask, pollKlingVideo } from "@/lib/studioKlingClientPoll";
 import {
   getPersonalApiKey,
   getPersonalPiapiApiKey,
   useCreditsPlanOptional,
 } from "@/app/_components/CreditsPlanContext";
 import { cn } from "@/lib/utils";
+import { registerStudioGenerationClient } from "@/lib/registerStudioGenerationClient";
+import { STUDIO_GENERATION_KIND_INTELLIGENCE_VIDEO } from "@/lib/studioGenerationKinds";
 
 const MAX_PRODUCT_IMAGES = 3;
 
@@ -301,12 +303,28 @@ export function AdRecreateDialog({
       if (!response.ok || !json.taskId) {
         throw new Error(json.error || `Generation failed (HTTP ${response.status}).`);
       }
+      const recreateInputUrls = productCdnUrls.filter((u): u is string => typeof u === "string" && u.trim().length > 0);
+      const recreateLabel = trimmedPrompt.slice(0, 200) || "Intelligence recreate video";
+      const registerPromise = registerStudioGenerationClient({
+        kind: STUDIO_GENERATION_KIND_INTELLIGENCE_VIDEO,
+        label: recreateLabel,
+        taskId: json.taskId,
+        provider: "kie-market",
+        model: SEEDANCE_RECREATE_MODEL,
+        creditsCharged: 0,
+        personalApiKey: personalApiKey ?? undefined,
+        piapiApiKey: piapiApiKey ?? undefined,
+        inputUrls: recreateInputUrls.length > 0 ? recreateInputUrls : undefined,
+        aspectRatio,
+      }).catch(() => null);
       const videoUrl = await pollKlingVideo(
         json.taskId,
         personalApiKey ?? undefined,
         piapiApiKey ?? undefined,
       );
       if (cancelRef.current) return;
+      void registerPromise;
+      void completeStudioTask(json.taskId, videoUrl);
       setGeneration({ kind: "success", videoUrl, taskId: json.taskId });
       // Store recreate in DB for the user's Intelligence history.
       void fetch("/api/intelligence/recreations", {
