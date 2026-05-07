@@ -18,6 +18,17 @@ type SortBy =
   | "rankDelta30d"
   | "longestRunning";
 
+function normalizeAdsPayload(raw: unknown): TTAd[] {
+  if (Array.isArray(raw)) return raw as TTAd[];
+  if (raw && typeof raw === "object") {
+    const maybeData = (raw as { data?: unknown; ads?: unknown }).data;
+    const maybeAds = (raw as { data?: unknown; ads?: unknown }).ads;
+    if (Array.isArray(maybeData)) return maybeData as TTAd[];
+    if (Array.isArray(maybeAds)) return maybeAds as TTAd[];
+  }
+  return [];
+}
+
 export function IntelligenceOverviewDashboard({ sortBy }: { sortBy: SortBy }) {
   const [trackers, setTrackers] = useState<TTTracker[]>([]);
   const [competitors, setCompetitors] = useState<IntelligenceCompetitor[]>([]);
@@ -59,13 +70,31 @@ export function IntelligenceOverviewDashboard({ sortBy }: { sortBy: SortBy }) {
     };
   }, []);
 
-  const fetchOwnAds = useCallback(async (trackerId: string) => {
+  const fetchOwnAds = useCallback(async (tracker: TTTracker) => {
     setOwnAdsLoading(true);
     try {
-      const res = await fetch(`/api/intelligence/trackers/${encodeURIComponent(trackerId)}/top-ads`);
+      // 1) Canonical path for own tracker ids (same source as TrackerDetail).
+      const res = await fetch(`/api/intelligence/trackers/${encodeURIComponent(tracker.id)}/top-ads`);
       const json = (await res.json().catch(() => [])) as unknown;
-      const rows = Array.isArray(json) ? (json as TTAd[]) : [];
-      setOwnAds(rows.filter((a) => Boolean(a.videoUrl?.trim())).slice(0, 8));
+      let rows = normalizeAdsPayload(json).filter((a) => Boolean(a.videoUrl?.trim()));
+
+      // 2) Fallback path: some saved brands can exist without workspace top-ads signal.
+      // Query by advertiser id/domain to still surface winning videos in dashboard.
+      if (rows.length === 0) {
+        const fallbackRes = await fetch("/api/intelligence/ads/query", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            advertiser: tracker.id,
+            advertiser_id: tracker.id,
+            ...(tracker.domain ? { domain: tracker.domain } : {}),
+          }),
+        });
+        const fallbackJson = (await fallbackRes.json().catch(() => [])) as unknown;
+        rows = normalizeAdsPayload(fallbackJson).filter((a) => Boolean(a.videoUrl?.trim()));
+      }
+
+      setOwnAds(rows.slice(0, 8));
     } finally {
       setOwnAdsLoading(false);
     }
@@ -96,8 +125,8 @@ export function IntelligenceOverviewDashboard({ sortBy }: { sortBy: SortBy }) {
       setOwnAds([]);
       return;
     }
-    void fetchOwnAds(activeTracker.id);
-  }, [activeTracker?.id, fetchOwnAds]);
+    void fetchOwnAds(activeTracker);
+  }, [activeTracker, fetchOwnAds]);
 
   useEffect(() => {
     if (!activeCompetitor) {
