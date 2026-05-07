@@ -3230,12 +3230,31 @@ export default function AppBrandWizard() {
       try {
         const vk = getPersonalApiKey();
         const vq = vk ? `&personalApiKey=${encodeURIComponent(vk)}` : "";
-        const res = await fetch(`/api/kling/status?taskId=${encodeURIComponent(taskId)}${vq}`, {
-          method: "GET",
-          cache: "no-store",
-        });
-        const json = (await res.json()) as any;
-        if (!res.ok || !json.data) throw new Error(json.error || "Polling failed");
+        let res: Response;
+        try {
+          res = await fetch(`/api/kling/status?taskId=${encodeURIComponent(taskId)}${vq}`, {
+            method: "GET",
+            cache: "no-store",
+          });
+        } catch {
+          return;
+        }
+        // Transient upstream errors should never kill the run — keep polling.
+        if (
+          !res.ok &&
+          (res.status === 429 || res.status === 502 || res.status === 503 || res.status === 504)
+        ) {
+          return;
+        }
+        let json: any = null;
+        try {
+          json = await res.json();
+        } catch {
+          if (!res.ok && res.status >= 500) return;
+          throw new Error(`Polling failed (HTTP ${res.status}).`);
+        }
+        if (!res.ok) throw new Error(json?.error || `Polling failed (HTTP ${res.status}).`);
+        if (!json?.data) return;
         if (cancelled) return;
 
         const s = json.data.status ?? "IN_PROGRESS";

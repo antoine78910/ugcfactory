@@ -3,6 +3,7 @@ export const runtime = "nodejs";
 import { NextResponse } from "next/server";
 import { kieVeoRecordInfo } from "@/lib/kie";
 import { logGenerationFailure, userFacingProviderErrorOrDefault } from "@/lib/generationUserMessage";
+import { isProviderTransientErrorMessage } from "@/lib/providerTransientError";
 
 export async function GET(req: Request) {
   const { searchParams } = new URL(req.url);
@@ -25,9 +26,29 @@ export async function GET(req: Request) {
         : data;
     return NextResponse.json({ data: safe });
   } catch (err) {
-    logGenerationFailure("kie/veo/status", err, { taskId });
     const message = err instanceof Error ? err.message : "Unknown error.";
+    /**
+     * See `/api/kling/status` — same logic. Transient provider errors must not turn
+     * into HTTP 502, otherwise the Veo client polling throws and aborts a generation
+     * that is still completing successfully on Kie's side.
+     */
+    if (isProviderTransientErrorMessage(message)) {
+      console.warn("[kie/veo/status] transient provider error; reporting pending", {
+        taskId,
+        message,
+      });
+      return NextResponse.json(
+        {
+          data: {
+            successFlag: 0,
+            errorMessage: null,
+            response: { resultUrls: [] as string[] },
+          },
+        },
+        { status: 200, headers: { "Cache-Control": "no-store" } },
+      );
+    }
+    logGenerationFailure("kie/veo/status", err, { taskId });
     return NextResponse.json({ error: userFacingProviderErrorOrDefault(message) }, { status: 502 });
   }
 }
-

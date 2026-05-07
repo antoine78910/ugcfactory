@@ -9,6 +9,7 @@ import {
 } from "@/lib/kieMarket";
 import { isPiapiTaskId, piapiGenericTaskStatusToLegacy, piapiGetTask } from "@/lib/piapiSeedance";
 import { logGenerationFailure, userFacingProviderErrorOrDefault } from "@/lib/generationUserMessage";
+import { isProviderTransientErrorMessage } from "@/lib/providerTransientError";
 
 const RECENT_FAILURE_LOGS = new Map<string, number>();
 const LOG_THROTTLE_MS = 20_000;
@@ -175,8 +176,32 @@ export async function GET(req: Request) {
       },
     });
   } catch (err) {
-    logGenerationFailure("kling/status", err, { taskId });
     const message = err instanceof Error ? err.message : "Unknown error.";
+    /**
+     * Provider rate-limit / transient blip: the underlying generation almost certainly
+     * still completes successfully on Kie / PiAPI's side. Returning a 502 here makes
+     * every client poll throw and kills perfectly fine jobs (the same root cause
+     * that triggered the recent "Image batch partial failure" + stuck "generating"
+     * studio_generations rows). Tell the client "still in progress" instead so it
+     * just polls again after its own backoff.
+     */
+    if (isProviderTransientErrorMessage(message)) {
+      console.warn("[kling/status] transient provider error; reporting in-progress", {
+        taskId,
+        message,
+      });
+      return NextResponse.json(
+        {
+          data: {
+            status: "IN_PROGRESS",
+            response: [],
+            error_message: null,
+          },
+        },
+        { status: 200, headers: { "Cache-Control": "no-store" } },
+      );
+    }
+    logGenerationFailure("kling/status", err, { taskId });
     return NextResponse.json({ error: userFacingProviderErrorOrDefault(message) }, { status: 502 });
   }
 }

@@ -375,7 +375,17 @@ const ADS_STUDIO_MAX_ACTIVE_JOB_AGE_MS = 1000 * 60 * 60 * 24;
 
 /** PiAPI / provider can take a long time; client used to cap at ~3 min and marked jobs failed incorrectly. */
 const ADS_STUDIO_VIDEO_POLL_MAX_MS = 2 * 60 * 60 * 1000; // 2 hours
-const ADS_STUDIO_VIDEO_POLL_INTERVAL_MS = 2000;
+const ADS_STUDIO_VIDEO_POLL_BASE_MS = 4000;
+const ADS_STUDIO_VIDEO_POLL_MAX_MS_INTERVAL = 12_000;
+const ADS_STUDIO_VIDEO_POLL_JITTER = 0.25;
+function adsStudioVideoPollDelayMs(consecutiveTransient: number): number {
+  const grow = Math.min(
+    ADS_STUDIO_VIDEO_POLL_MAX_MS_INTERVAL,
+    ADS_STUDIO_VIDEO_POLL_BASE_MS + Math.max(0, consecutiveTransient) * 800,
+  );
+  const j = grow * ADS_STUDIO_VIDEO_POLL_JITTER;
+  return Math.max(2000, Math.floor(grow + (Math.random() * 2 - 1) * j));
+}
 
 type TemplateVideoItem = { filename: string; label: string; url: string };
 
@@ -1144,22 +1154,48 @@ function promptForTemplateLabel(label: string): string {
 async function pollVideo(taskId: string, personalApiKey?: string, piapiApiKey?: string): Promise<string> {
   const deadline = Date.now() + ADS_STUDIO_VIDEO_POLL_MAX_MS;
   const keyParam = `${personalApiKey ? `&personalApiKey=${encodeURIComponent(personalApiKey)}` : ""}${piapiApiKey ? `&piapiApiKey=${encodeURIComponent(piapiApiKey)}` : ""}`;
-  const wait = () => new Promise((r) => setTimeout(r, ADS_STUDIO_VIDEO_POLL_INTERVAL_MS));
+  // Desynchronize parallel job starts to avoid lock-step polling bursts.
+  await new Promise((r) => setTimeout(r, Math.floor(Math.random() * 1500)));
+  let consecutiveTransient = 0;
+  const wait = () =>
+    new Promise((r) => setTimeout(r, adsStudioVideoPollDelayMs(consecutiveTransient)));
 
   while (Date.now() < deadline) {
-    const res = await fetch(`/api/kling/status?taskId=${encodeURIComponent(taskId)}${keyParam}`, { cache: "no-store" });
-    const json = (await res.json()) as {
-      data?: { status?: string; response?: string[]; error_message?: string | null };
-      error?: string;
-    };
+    let res: Response;
+    try {
+      res = await fetch(`/api/kling/status?taskId=${encodeURIComponent(taskId)}${keyParam}`, {
+        cache: "no-store",
+      });
+    } catch {
+      consecutiveTransient = Math.min(consecutiveTransient + 1, 12);
+      await wait();
+      continue;
+    }
+    let json: { data?: { status?: string; response?: string[]; error_message?: string | null }; error?: string } = {};
+    try {
+      json = (await res.json()) as typeof json;
+    } catch {
+      if (!res.ok && res.status >= 500) {
+        consecutiveTransient = Math.min(consecutiveTransient + 1, 12);
+        await wait();
+        continue;
+      }
+      throw new Error(`Video poll failed (HTTP ${res.status}).`);
+    }
     if (!res.ok) {
       if (res.status === 429 || res.status === 502 || res.status === 503 || res.status === 504) {
+        consecutiveTransient = Math.min(consecutiveTransient + 1, 12);
         await wait();
         continue;
       }
       throw new Error(json.error || `Video poll failed (HTTP ${res.status}).`);
     }
-    if (!json.data) throw new Error(json.error || "Video poll failed");
+    if (!json.data) {
+      consecutiveTransient = 0;
+      await wait();
+      continue;
+    }
+    consecutiveTransient = 0;
     const st = String(json.data.status ?? "IN_PROGRESS").toUpperCase();
     const inFlight = new Set([
       "",

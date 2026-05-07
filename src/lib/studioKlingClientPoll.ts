@@ -1,10 +1,24 @@
 /**
  * Client-side Kling/KIE Market polling + immediate DB persist.
  * Server poll still runs as a backup; this matches completed jobs to the row quickly (same pattern as Studio Video).
+ *
+ * Resilience contract — see also `/api/kling/status`, `/api/kie/veo/status`,
+ * `/api/nanobanana/task`, `pollNanoBananaTask` (workflow):
+ *   - We never throw on transient provider errors (rate-limit / 429-504 / network blips
+ *     / "frequency too high"). We just keep polling, because the underlying generation
+ *     is almost always still completing fine server-side.
+ *   - We use exponential-ish backoff with jitter so 100 parallel jobs don't lock-step
+ *     into the same poll instants and bomb the upstream provider.
+ *   - We grow the per-job total wait budget so longer (Sora 2 Pro / Veo 3 / Seedance)
+ *     jobs don't time out client-side while the provider is still working.
  */
 
-const POLL_INTERVAL_MS = 4000;
+const POLL_BASE_INTERVAL_MS = 4_000;
+const POLL_MAX_INTERVAL_MS = 12_000;
+const POLL_JITTER = 0.25;
+/** ~16 minutes total budget at avg 8s spacing — comfortably above Sora 2 Pro / Veo 3 worst case. */
 const POLL_MAX_ROUNDS = 120;
+
 /** Avoid hung status requests leaving the Studio UI stuck on "generating" forever. */
 const STATUS_FETCH_TIMEOUT_MS = 45_000;
 
@@ -14,13 +28,37 @@ function isTransientPollErrorMessage(msg: string): boolean {
     m.includes("abort") ||
     m.includes("aborted") ||
     m.includes("timeout") ||
+    m.includes("timed out") ||
     m.includes("fetch failed") ||
+    m.includes("failed to fetch") ||
     m.includes("econnreset") ||
     m.includes("und_err_socket") ||
     m.includes("socketerror") ||
     m.includes("other side closed") ||
-    m.includes("network")
+    m.includes("network") ||
+    m.includes("call frequency") ||
+    m.includes("frequency is too high") ||
+    m.includes("rate limit") ||
+    m.includes("ratelimit") ||
+    m.includes("throttl") ||
+    m.includes("too many requests") ||
+    m.includes("try again later") ||
+    m.includes("temporar") ||
+    m.includes("server exception") ||
+    m.includes("internal error") ||
+    m.includes("service unavailable") ||
+    m.includes("bad gateway") ||
+    m.includes("gateway time")
   );
+}
+
+function pollDelayMs(attempt: number, consecutiveTransient: number): number {
+  const grow = Math.min(
+    POLL_MAX_INTERVAL_MS,
+    POLL_BASE_INTERVAL_MS + Math.max(0, attempt) * 200 + Math.max(0, consecutiveTransient) * 600,
+  );
+  const jitter = grow * POLL_JITTER;
+  return Math.max(2_000, Math.floor(grow + (Math.random() * 2 - 1) * jitter));
 }
 
 async function fetchStatusWithTimeout(url: string): Promise<Response> {
@@ -84,6 +122,10 @@ export async function pollKlingVideo(
   const pi = piapiApiKey ? `&piapiApiKey=${encodeURIComponent(piapiApiKey)}` : "";
   const keyParam = `${p}${pi}`;
   const maxRounds = Math.max(1, Math.floor(opts?.maxRounds ?? POLL_MAX_ROUNDS));
+  // Desynchronize parallel job starts (100 jobs launched in the same millisecond
+  // would otherwise lock-step into the same poll instants and bomb Kie / PiAPI).
+  await new Promise((r) => setTimeout(r, Math.floor(Math.random() * 1500)));
+  let consecutiveTransient = 0;
   for (let i = 0; i < maxRounds; i++) {
     let res: Response;
     let json: KlingStatusJson;
@@ -93,33 +135,46 @@ export async function pollKlingVideo(
     } catch (err) {
       const msg = err instanceof Error ? err.message : String(err ?? "");
       if (isTransientPollErrorMessage(msg)) {
-        await new Promise((r) => setTimeout(r, POLL_INTERVAL_MS));
+        consecutiveTransient = Math.min(consecutiveTransient + 1, 12);
+        await new Promise((r) => setTimeout(r, pollDelayMs(i, consecutiveTransient)));
         continue;
       }
       throw err instanceof Error ? err : new Error(msg || "Video status check failed.");
     }
     if (!res.ok) {
       const message = json.error || `Video status check failed (HTTP ${res.status}).`;
-      if (res.status === 429 || res.status === 502 || res.status === 503 || res.status === 504) {
-        await new Promise((r) => setTimeout(r, POLL_INTERVAL_MS));
-        continue;
-      }
-      if (isTransientPollErrorMessage(message)) {
-        await new Promise((r) => setTimeout(r, POLL_INTERVAL_MS));
+      if (
+        res.status === 429 ||
+        res.status === 502 ||
+        res.status === 503 ||
+        res.status === 504 ||
+        isTransientPollErrorMessage(message)
+      ) {
+        consecutiveTransient = Math.min(consecutiveTransient + 1, 12);
+        await new Promise((r) => setTimeout(r, pollDelayMs(i, consecutiveTransient)));
         continue;
       }
       throw new Error(message);
     }
+    consecutiveTransient = 0;
     const st = String(json.data?.status ?? "").toUpperCase();
     if (st === "SUCCESS") {
       const list = json.data?.response ?? [];
       const u = list.map((x) => String(x).trim()).find((s) => s.length > 0);
       if (u) return u;
-      await new Promise((r) => setTimeout(r, POLL_INTERVAL_MS));
+      await new Promise((r) => setTimeout(r, pollDelayMs(i, 0)));
       continue;
     }
     if (st === "FAILED") {
-      throw new Error(json.data?.error_message?.trim() || "Video generation failed.");
+      const errMsg = json.data?.error_message?.trim() ?? "";
+      // Some providers emit transient-shaped messages on the FAILED envelope while the
+      // task is still actually running. Treat those as pending instead of aborting.
+      if (errMsg && isTransientPollErrorMessage(errMsg)) {
+        consecutiveTransient = Math.min(consecutiveTransient + 1, 12);
+        await new Promise((r) => setTimeout(r, pollDelayMs(i, consecutiveTransient)));
+        continue;
+      }
+      throw new Error(errMsg || "Video generation failed.");
     }
     const inFlight = new Set([
       "",
@@ -140,7 +195,7 @@ export async function pollKlingVideo(
         json.data?.error_message?.trim() || `Video task stopped with status: ${json.data?.status ?? st}`,
       );
     }
-    await new Promise((r) => setTimeout(r, POLL_INTERVAL_MS));
+    await new Promise((r) => setTimeout(r, pollDelayMs(i, 0)));
   }
   throw new Error(opts?.timeoutMessage || "Video generation timed out. Please try again.");
 }
@@ -170,6 +225,9 @@ async function readVeoStatusResponse(res: Response): Promise<VeoStatusJson> {
 /** Client-side Veo status polling (same pattern as {@link pollKlingVideo}). */
 export async function pollVeoVideo(taskId: string, personalApiKey?: string): Promise<string> {
   const keyParam = personalApiKey ? `&personalApiKey=${encodeURIComponent(personalApiKey)}` : "";
+  // Same start-jitter as pollKlingVideo to spread parallel polls across providers.
+  await new Promise((r) => setTimeout(r, Math.floor(Math.random() * 1500)));
+  let consecutiveTransient = 0;
   for (let i = 0; i < POLL_MAX_ROUNDS; i++) {
     let res: Response;
     let json: VeoStatusJson;
@@ -179,34 +237,49 @@ export async function pollVeoVideo(taskId: string, personalApiKey?: string): Pro
     } catch (err) {
       const msg = err instanceof Error ? err.message : String(err ?? "");
       if (isTransientPollErrorMessage(msg)) {
-        await new Promise((r) => setTimeout(r, POLL_INTERVAL_MS));
+        consecutiveTransient = Math.min(consecutiveTransient + 1, 12);
+        await new Promise((r) => setTimeout(r, pollDelayMs(i, consecutiveTransient)));
         continue;
       }
       throw err instanceof Error ? err : new Error(msg || "Veo status check failed.");
     }
     if (!res.ok) {
       const message = json.error || `Veo status check failed (HTTP ${res.status}).`;
-      if (res.status === 429 || res.status === 502 || res.status === 503 || res.status === 504) {
-        await new Promise((r) => setTimeout(r, POLL_INTERVAL_MS));
-        continue;
-      }
-      if (isTransientPollErrorMessage(message)) {
-        await new Promise((r) => setTimeout(r, POLL_INTERVAL_MS));
+      if (
+        res.status === 429 ||
+        res.status === 502 ||
+        res.status === 503 ||
+        res.status === 504 ||
+        isTransientPollErrorMessage(message)
+      ) {
+        consecutiveTransient = Math.min(consecutiveTransient + 1, 12);
+        await new Promise((r) => setTimeout(r, pollDelayMs(i, consecutiveTransient)));
         continue;
       }
       throw new Error(message);
     }
+    consecutiveTransient = 0;
     const d = json.data;
-    if (!d) throw new Error("Veo status returned no data.");
+    if (!d) {
+      // Transient-tolerant: the route may have returned an empty body during a blip.
+      await new Promise((r) => setTimeout(r, pollDelayMs(i, 0)));
+      continue;
+    }
     if (d.successFlag === 1) {
       const u = d.response?.resultUrls?.[0];
       if (!u) throw new Error("No video URL in completed Veo task.");
       return u;
     }
     if (d.successFlag === 2 || d.successFlag === 3) {
-      throw new Error(d.errorMessage?.trim() || "Veo generation failed.");
+      const errMsg = d.errorMessage?.trim() ?? "";
+      if (errMsg && isTransientPollErrorMessage(errMsg)) {
+        consecutiveTransient = Math.min(consecutiveTransient + 1, 12);
+        await new Promise((r) => setTimeout(r, pollDelayMs(i, consecutiveTransient)));
+        continue;
+      }
+      throw new Error(errMsg || "Veo generation failed.");
     }
-    await new Promise((r) => setTimeout(r, POLL_INTERVAL_MS));
+    await new Promise((r) => setTimeout(r, pollDelayMs(i, 0)));
   }
   throw new Error("Veo generation timed out. Please try again.");
 }

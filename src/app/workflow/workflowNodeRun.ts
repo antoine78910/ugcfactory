@@ -692,6 +692,9 @@ function isImagePollTransientMessage(raw: string): boolean {
 
 async function pollNanoBananaTask(taskId: string, personalApiKey?: string): Promise<string> {
   const keyParam = personalApiKey ? `&personalApiKey=${encodeURIComponent(personalApiKey)}` : "";
+  // Desynchronize parallel job starts so a 50/100-prompt batch doesn't all hit the
+  // first poll on the exact same millisecond and trigger Kie's frequency throttle.
+  await new Promise((r) => setTimeout(r, Math.floor(Math.random() * 1500)));
   let consecutiveTransient = 0;
   for (let i = 0; i < WORKFLOW_IMAGE_POLL_MAX_ROUNDS; i++) {
     const ac = new AbortController();
