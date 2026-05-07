@@ -412,6 +412,15 @@ function sourceKindFromNodeHandle(
   return null;
 }
 
+function isMarqueeModuleNode(node: WorkflowCanvasNode): boolean {
+  return (
+    node.type === "adAsset" ||
+    node.type === "imageRef" ||
+    node.type === "textPrompt" ||
+    node.type === "promptList"
+  );
+}
+
 function targetKindFromNodeHandle(
   node: WorkflowCanvasNode | undefined,
   handleId: string | null | undefined,
@@ -2654,6 +2663,38 @@ function WorkflowFlowWorkspace({
   const lastEdgePointerRef = useRef<{ x: number; y: number } | null>(null);
   /** Derive from node `selected` flags, matches React Flow's controlled state (onSelectionChange can lag). */
   const selectedNodes = useMemo(() => nodes.filter((n) => n.selected), [nodes]);
+  const onSelectionChange = useCallback(
+    ({ nodes: selNodes }: { nodes: WorkflowCanvasNode[]; edges: Edge[] }) => {
+      if (readOnly || tool !== "select") return;
+      // Apply strict "touched modules only" behavior on marquee multi-select.
+      // Single-click selection remains unchanged (notes/groups still editable).
+      if ((selNodes?.length ?? 0) <= 1) return;
+      const keepIds = new Set(selNodes.filter((n) => isMarqueeModuleNode(n)).map((n) => n.id));
+      setNodes((prev) => {
+        let changed = false;
+        const next = prev.map((n) => {
+          const shouldSelect = keepIds.has(n.id);
+          if ((n.selected ?? false) !== shouldSelect) {
+            changed = true;
+            return { ...n, selected: shouldSelect };
+          }
+          return n;
+        });
+        return changed ? next : prev;
+      });
+      // Avoid edge selection noise when box-selecting modules.
+      setEdges((prev) => {
+        let changed = false;
+        const next = prev.map((e) => {
+          if (!e.selected) return e;
+          changed = true;
+          return { ...e, selected: false };
+        });
+        return changed ? next : prev;
+      });
+    },
+    [readOnly, tool, setNodes, setEdges],
+  );
   const [placementPicker, setPlacementPicker] = useState<WorkflowPlacementPickerState | null>(null);
   const placementRef = useRef<HTMLDivElement>(null);
   const [uploadTrimState, setUploadTrimState] = useState<{
@@ -4476,6 +4517,7 @@ function WorkflowFlowWorkspace({
           panOnDrag={readOnly ? true : tool === "pan"}
           selectionOnDrag={readOnly ? false : tool === "select"}
           selectionMode={SelectionMode.Partial}
+          onSelectionChange={onSelectionChange}
           onEdgeClick={(event, edge) => {
             if (readOnly || tool !== "cutTarget") return;
             event.preventDefault();
