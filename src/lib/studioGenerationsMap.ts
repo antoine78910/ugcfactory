@@ -1,5 +1,9 @@
 import type { StudioHistoryItem } from "@/app/_components/StudioGenerationsHistory";
 import { userFacingProviderErrorOrDefault } from "@/lib/generationUserMessage";
+import {
+  parseWorkflowRunCorrelationFromLabel,
+  stripWorkflowRunCorrelationFromLabel,
+} from "@/lib/workflowRunCorrelation";
 import { KIE_TOPAZ_IMAGE_UPSCALE_MODEL, KIE_TOPAZ_VIDEO_UPSCALE_MODEL } from "@/lib/pricing";
 import {
   studioImagePickerDisplayLabel,
@@ -177,7 +181,10 @@ export function studioGenerationRowToHistoryItem(row: StudioGenerationRow): Stud
   const status = String(row.status ?? "").toLowerCase();
   const resultUrls = normalizeResultUrls(row.result_urls as unknown);
   const inputUrls = normalizeResultUrls(row.input_urls as unknown);
-  const mediaKind = rowKindToMediaKind(row.kind, resultUrls, row.label ?? "");
+  const rawRowLabel = String(row.label ?? "");
+  const workflowRunCorrelation = parseWorkflowRunCorrelationFromLabel(rawRowLabel);
+  const labelNoCorrelation = stripWorkflowRunCorrelationFromLabel(rawRowLabel);
+  const mediaKind = rowKindToMediaKind(row.kind, resultUrls, labelNoCorrelation);
   const hasUrls = resultUrls.length > 0;
   const hasError = typeof row.error_message === "string" && row.error_message.trim().length > 0;
   const isReady = ["ready", "success", "succeeded", "completed", "done"].includes(status);
@@ -188,9 +195,12 @@ export function studioGenerationRowToHistoryItem(row: StudioGenerationRow): Stud
   const baseIds = { studioGenerationId: row.id };
   const extId = String(row.external_task_id ?? "").trim();
   const taskExtra = extId ? { externalTaskId: extId } : {};
-  const parsedLabel = parseWorkflowTaggedLabel(row.label ?? "");
+  const parsedLabel = parseWorkflowTaggedLabel(labelNoCorrelation);
   const label = parsedLabel.label || "Avatar";
-  const workflowExtra = parsedLabel.workflowGenerated ? { workflowGenerated: true } : {};
+  const workflowExtra = {
+    ...(parsedLabel.workflowGenerated ? { workflowGenerated: true } : {}),
+    ...(workflowRunCorrelation ? { workflowRunCorrelation } : {}),
+  };
   if (hasUrls || isReady) {
     return {
       id: row.id,

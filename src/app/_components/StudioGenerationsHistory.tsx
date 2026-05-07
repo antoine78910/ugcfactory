@@ -52,6 +52,11 @@ export type StudioHistoryItem = {
   externalTaskId?: string;
   /** Item originated from workflow generation flow. */
   workflowGenerated?: boolean;
+  /**
+   * Embedded in `studio_generations.label` so workflow nodes can map poll rows to a specific
+   * in-flight run without cross-talk when multiple jobs start at once.
+   */
+  workflowRunCorrelation?: string;
 };
 
 function formatHistoryDate(ts: number): string {

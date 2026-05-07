@@ -52,6 +52,7 @@ import {
 import { refundPlatformCredits } from "@/lib/refundPlatformCredits";
 import { studioVideoDurationSecOptions } from "@/lib/studioVideoModelCapabilities";
 import { uploadFileToCdn } from "@/lib/uploadBlobUrlToCdn";
+import { parseWorkflowRunCorrelationFromLabel } from "@/lib/workflowRunCorrelation";
 
 import {
   Select,
@@ -178,6 +179,8 @@ export type AdAssetNodeData = {
     progressListId?: string | null;
     listLabel?: string;
     updatedAt: number;
+    /** Binds `/api/studio/generations/poll` rows to this run only (critical for simultaneous runs). */
+    correlationId?: string;
   };
 };
 
@@ -314,6 +317,8 @@ type WorkflowPollHistoryItem = {
   errorMessage?: string;
   studioGenerationKind?: string;
   createdAt?: number;
+  label?: string;
+  workflowRunCorrelation?: string;
 };
 
 function workflowMediaErrorToken(params: {
@@ -909,18 +914,22 @@ export function AdAssetNode({ id, data, selected }: NodeProps<AdAssetNodeType>) 
         taskIds: string[];
         progressListId?: string | null;
         listLabel?: string;
+        correlationId?: string | null;
       } | null,
     ) => {
       if (!run) {
         patch(id, { pendingWorkflowRun: undefined });
         return;
       }
+      const corr = run.correlationId?.trim();
       patch(id, {
         pendingWorkflowRun: {
           mediaKind: run.mediaKind,
-          taskIds: run.taskIds.filter((t) => t.trim()),
+          /** Keep placeholder slots (`""`) so parallel batch prompts map deterministically onto rows. */
+          taskIds: run.taskIds.map((t) => (typeof t === "string" ? t.trim() : "")),
           progressListId: run.progressListId ?? null,
           listLabel: run.listLabel,
+          ...(corr ? { correlationId: corr } : {}),
           updatedAt: Date.now(),
         },
       });
@@ -1167,15 +1176,20 @@ export function AdAssetNode({ id, data, selected }: NodeProps<AdAssetNodeType>) 
     if (data.kind !== "image" && data.kind !== "video" && data.kind !== "motion") return;
     const pending = data.pendingWorkflowRun;
     if (!pending) return;
-    const initialTaskIds = pending.taskIds?.map((t) => t.trim()).filter(Boolean) ?? [];
+    const correl = pending.correlationId?.trim() ?? "";
+    const rawSlotTaskIds = (pending.taskIds ?? []).map((t) => String(t ?? "").trim());
+    const resolvedIds = rawSlotTaskIds.filter((t) => t.length > 0);
     const pendingMediaKind = pending.mediaKind ?? (data.kind === "video" || data.kind === "motion" ? "video" : "image");
     const updatedAt = pending.updatedAt ?? 0;
     const fresh = updatedAt > 0 && Date.now() - updatedAt < WORKFLOW_RACE_RECOVERY_WINDOW_MS;
-    if (initialTaskIds.length === 0 && !fresh) return;
+    const slotCount = rawSlotTaskIds.length;
+    /** Empty placeholder slots imply we are still awaiting provider task ids (must not widen poll matching loosely). */
+    const hasResolvedTasks = resolvedIds.length > 0;
+    if (!hasResolvedTasks && !fresh) return;
 
     let alive = true;
     let timer: ReturnType<typeof setTimeout> | null = null;
-    let trackedTaskIds = initialTaskIds.slice();
+    let trackedTaskIds = slotCount > 0 ? [...rawSlotTaskIds] : [...resolvedIds];
     const expectedKindForMedia = pendingMediaKind === "video" ? "workflow_video" : "workflow_image";
     setGenerating(true);
 
@@ -1210,10 +1224,11 @@ export function AdAssetNode({ id, data, selected }: NodeProps<AdAssetNodeType>) 
           byTask.set(tid, item);
         }
 
-        if (trackedTaskIds.length === 0) {
-          // Race recovery: pendingWorkflowRun was persisted before /start returned a task id.
-          // Adopt the closest workflow row (including terminal states) of matching media kind,
-          // created near `updatedAt`. Some providers can complete very quickly.
+        const missingEveryTaskId = trackedTaskIds.length === 0 || trackedTaskIds.every((tid) => !tid.trim());
+        if (missingEveryTaskId) {
+          // Race recovery: pendingWorkflowRun sometimes persists before `/start` attaches task ids — or parallel
+          // batch placeholders remain `""` until server rows exist. Must never merge another run’s rows (simultaneous
+          // generators / tabs / spaces), so when `correlationId` exists we require a label match.
           const candidates = items.filter((it) => {
             if (it.studioGenerationKind !== expectedKindForMedia) return false;
             if (!it.externalTaskId?.trim()) return false;
@@ -1222,7 +1237,17 @@ export function AdAssetNode({ id, data, selected }: NodeProps<AdAssetNodeType>) 
             if (!Number.isFinite(created)) return false;
             return created >= updatedAt - 5_000 && created <= updatedAt + WORKFLOW_RACE_RECOVERY_WINDOW_MS;
           });
-          if (candidates.length === 0) {
+          const narrowed = correl
+            ? candidates.filter((it) => {
+                const cid =
+                  typeof it.workflowRunCorrelation === "string" && it.workflowRunCorrelation.trim()
+                    ? it.workflowRunCorrelation.trim()
+                    : parseWorkflowRunCorrelationFromLabel(it.label);
+                return Boolean(cid && cid === correl);
+              })
+            : candidates;
+          const pool = narrowed;
+          if (pool.length === 0) {
             // Keep recovering for the full race-recovery window. Providers can
             // acknowledge task ids late, so aborting after a fixed small poll
             // count creates false "lost request" failures.
@@ -1248,17 +1273,28 @@ export function AdAssetNode({ id, data, selected }: NodeProps<AdAssetNodeType>) 
             }
             return;
           }
-          const adopted = candidates
-            .sort((a, b) => Math.abs((a.createdAt ?? 0) - updatedAt) - Math.abs((b.createdAt ?? 0) - updatedAt))
+          const matched = pool
+            .sort((a, b) =>
+              correl
+                ? (a.createdAt ?? 0) - (b.createdAt ?? 0)
+                : Math.abs((a.createdAt ?? 0) - updatedAt) - Math.abs((b.createdAt ?? 0) - updatedAt),
+            )
             .map((c) => (c.externalTaskId ?? "").trim())
             .filter(Boolean) as string[];
-          if (!adopted.length) return;
-          trackedTaskIds = adopted;
+          if (!matched.length) return;
+          if (slotCount > 0 && trackedTaskIds.every((tid) => !tid.trim())) {
+            trackedTaskIds = trackedTaskIds.map((_, idx) => matched[idx] ?? "");
+          } else if (trackedTaskIds.length === 0) {
+            trackedTaskIds = [...matched];
+          } else {
+            trackedTaskIds = trackedTaskIds.map((tid, idx) => (tid.trim() ? tid.trim() : matched[idx] ?? ""));
+          }
           setPendingWorkflowRun({
             mediaKind: pendingMediaKind,
             taskIds: trackedTaskIds,
             progressListId: pending.progressListId ?? null,
             listLabel: pending.listLabel,
+            ...(correl ? { correlationId: correl } : {}),
           });
         }
 
@@ -2412,12 +2448,17 @@ export function AdAssetNode({ id, data, selected }: NodeProps<AdAssetNodeType>) 
             ]);
           }
         }
+        const runCorrelationId =
+          typeof crypto !== "undefined" && typeof crypto.randomUUID === "function"
+            ? crypto.randomUUID()
+            : `wf-${Date.now()}-${Math.random().toString(16).slice(2)}`;
         pendingImageTaskIds = Array.from({ length: promptsForRun.length }, () => "");
         setPendingWorkflowRun({
           mediaKind: "image",
           taskIds: pendingImageTaskIds,
           progressListId,
           listLabel: imageResultsListLabel,
+          correlationId: runCorrelationId,
         });
         emitRunLog(
           "info",
@@ -2438,6 +2479,7 @@ export function AdAssetNode({ id, data, selected }: NodeProps<AdAssetNodeType>) 
               resolution: imageResolutionForJob,
               quantity: imageQtyForJob,
               referenceImageUrls: refsForJob.length ? refsForJob : undefined,
+              workflowRunCorrelationId: runCorrelationId,
               onTaskStarted: (taskId) => {
                 pendingImageTaskIds[idx] = taskId;
                 setPendingWorkflowRun({
@@ -2445,6 +2487,7 @@ export function AdAssetNode({ id, data, selected }: NodeProps<AdAssetNodeType>) 
                   taskIds: pendingImageTaskIds,
                   progressListId,
                   listLabel: imageResultsListLabel,
+                  correlationId: runCorrelationId,
                 });
               },
             });
@@ -2654,11 +2697,16 @@ export function AdAssetNode({ id, data, selected }: NodeProps<AdAssetNodeType>) 
             promptsForRun[0]?.trim().slice(0, 120) ?? ""
           }".`,
         );
+        const motionCorrelationId =
+          typeof crypto !== "undefined" && typeof crypto.randomUUID === "function"
+            ? crypto.randomUUID()
+            : `wf-${Date.now()}-${Math.random().toString(16).slice(2)}`;
         pendingTaskIds = Array.from({ length: promptsForRun.length }, () => "");
         setPendingWorkflowRun({
           mediaKind: "video",
           taskIds: pendingTaskIds,
           listLabel: `${(data.label || cfg.title || "Motion").trim() || "Motion"} results`,
+          correlationId: motionCorrelationId,
         });
         const results = await Promise.all(
           promptsForRun.map(async (p, idx) => {
@@ -2671,12 +2719,14 @@ export function AdAssetNode({ id, data, selected }: NodeProps<AdAssetNodeType>) 
               imageUrl: motionImageUrl,
               videoUrl: motionVideoUrl,
               backgroundSource: data.motionBackgroundSource ?? "input_video",
+              workflowRunCorrelationId: motionCorrelationId,
               onTaskStarted: (taskId) => {
                 pendingTaskIds[idx] = taskId;
                 setPendingWorkflowRun({
                   mediaKind: "video",
                   taskIds: pendingTaskIds,
                   listLabel: `${(data.label || cfg.title || "Motion").trim() || "Motion"} results`,
+                  correlationId: motionCorrelationId,
                 });
               },
             });
@@ -2941,12 +2991,17 @@ export function AdAssetNode({ id, data, selected }: NodeProps<AdAssetNodeType>) 
           ]);
         }
       }
+      const videoCorrelationId =
+        typeof crypto !== "undefined" && typeof crypto.randomUUID === "function"
+          ? crypto.randomUUID()
+          : `wf-${Date.now()}-${Math.random().toString(16).slice(2)}`;
       pendingVideoTaskIds = Array.from({ length: promptsForRun.length }, () => "");
       setPendingWorkflowRun({
         mediaKind: "video",
         taskIds: pendingVideoTaskIds,
         progressListId,
         listLabel: videoResultsListLabel,
+        correlationId: videoCorrelationId,
       });
       const videoSettled = await Promise.allSettled(
         promptsForRun.map(async (p, idx) => {
@@ -2981,6 +3036,7 @@ export function AdAssetNode({ id, data, selected }: NodeProps<AdAssetNodeType>) 
               seedance2ProLike && workflowSeedanceProVideoRefUrls.length > 0
                 ? workflowSeedanceProVideoRefUrls
                 : undefined,
+            workflowRunCorrelationId: videoCorrelationId,
             onTaskStarted: (taskId) => {
               pendingVideoTaskIds[idx] = taskId;
               setPendingWorkflowRun({
@@ -2988,6 +3044,7 @@ export function AdAssetNode({ id, data, selected }: NodeProps<AdAssetNodeType>) 
                 taskIds: pendingVideoTaskIds,
                 progressListId,
                 listLabel: videoResultsListLabel,
+                correlationId: videoCorrelationId,
               });
             },
           });

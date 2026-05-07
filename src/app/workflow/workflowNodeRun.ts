@@ -36,6 +36,7 @@ import {
 import { SEEDANCE_PRO_MAX_VIDEO_URLS, SEEDANCE_PRO_PROMPT_MAX_CHARS } from "@/lib/piapiSeedance";
 import { uploadBlobUrlToCdn } from "@/lib/uploadBlobUrlToCdn";
 import { guardedFetch } from "@/lib/guardedFetch";
+import { appendWorkflowRunCorrelationToLabel } from "@/lib/workflowRunCorrelation";
 
 import { workflowVideoResolutionToPiapiSeedance } from "./workflowVideoExportDimensions";
 import {
@@ -56,6 +57,11 @@ function workflowHistoryLabel(label: string): string {
   return t.startsWith(WORKFLOW_HISTORY_LABEL_PREFIX)
     ? t
     : `${WORKFLOW_HISTORY_LABEL_PREFIX}${t}`;
+}
+
+/** Label stored on `studio_generations` for workflow jobs; optional correlation disambiguates concurrent runs. */
+function workflowHistoryStorageLabel(promptSnippet: string, workflowRunCorrelationId?: string | null): string {
+  return appendWorkflowRunCorrelationToLabel(workflowHistoryLabel(promptSnippet.slice(0, 120)), workflowRunCorrelationId);
 }
 
 export function stripStickyHtmlToText(html: string): string {
@@ -853,6 +859,8 @@ export type WorkflowRunImageParams = {
   quantity: number;
   referenceImageUrls?: string[];
   onTaskStarted?: (taskId: string) => void;
+  /** Matches `pendingWorkflowRun.correlationId` for safe poll / race recovery across concurrent runs. */
+  workflowRunCorrelationId?: string | null;
 };
 
 function isLocalOnlyWorkflowMediaUrl(url: string): boolean {
@@ -1014,7 +1022,7 @@ export async function runWorkflowImageJob(params: WorkflowRunImageParams): Promi
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({
       kind: "workflow_image",
-      label: workflowHistoryLabel(params.prompt.slice(0, 120)),
+      label: workflowHistoryStorageLabel(params.prompt, params.workflowRunCorrelationId),
       accountPlan: params.planId,
       prompt: params.prompt,
       model: resolvedModel,
@@ -1061,6 +1069,7 @@ export type WorkflowRunVideoParams = {
    */
   referenceVideoUrls?: string[];
   onTaskStarted?: (taskId: string) => void;
+  workflowRunCorrelationId?: string | null;
 };
 
 /** True when the picker accepts a discrete first-frame image (image-to-video / first+last). */
@@ -1331,6 +1340,7 @@ export type WorkflowRunMotionControlParams = {
   videoUrl: string;
   backgroundSource?: "input_video" | "input_image";
   onTaskStarted?: (taskId: string) => void;
+  workflowRunCorrelationId?: string | null;
 };
 
 export async function probeWorkflowVideoDurationSec(url: string): Promise<number | null> {
@@ -1408,7 +1418,7 @@ export async function runWorkflowMotionControlJob(
   params.onTaskStarted?.(json.taskId);
   const credits = calculateMotionControlCreditsFromDuration(inputDurationSec, params.quality);
   await registerStudioVideoTask({
-    label: workflowHistoryLabel((motionPrompt || "Motion control").slice(0, 120)),
+    label: workflowHistoryStorageLabel(motionPrompt || "Motion control", params.workflowRunCorrelationId),
     taskId: json.taskId,
     provider: json.provider,
     model: params.motionFamily === "kling-2.6" ? "kling-2.6/motion-control" : "kling-3.0/motion-control",
@@ -1542,7 +1552,7 @@ export async function runWorkflowVideoJob(params: WorkflowRunVideoParams): Promi
     if (!res.ok || !json.taskId) throw new Error(json.error || "Veo failed");
     params.onTaskStarted?.(json.taskId);
     await registerStudioVideoTask({
-      label: workflowHistoryLabel(params.prompt.slice(0, 120)),
+      label: workflowHistoryStorageLabel(params.prompt, params.workflowRunCorrelationId),
       taskId: json.taskId,
       provider: json.provider,
       model: modelId,
@@ -1748,7 +1758,7 @@ export async function runWorkflowVideoJob(params: WorkflowRunVideoParams): Promi
     return undefined;
   })();
   await registerStudioVideoTask({
-    label: workflowHistoryLabel(params.prompt.slice(0, 120)),
+    label: workflowHistoryStorageLabel(params.prompt, params.workflowRunCorrelationId),
     taskId: genJson.taskId,
     provider: genJson.provider,
     model: modelId,
