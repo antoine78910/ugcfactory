@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useRef, useState } from "react";
-import { CalendarDays, Coins, Copy, Eye, Maximize2, Sparkles, Users } from "lucide-react";
+import { CalendarDays, Coins, Copy, Download, Eye, Maximize2, Sparkles, Users } from "lucide-react";
 import type { TTAd } from "@/lib/trendtrack";
 import { AdRecreateDialog } from "./AdRecreateDialog";
 import { cn } from "@/lib/utils";
@@ -73,6 +73,7 @@ export function AdCard({
   const [videoBroken, setVideoBroken] = useState(false);
   const [videoReady, setVideoReady] = useState(false);
   const [recreateOpen, setRecreateOpen] = useState(false);
+  const [downloadingVideo, setDownloadingVideo] = useState(false);
 
   const stopVideo = useCallback(() => {
     const v = videoRef.current;
@@ -105,6 +106,64 @@ export function AdCard({
     setHoverPlay(false);
     stopVideo();
   }, [stopVideo]);
+
+  const openFullscreenVideo = useCallback(async () => {
+    if (!videoSrc) return;
+    const v = videoRef.current;
+    if (!v) {
+      onView?.();
+      return;
+    }
+    try {
+      if (!document.fullscreenElement && typeof v.requestFullscreen === "function") {
+        await v.requestFullscreen();
+      } else {
+        onView?.();
+      }
+    } catch {
+      onView?.();
+    }
+  }, [onView, videoSrc]);
+
+  const downloadVideo = useCallback(async () => {
+    if (!videoSrc || downloadingVideo) return;
+    setDownloadingVideo(true);
+    try {
+      const filenameBase =
+        (ad.headline ?? ad.title ?? ad.id ?? "intelligence-ad")
+          .toLowerCase()
+          .replace(/[^a-z0-9]+/g, "-")
+          .replace(/^-+|-+$/g, "")
+          .slice(0, 64) || "intelligence-ad";
+      const filename = `${filenameBase}.mp4`;
+
+      try {
+        const res = await fetch(videoSrc, { cache: "no-store" });
+        if (!res.ok) throw new Error(`HTTP ${res.status}`);
+        const blob = await res.blob();
+        const objectUrl = URL.createObjectURL(blob);
+        const a = document.createElement("a");
+        a.href = objectUrl;
+        a.download = filename;
+        document.body.appendChild(a);
+        a.click();
+        a.remove();
+        URL.revokeObjectURL(objectUrl);
+      } catch {
+        // Fallback for CORS-restricted media URLs.
+        const a = document.createElement("a");
+        a.href = videoSrc;
+        a.target = "_blank";
+        a.rel = "noopener noreferrer";
+        a.download = filename;
+        document.body.appendChild(a);
+        a.click();
+        a.remove();
+      }
+    } finally {
+      setDownloadingVideo(false);
+    }
+  }, [ad.headline, ad.id, ad.title, downloadingVideo, videoSrc]);
 
   const clickable = typeof onView === "function";
   const showInlineVideo = Boolean(videoSrc && !thumbnail && !videoBroken);
@@ -201,23 +260,41 @@ export function AdCard({
             </span>
           ) : null}
 
-          {clickable && videoSrc ? (
-            <button
-              type="button"
-              onClick={(e) => {
-                e.preventDefault();
-                e.stopPropagation();
-                onView?.();
-              }}
+          {videoSrc ? (
+            <div
               className={cn(
-                "absolute top-2 z-20 inline-flex h-7 w-7 items-center justify-center rounded-md border border-white/15 bg-black/65 text-white/80 opacity-0 shadow-sm backdrop-blur-sm transition hover:bg-black/80 hover:text-white group-hover:opacity-100",
+                "absolute top-2 z-20 flex items-center gap-1 opacity-0 transition group-hover:opacity-100",
                 typeof rank === "number" && Number.isFinite(rank) && rank > 0 ? "right-10" : "right-2",
               )}
-              aria-label="Fullscreen video"
-              title="Fullscreen video"
             >
-              <Maximize2 className="h-3.5 w-3.5" aria-hidden />
-            </button>
+              <button
+                type="button"
+                onClick={(e) => {
+                  e.preventDefault();
+                  e.stopPropagation();
+                  void openFullscreenVideo();
+                }}
+                className="inline-flex h-7 w-7 items-center justify-center rounded-md border border-white/15 bg-black/65 text-white/80 shadow-sm backdrop-blur-sm transition hover:bg-black/80 hover:text-white"
+                aria-label="Fullscreen video"
+                title="Fullscreen video"
+              >
+                <Maximize2 className="h-3.5 w-3.5" aria-hidden />
+              </button>
+              <button
+                type="button"
+                onClick={(e) => {
+                  e.preventDefault();
+                  e.stopPropagation();
+                  void downloadVideo();
+                }}
+                disabled={downloadingVideo}
+                className="inline-flex h-7 w-7 items-center justify-center rounded-md border border-white/15 bg-black/65 text-white/80 shadow-sm backdrop-blur-sm transition hover:bg-black/80 hover:text-white disabled:opacity-45"
+                aria-label="Download video"
+                title="Download video"
+              >
+                <Download className="h-3.5 w-3.5" aria-hidden />
+              </button>
+            </div>
           ) : null}
 
           <span className="pointer-events-none absolute left-2 top-2 rounded-full bg-black/60 px-2 py-0.5 text-[10px] font-medium text-white/85 backdrop-blur">

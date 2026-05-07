@@ -73,28 +73,11 @@ export function IntelligenceOverviewDashboard({ sortBy }: { sortBy: SortBy }) {
   const fetchOwnAds = useCallback(async (tracker: TTTracker) => {
     setOwnAdsLoading(true);
     try {
-      // 1) Canonical path for own tracker ids (same source as TrackerDetail).
+      // Canonical path for own tracker ids (same source as TrackerDetail).
       const res = await fetch(`/api/intelligence/trackers/${encodeURIComponent(tracker.id)}/top-ads`);
       const json = (await res.json().catch(() => [])) as unknown;
-      let rows = normalizeAdsPayload(json).filter((a) => Boolean(a.videoUrl?.trim()));
-
-      // 2) Fallback path: some saved brands can exist without workspace top-ads signal.
-      // Query by advertiser id/domain to still surface winning videos in dashboard.
-      if (rows.length === 0) {
-        const fallbackRes = await fetch("/api/intelligence/ads/query", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            advertiser: tracker.id,
-            advertiser_id: tracker.id,
-            ...(tracker.domain ? { domain: tracker.domain } : {}),
-          }),
-        });
-        const fallbackJson = (await fallbackRes.json().catch(() => [])) as unknown;
-        rows = normalizeAdsPayload(fallbackJson).filter((a) => Boolean(a.videoUrl?.trim()));
-      }
-
-      setOwnAds(rows.slice(0, 8));
+      const rows = normalizeAdsPayload(json).filter((a) => Boolean(a.videoUrl?.trim()));
+      setOwnAds(rows.slice(0, 10));
     } finally {
       setOwnAdsLoading(false);
     }
@@ -103,18 +86,26 @@ export function IntelligenceOverviewDashboard({ sortBy }: { sortBy: SortBy }) {
   const fetchCompetitorAds = useCallback(async (competitor: IntelligenceCompetitor, currentSortBy: SortBy) => {
     setCompetitorAdsLoading(true);
     try {
-      const lookupId = competitor.lookupId ?? competitor.id;
-      const q = competitor.domain?.trim() || competitor.name.trim() || lookupId;
-      const res = await fetch(
-        `/api/intelligence/competitors/top-ads?lookupId=${encodeURIComponent(lookupId)}&q=${encodeURIComponent(q)}&sortBy=${encodeURIComponent(currentSortBy)}`,
-      );
+      const q = competitor.domain?.trim() || competitor.name.trim() || "";
+      if (!q) {
+        setCompetitorAds([]);
+        return;
+      }
+      const params = new URLSearchParams({
+        q,
+        sortBy: currentSortBy,
+      });
+      if (competitor.lookupId?.trim()) {
+        params.set("lookupId", competitor.lookupId.trim());
+      }
+      const res = await fetch(`/api/intelligence/competitors/top-ads?${params.toString()}`);
       const json = (await res.json().catch(() => ({}))) as { ads?: TTAd[] } | TTAd[];
       const rows = Array.isArray((json as { ads?: TTAd[] }).ads)
         ? ((json as { ads?: TTAd[] }).ads as TTAd[])
         : Array.isArray(json)
           ? (json as TTAd[])
           : [];
-      setCompetitorAds(rows.filter((a) => Boolean(a.videoUrl?.trim())).slice(0, 8));
+      setCompetitorAds(rows.filter((a) => Boolean(a.videoUrl?.trim())).slice(0, 10));
     } finally {
       setCompetitorAdsLoading(false);
     }
