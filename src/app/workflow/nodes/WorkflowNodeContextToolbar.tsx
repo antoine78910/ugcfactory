@@ -1,7 +1,7 @@
 "use client";
 
 import { NodeToolbar, Position, useReactFlow, useStore } from "@xyflow/react";
-import { ChevronDown, Copy, HelpCircle, MoreHorizontal, Play, Spline, Trash2, Ungroup } from "lucide-react";
+import { ArrowDown, ChevronDown, Coins, Copy, HelpCircle, MoreHorizontal, Play, Spline, Trash2, Ungroup } from "lucide-react";
 import { useCallback, useMemo, useState } from "react";
 import { toast } from "sonner";
 import { HoverCard } from "radix-ui";
@@ -133,20 +133,31 @@ export function WorkflowNodeContextToolbar({
       const d = n.data as AdAssetNodeData;
       return isRunnableWorkflowAdAssetKind(d.kind);
     });
-    if (!runIds.length) return { orderedRunIds: [], estimatedCredits: 0, byId };
+    if (!runIds.length) {
+      return {
+        orderedRunIds: [],
+        estimatedCredits: 0,
+        byId,
+        perStepCredits: new Map<string, number>(),
+        parentStepIndices: new Map<string, number[]>(),
+      };
+    }
 
     // Order runnable nodes topologically within the reachable subgraph.
     const runSet = new Set(runIds);
     const indegree = new Map<string, number>();
     const children = new Map<string, string[]>();
+    const parents = new Map<string, string[]>();
     const reachOrder = new Map<string, number>(reachable.map((nid, idx) => [nid, idx]));
     for (const rid of runIds) {
       indegree.set(rid, 0);
       children.set(rid, []);
+      parents.set(rid, []);
     }
     for (const e of edges) {
       if (!runSet.has(e.source) || !runSet.has(e.target)) continue;
       children.get(e.source)!.push(e.target);
+      parents.get(e.target)!.push(e.source);
       indegree.set(e.target, (indegree.get(e.target) ?? 0) + 1);
     }
     const ready: string[] = runIds.filter((rid) => (indegree.get(rid) ?? 0) === 0);
@@ -168,14 +179,29 @@ export function WorkflowNodeContextToolbar({
       for (const rid of runIds) if (!orderedRunIds.includes(rid)) orderedRunIds.push(rid);
     }
 
-    const estimatedCredits = orderedRunIds.reduce((sum, nid) => {
-      const n = byId.get(nid);
-      if (!n || n.type !== "adAsset") return sum;
-      const d = n.data as AdAssetNodeData;
-      return sum + estimateWorkflowAdAssetRunCredits(d, nid, nodes, edges);
-    }, 0);
+    const indexOfRunId = new Map<string, number>(orderedRunIds.map((rid, idx) => [rid, idx]));
+    const parentStepIndices = new Map<string, number[]>();
+    for (const rid of orderedRunIds) {
+      const pIds = parents.get(rid) ?? [];
+      const pIdx = pIds
+        .map((p) => indexOfRunId.get(p))
+        .filter((v): v is number => typeof v === "number")
+        .sort((a, b) => a - b);
+      parentStepIndices.set(rid, pIdx);
+    }
 
-    return { orderedRunIds, estimatedCredits, byId };
+    const perStepCredits = new Map<string, number>();
+    let estimatedCredits = 0;
+    for (const rid of orderedRunIds) {
+      const n = byId.get(rid);
+      if (!n || n.type !== "adAsset") continue;
+      const d = n.data as AdAssetNodeData;
+      const cost = estimateWorkflowAdAssetRunCredits(d, rid, nodes, edges);
+      perStepCredits.set(rid, cost);
+      estimatedCredits += cost;
+    }
+
+    return { orderedRunIds, estimatedCredits, byId, perStepCredits, parentStepIndices };
   }, [getEdges, getNodes, hasDownstream, nodeId]);
 
   const triggerRunMain = useCallback(() => {
@@ -225,6 +251,119 @@ export function WorkflowNodeContextToolbar({
                   <ChevronDown className="h-3.5 w-3.5 text-white/70" strokeWidth={2.5} />
                 </button>
               ) : null}
+              {/**
+               * Inline help button: always visible (when there's downstream) so users
+               * never have to dig through a dropdown to see the full run-from-here plan.
+               * Hover OR click to open; the popover lists every step in topological
+               * order with its individual credit cost and parent-step references.
+               */}
+              {runFromHerePlan ? (
+                <HoverCard.Root openDelay={120} closeDelay={120}>
+                  <HoverCard.Trigger asChild>
+                    <button
+                      type="button"
+                      className={cn(iconBtn, "ml-0.5 text-white/65 hover:text-white")}
+                      aria-label="Show run-from-here plan"
+                      title="Show run-from-here plan"
+                      onClick={(e) => e.preventDefault()}
+                      onPointerDown={(e) => e.stopPropagation()}
+                    >
+                      <HelpCircle className="h-3.5 w-3.5" strokeWidth={2.2} aria-hidden />
+                    </button>
+                  </HoverCard.Trigger>
+                  <HoverCard.Portal>
+                    <HoverCard.Content
+                      side="top"
+                      align="center"
+                      sideOffset={12}
+                      className="z-[200] w-[360px] rounded-xl border border-white/12 bg-[#101018]/95 p-3 shadow-[0_18px_55px_rgba(0,0,0,0.65)] backdrop-blur-md"
+                      onPointerDown={(e) => e.stopPropagation()}
+                    >
+                      <div className="flex items-start justify-between gap-3">
+                        <div className="min-w-0">
+                          <div className="text-[12px] font-semibold text-white/90">Run from here</div>
+                          <div className="mt-0.5 text-[11px] text-white/60">
+                            {runFromHerePlan.orderedRunIds.length
+                              ? `${runFromHerePlan.orderedRunIds.length} step${runFromHerePlan.orderedRunIds.length > 1 ? "s" : ""} chained from this module`
+                              : "No runnable modules downstream"}
+                          </div>
+                        </div>
+                        {runFromHerePlan.orderedRunIds.length ? (
+                          <div className="inline-flex shrink-0 items-center gap-1 rounded-md border border-amber-300/25 bg-amber-300/10 px-2 py-0.5 text-[11px] font-semibold text-amber-200">
+                            <Coins className="h-3 w-3" strokeWidth={2.2} aria-hidden />~
+                            {Math.round(runFromHerePlan.estimatedCredits)}
+                          </div>
+                        ) : null}
+                      </div>
+                      {runFromHerePlan.orderedRunIds.length ? (
+                        <div className="mt-2 max-h-[280px] overflow-y-auto pr-1">
+                          <div className="space-y-0.5">
+                            {runFromHerePlan.orderedRunIds.map((rid, idx) => {
+                              const n = runFromHerePlan.byId.get(rid) as
+                                | WorkflowCanvasNode
+                                | undefined;
+                              const label =
+                                n?.type === "adAsset"
+                                  ? (((n.data as AdAssetNodeData).label ?? "").trim() ||
+                                    (n.data as AdAssetNodeData).kind)
+                                  : n?.type ?? "node";
+                              const kind =
+                                n?.type === "adAsset"
+                                  ? (n.data as AdAssetNodeData).kind
+                                  : (n?.type ?? "node");
+                              const cost = runFromHerePlan.perStepCredits.get(rid) ?? 0;
+                              const parents = runFromHerePlan.parentStepIndices.get(rid) ?? [];
+                              const isLast = idx === runFromHerePlan.orderedRunIds.length - 1;
+                              return (
+                                <div key={rid}>
+                                  <div className="flex items-start gap-2 rounded-lg border border-white/10 bg-white/[0.03] px-2 py-1.5">
+                                    <div className="mt-[1px] flex h-5 w-5 shrink-0 items-center justify-center rounded-full border border-white/15 bg-white/[0.04] text-[10px] font-semibold text-white/65">
+                                      {idx + 1}
+                                    </div>
+                                    <div className="min-w-0 flex-1">
+                                      <div className="flex items-center justify-between gap-2">
+                                        <div className="truncate text-[11px] font-semibold text-white/85">
+                                          {label}
+                                        </div>
+                                        <div className="inline-flex shrink-0 items-center gap-1 rounded border border-white/10 bg-white/[0.04] px-1.5 py-[1px] text-[10px] font-medium text-white/75">
+                                          <Coins className="h-2.5 w-2.5 text-amber-200" strokeWidth={2.4} aria-hidden />
+                                          {cost > 0 ? `~${Math.round(cost)}` : "—"}
+                                        </div>
+                                      </div>
+                                      <div className="mt-[1px] flex items-center gap-1.5 text-[10px] text-white/45">
+                                        <span className="rounded bg-white/[0.05] px-1 py-[1px] font-medium uppercase tracking-wide text-white/55">
+                                          {kind}
+                                        </span>
+                                        {parents.length ? (
+                                          <span className="truncate">
+                                            ← from {parents.map((p) => `#${p + 1}`).join(", ")}
+                                          </span>
+                                        ) : (
+                                          <span className="italic text-white/35">starts the chain</span>
+                                        )}
+                                      </div>
+                                    </div>
+                                  </div>
+                                  {!isLast ? (
+                                    <div className="my-0.5 flex items-center justify-center">
+                                      <ArrowDown className="h-3 w-3 text-white/30" strokeWidth={2.2} aria-hidden />
+                                    </div>
+                                  ) : null}
+                                </div>
+                              );
+                            })}
+                          </div>
+                        </div>
+                      ) : (
+                        <div className="mt-2 rounded-lg border border-white/10 bg-white/[0.03] px-2.5 py-2 text-[11px] text-white/55">
+                          Connect this module to an image/video/motion generator (or
+                          assistant) to enable Run from here.
+                        </div>
+                      )}
+                    </HoverCard.Content>
+                  </HoverCard.Portal>
+                </HoverCard.Root>
+              ) : null}
               {runMenuOpen && hasDownstream ? (
                 <div className="absolute left-0 top-[calc(100%+6px)] z-50 min-w-[170px] rounded-xl border border-white/12 bg-[#14141a]/95 p-1.5 shadow-[0_12px_36px_rgba(0,0,0,0.6)] backdrop-blur-md">
                   <button
@@ -234,85 +373,13 @@ export function WorkflowNodeContextToolbar({
                   >
                     This node only
                   </button>
-                  <div className="flex w-full items-center gap-1 rounded-lg px-2.5 py-1.5 transition hover:bg-white/[0.08]">
-                    <button
-                      type="button"
-                      className="flex flex-1 items-center py-0.5 text-left text-[12px] font-medium text-white/90"
-                      onClick={triggerRunFromHere}
-                    >
-                      Run from here
-                    </button>
-                    {runFromHerePlan ? (
-                      <HoverCard.Root openDelay={220} closeDelay={90}>
-                        <HoverCard.Trigger asChild>
-                          <button
-                            type="button"
-                            className="inline-flex h-7 w-7 items-center justify-center rounded-md border border-white/10 bg-black/20 text-white/70 transition hover:bg-black/35 hover:text-white"
-                            aria-label="Show run plan"
-                            title="Show run plan"
-                            onClick={(e) => e.preventDefault()}
-                            onPointerDown={(e) => e.stopPropagation()}
-                          >
-                            <HelpCircle className="h-3.5 w-3.5" strokeWidth={2.2} aria-hidden />
-                          </button>
-                        </HoverCard.Trigger>
-                        <HoverCard.Portal>
-                          <HoverCard.Content
-                            side="right"
-                            align="start"
-                            sideOffset={10}
-                            className="z-[200] w-[340px] rounded-xl border border-white/12 bg-[#101018]/95 p-3 shadow-[0_18px_55px_rgba(0,0,0,0.65)] backdrop-blur-md"
-                            onPointerDown={(e) => e.stopPropagation()}
-                          >
-                            <div className="flex items-start justify-between gap-3">
-                              <div className="min-w-0">
-                                <div className="text-[12px] font-semibold text-white/90">Run from here</div>
-                                <div className="mt-0.5 text-[11px] text-white/60">
-                                  {runFromHerePlan.orderedRunIds.length
-                                    ? `${runFromHerePlan.orderedRunIds.length} node(s) • ~${Math.round(
-                                        runFromHerePlan.estimatedCredits,
-                                      )} credits`
-                                    : "No runnable nodes downstream"}
-                                </div>
-                              </div>
-                            </div>
-                            {runFromHerePlan.orderedRunIds.length ? (
-                              <div className="mt-2 max-h-[240px] overflow-y-auto pr-1">
-                                <div className="space-y-1.5">
-                                  {runFromHerePlan.orderedRunIds.map((rid, idx) => {
-                                    const n = runFromHerePlan.byId.get(rid) as WorkflowCanvasNode | undefined;
-                                    const label =
-                                      n?.type === "adAsset"
-                                        ? (((n.data as AdAssetNodeData).label ?? "").trim() ||
-                                          (n.data as AdAssetNodeData).kind)
-                                        : n?.type ?? "node";
-                                    const kind =
-                                      n?.type === "adAsset" ? (n.data as AdAssetNodeData).kind : (n?.type ?? "node");
-                                    return (
-                                      <div
-                                        key={rid}
-                                        className="flex items-start gap-2 rounded-lg border border-white/10 bg-white/[0.03] px-2 py-1.5"
-                                      >
-                                        <div className="mt-[1px] w-5 shrink-0 text-right text-[10px] font-semibold text-white/35">
-                                          {idx + 1}
-                                        </div>
-                                        <div className="min-w-0 flex-1">
-                                          <div className="truncate text-[11px] font-semibold text-white/80">{label}</div>
-                                          <div className="truncate text-[10px] text-white/45">
-                                            {kind} · {rid}
-                                          </div>
-                                        </div>
-                                      </div>
-                                    );
-                                  })}
-                                </div>
-                              </div>
-                            ) : null}
-                          </HoverCard.Content>
-                        </HoverCard.Portal>
-                      </HoverCard.Root>
-                    ) : null}
-                  </div>
+                  <button
+                    type="button"
+                    className="flex w-full items-center rounded-lg px-2.5 py-2 text-left text-[12px] font-medium text-white/90 transition hover:bg-white/[0.08]"
+                    onClick={triggerRunFromHere}
+                  >
+                    Run from here
+                  </button>
                 </div>
               ) : null}
             </div>
