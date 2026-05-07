@@ -42,7 +42,7 @@ import { STUDIO_GENERATION_KIND_INTELLIGENCE_VIDEO } from "@/lib/studioGeneratio
 
 const MAX_PRODUCT_IMAGES = 3;
 
-const SEEDANCE_RECREATE_MODEL = "bytedance/seedance-2-fast" as const;
+const SEEDANCE_RECREATE_MODEL = "bytedance/seedance-2" as const;
 
 type ClipType = "talking_head" | "product_unboxing" | "faceless_lifestyle" | "app_promo" | "custom";
 type AspectRatio = "9:16" | "1:1" | "16:9";
@@ -532,7 +532,7 @@ export function AdRecreateDialog({
             <div className="text-[11px] text-white/40">
               {step === "intake" && (frameExtracting ? "Extracting video start frame…" : firstFrameCdnUrl ? "Step 1 of 3 — Start frame ready ✓ — Add your product" : "Step 1 of 3 — Add your product")}
               {step === "review" && "Step 2 of 3 — Review the script"}
-              {step === "running" && "Step 3 of 3 — Generating with Seedance 2.0 Fast"}
+              {step === "running" && "Step 3 of 3 — Generating with Seedance 2.0"}
             </div>
             <div className="flex items-center gap-2">
               {step === "review" && (
@@ -930,7 +930,7 @@ function ReviewStep({
         <p className="text-[11px] text-white/40">
           Tweak any line. References to{" "}
           <code className="rounded bg-white/5 px-1 text-violet-200">@imageN</code> map to your
-          product photos in upload order. Generation runs on Seedance 2.0 Fast — ~10s clip,{" "}
+          product photos in upload order. Generation runs on Seedance 2.0 — ~10s clip,{" "}
           {productImageUrls.length} product image{productImageUrls.length === 1 ? "" : "s"}.
         </p>
       </section>
@@ -954,7 +954,7 @@ function RunningStep({
         <div className="text-center">
           <p className="text-sm font-medium text-white">Generating your recreate clip…</p>
           <p className="mt-1 text-[11px] text-white/50">
-            Seedance 2.0 Fast — typically 1–3 minutes. You can keep this open or close — the job
+            Seedance 2.0 — typically 2–5 minutes. You can keep this open or close — the job
             finishes server-side.
           </p>
         </div>
