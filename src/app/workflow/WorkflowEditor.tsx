@@ -2694,12 +2694,23 @@ function WorkflowFlowWorkspace({
       const id = project.activePageId;
       // Keep the flush ref snapshot in sync immediately (avoids losing placement on rapid refresh/navigation).
       nodesEdgesRef.current = { nodes: nextNodes, edges: nextEdges };
+      const snapshot = {
+        ...project,
+        pages: project.pages.map((p) => (p.id === id ? { ...p, nodes: nextNodes, edges: nextEdges } : p)),
+      };
       setProject((prev) => ({
         ...prev,
         pages: prev.pages.map((p) => (p.id === id ? { ...p, nodes: nextNodes, edges: nextEdges } : p)),
       }));
+      // Hard write-through: persist synchronously on critical actions (connect/drag-stop/add-node).
+      // This removes the remaining race where a tab reload lands between state update and debounced effects.
+      try {
+        onCanvasPersist?.(snapshot);
+      } catch {
+        /* best-effort write-through */
+      }
     },
-    [project.activePageId, setProject],
+    [project, setProject, onCanvasPersist],
   );
 
   useEffect(() => {
@@ -3217,54 +3228,41 @@ function WorkflowFlowWorkspace({
 
   /**
    * Sync the live React Flow graph back into the parent `workflowProject` state.
-   * Debounced so we don't churn during multi-pixel drags. Kept tight (~80ms) to
-   * minimise the window where a fast reload could miss a pending connection.
+   * No debounce: users expect node/link edits to persist like text input.
    */
   useEffect(() => {
     const id = project.activePageId;
-    const t = window.setTimeout(() => {
-      setProject((prev) => ({
-        ...prev,
-        pages: prev.pages.map((p) => (p.id === id ? { ...p, nodes, edges } : p)),
-      }));
-    }, 80);
-    return () => window.clearTimeout(t);
+    setProject((prev) => ({
+      ...prev,
+      pages: prev.pages.map((p) => (p.id === id ? { ...p, nodes, edges } : p)),
+    }));
   }, [nodes, edges, project.activePageId, setProject]);
 
   /**
-   * Write-through persistence: bypasses the debounced React state cycle and writes
-   * the canvas state straight to localStorage on every nodes/edges mutation. This is
-   * the safety net that guarantees connections / placements survive a fast reload
-   * (Cmd+R) even if `setProject` hasn't flushed yet and `pagehide` happens to be
-   * unreliable on the user's browser.
-   *
-   * Debounced to ~50ms to coalesce rapid changes (drag) without delaying long enough
-   * for users to lose work.
+   * Write-through persistence: write canvas state to localStorage on each mutation.
+   * Intentionally immediate (no debounce) to match "typed text is saved right away".
    */
   useEffect(() => {
     if (!onCanvasPersist) return;
     const id = project.activePageId;
-    const handle = window.setTimeout(() => {
-      const safeClone = <T,>(value: T): T => {
-        try {
-          return structuredClone(value);
-        } catch {
-          return JSON.parse(JSON.stringify(value)) as T;
-        }
-      };
-      const snapshot: WorkflowProjectStateV1 = {
-        ...project,
-        pages: project.pages.map((p) =>
-          p.id === id ? { ...p, nodes: safeClone(nodes), edges: safeClone(edges) } : p,
-        ),
-      };
+    const safeClone = <T,>(value: T): T => {
       try {
-        onCanvasPersist(snapshot);
+        return structuredClone(value);
       } catch {
-        /* best-effort write-through */
+        return JSON.parse(JSON.stringify(value)) as T;
       }
-    }, 50);
-    return () => window.clearTimeout(handle);
+    };
+    const snapshot: WorkflowProjectStateV1 = {
+      ...project,
+      pages: project.pages.map((p) =>
+        p.id === id ? { ...p, nodes: safeClone(nodes), edges: safeClone(edges) } : p,
+      ),
+    };
+    try {
+      onCanvasPersist(snapshot);
+    } catch {
+      /* best-effort write-through */
+    }
   }, [nodes, edges, project, onCanvasPersist]);
 
   useEffect(() => {

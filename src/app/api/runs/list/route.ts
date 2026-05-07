@@ -24,14 +24,18 @@ export async function GET() {
 
     // Lazy backfill (list view): mirror ephemeral provider URLs into Supabase Storage so
     // old Projects media doesn't break when third-party CDNs expire.
+    //
+    // IMPORTANT PERF: this endpoint powers "My projects", so never block the HTTP
+    // response on mirroring network calls. We return rows immediately, then continue
+    // backfill in the background.
     const rows = (data ?? []) as any[];
     const candidates = rows.filter((r) => r && typeof r === "object" && rowHasUnpersistedMedia(r));
     if (candidates.length > 0) {
       const admin = createSupabaseServiceClient();
       if (admin) {
-        const MAX_MIRROR_PER_LIST = 12;
+        const MAX_MIRROR_PER_LIST = 6;
         const toMirror = candidates.slice(0, MAX_MIRROR_PER_LIST);
-        await Promise.all(
+        void Promise.all(
           toMirror.map(async (r) => {
             const runId = String(r.id ?? "").trim();
             if (!runId) return;

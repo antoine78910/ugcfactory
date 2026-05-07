@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { usePathname, useSearchParams } from "next/navigation";
 import Image from "next/image";
-import { Download, Loader2, Maximize2, Play, Plus, Sparkles, Star, Trash2, X } from "lucide-react";
+import { CalendarDays, Download, Loader2, Maximize2, Play, Plus, Sparkles, Star, Trash2, X } from "lucide-react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -116,6 +116,8 @@ import {
 
 /** Query param for GET `/api/studio/generations` when the Voice tab is active. */
 const VOICE_HISTORY_API_KINDS = `${STUDIO_GENERATION_KIND_VOICE_CHANGE},studio_audio`;
+const APP_ONBOARDING_CAL_URL = "https://cal.com/antoinee/15min";
+const APP_ONBOARDING_POPUP_KEY_PREFIX = "ugc-app-onboarding-call-v1:";
 
 /**
  * Voice history must only show voice jobs. Previously, "Change voice" copied a motion (or other)
@@ -1090,6 +1092,7 @@ export default function AppBrandWizard() {
   creditsRef.current = creditsBalance;
   const grantCreditsRef = useRef(grantCredits);
   grantCreditsRef.current = grantCredits;
+  const [showOnboardingCallPopup, setShowOnboardingCallPopup] = useState(false);
 
   const applyRefundHints = useCallback((hints: RefundHint[]) => {
     for (const h of hints) {
@@ -1098,6 +1101,37 @@ export default function AppBrandWizard() {
         creditsRef.current += h.credits;
       }
     }
+  }, []);
+
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    let cancelled = false;
+
+    void (async () => {
+      try {
+        const res = await fetch("/api/me/content-creator", {
+          method: "GET",
+          credentials: "include",
+          cache: "no-store",
+        });
+        if (!res.ok || cancelled) return;
+        const data = (await res.json()) as { userId?: string; isContentCreator?: boolean };
+        const userId = typeof data.userId === "string" ? data.userId.trim() : "";
+        if (!userId) return;
+        if (data.isContentCreator === true) return;
+        const seenKey = `${APP_ONBOARDING_POPUP_KEY_PREFIX}${userId}`;
+        if (window.localStorage.getItem(seenKey) === "1") return;
+        // Mark immediately so this invitation is shown only once per account.
+        window.localStorage.setItem(seenKey, "1");
+        if (!cancelled) setShowOnboardingCallPopup(true);
+      } catch {
+        /* non-blocking */
+      }
+    })();
+
+    return () => {
+      cancelled = true;
+    };
   }, []);
 
   const languageDisplayNames = useMemo(() => {
@@ -5766,6 +5800,56 @@ export default function AppBrandWizard() {
               </Button>
             </CardContent>
           </Card>
+        </div>
+      ) : null}
+
+      {showOnboardingCallPopup ? (
+        <div
+          className="fixed inset-0 z-[170] flex items-center justify-center bg-black/60 p-4 backdrop-blur-[2px] animate-in fade-in duration-200"
+          role="presentation"
+          onClick={() => setShowOnboardingCallPopup(false)}
+        >
+          <div
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="onboarding-call-title"
+            className="w-full max-w-md rounded-2xl border border-white/15 bg-[#0b0912] p-5 shadow-[0_20px_60px_rgba(0,0,0,0.5)] animate-in slide-in-from-bottom-2 duration-300"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="mb-3 inline-flex items-center gap-2 rounded-full border border-violet-300/30 bg-violet-500/10 px-2.5 py-1 text-[11px] font-medium text-violet-100">
+              <CalendarDays className="h-3.5 w-3.5" />
+              Welcome session
+            </div>
+            <h3 id="onboarding-call-title" className="text-lg font-semibold text-white">
+              Want a personalized 15-minute walkthrough?
+            </h3>
+            <p className="mt-2 text-sm leading-relaxed text-white/70">
+              Book a quick onboarding call to get your setup right and start generating faster.
+            </p>
+            <div className="mt-5 flex flex-col gap-2 sm:flex-row sm:justify-end">
+              <Button
+                type="button"
+                variant="secondary"
+                className="border border-white/15 bg-white/5 text-white hover:bg-white/10"
+                onClick={() => setShowOnboardingCallPopup(false)}
+              >
+                Maybe later
+              </Button>
+              <Button
+                asChild
+                className="bg-violet-500 text-white hover:bg-violet-400"
+              >
+                <a
+                  href={APP_ONBOARDING_CAL_URL}
+                  target="_blank"
+                  rel="noreferrer"
+                  onClick={() => setShowOnboardingCallPopup(false)}
+                >
+                  Book 15-min onboarding
+                </a>
+              </Button>
+            </div>
+          </div>
         </div>
       ) : null}
 
