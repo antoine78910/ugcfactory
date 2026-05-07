@@ -920,7 +920,6 @@ function WorkflowReactFlowChrome({
     useReactFlow();
   const viewport = useStore((s) => s.transform);
 
-  const [groupNameDraft, setGroupNameDraft] = useState("Group");
   const [groupColorDraft, setGroupColorDraft] = useState<string>(GROUP_COLOR_PRESETS[0].value);
 
   const eligibleForGroup = useMemo(
@@ -929,11 +928,6 @@ function WorkflowReactFlowChrome({
   );
   const canGroup = eligibleForGroup.length >= 2;
   const canClone = useMemo(() => canCloneWorkflowSelection(selectedNodes), [selectedNodes]);
-
-  const groupPreviewColor = /^#[0-9A-Fa-f]{6}$/.test(groupColorDraft)
-    ? groupColorDraft
-    : GROUP_COLOR_PRESETS[0].value;
-  const groupPreviewLabel = groupNameDraft.trim() || "Group";
 
   const [layoutRev, setLayoutRev] = useState(0);
   useEffect(() => {
@@ -1003,7 +997,7 @@ function WorkflowReactFlowChrome({
     if (!frameOpen || !groupSelectionAnchor) return null;
     const GAP = 12;
     const MIN_TOP_SAFE = 52;
-    const ESTIMATED_PANEL_H = 340;
+    const ESTIMATED_PANEL_H = 172;
     const VIEW_MARGIN = 10;
     const vh = typeof window !== "undefined" ? window.innerHeight : 800;
 
@@ -1015,7 +1009,7 @@ function WorkflowReactFlowChrome({
     const transform = placeAbove ? "translate(-50%, -100%)" : "translate(-50%, 0)";
 
     // Clamp so the dialog stays on-screen (users shouldn't have to pan/scroll to click "Create group").
-    const maxTop = Math.max(MIN_TOP_SAFE, vh - VIEW_MARGIN);
+    const maxTop = Math.max(MIN_TOP_SAFE, vh - VIEW_MARGIN - (placeAbove ? 0 : ESTIMATED_PANEL_H));
     const minTop = MIN_TOP_SAFE;
     const clampedTop = Math.max(minTop, Math.min(maxTop, desiredTop));
 
@@ -1034,7 +1028,7 @@ function WorkflowReactFlowChrome({
     }
   }, [tool, setFrameOpen]);
 
-  const createGroup = useCallback(() => {
+  const createGroup = useCallback((colorOverride?: string) => {
     if (!canGroup) {
       toast.error("Select at least two top-level nodes to group.");
       return;
@@ -1049,8 +1043,8 @@ function WorkflowReactFlowChrome({
     const gw = Math.max(bounds.width + 2 * PAD, 200);
     const gh = Math.max(bounds.height + 2 * PAD + HEADER, 160);
     const groupId = crypto.randomUUID();
-    const name = groupNameDraft.trim() || "Group";
-    const color = groupColorDraft;
+    const name = "Group";
+    const color = colorOverride && /^#[0-9A-Fa-f]{6}$/.test(colorOverride) ? colorOverride : groupColorDraft;
 
     const childUpdates = freshEligible.map((n) => {
       const internal = getInternalNode(n.id);
@@ -1090,7 +1084,6 @@ function WorkflowReactFlowChrome({
     getNodes,
     getNodesBounds,
     groupColorDraft,
-    groupNameDraft,
     setFrameOpen,
     setSelectionBarExpanded,
     setNodes,
@@ -2313,7 +2306,11 @@ function WorkflowReactFlowChrome({
                 >
                   <span
                     className="h-4 w-4 shrink-0 rounded-full border border-white/25 shadow-inner"
-                    style={{ backgroundColor: groupPreviewColor }}
+                    style={{
+                      backgroundColor: /^#[0-9A-Fa-f]{6}$/.test(groupColorDraft)
+                        ? groupColorDraft
+                        : GROUP_COLOR_PRESETS[0].value,
+                    }}
                     aria-hidden
                   />
                 </button>
@@ -2485,7 +2482,7 @@ function WorkflowReactFlowChrome({
         <div
           role="dialog"
           aria-label="New group"
-          className="pointer-events-auto fixed z-[200] w-[min(100vw-24px,280px)] rounded-xl border border-white/10 bg-[#0b0912] p-3 shadow-2xl"
+          className="pointer-events-auto fixed z-[200] w-[min(100vw-24px,220px)] rounded-xl border border-white/10 bg-[#0b0912] p-2.5 shadow-2xl"
           style={
             newGroupPanelScreen ?? {
               left: "50%",
@@ -2495,7 +2492,7 @@ function WorkflowReactFlowChrome({
           }
         >
           <div className="mb-2 flex items-center justify-between gap-2">
-            <p className="text-[11px] font-semibold uppercase tracking-wide text-white/45">New group</p>
+            <p className="text-[10px] font-semibold uppercase tracking-wide text-white/50">Group color</p>
             <button
               type="button"
               onClick={() => setFrameOpen(false)}
@@ -2506,20 +2503,10 @@ function WorkflowReactFlowChrome({
               <X className="h-3.5 w-3.5" aria-hidden />
             </button>
           </div>
-          <p className="mb-3 text-[11px] leading-snug text-white/45">
-            Name it (optional), pick a color, then create.
+          <p className="mb-2 text-[10px] leading-snug text-white/45">
+            Pick a color to create instantly.
           </p>
-          <label className="mb-2 block">
-            <span className="mb-1 block text-[10px] text-white/40">Name</span>
-            <input
-              value={groupNameDraft}
-              onChange={(e) => setGroupNameDraft(e.target.value)}
-              className="w-full rounded-lg border border-white/12 bg-black/40 px-2.5 py-1.5 text-[13px] text-white outline-none focus:border-violet-500/40"
-              placeholder="Group name"
-            />
-          </label>
-          <p className="mb-1.5 text-[10px] text-white/40">Color</p>
-          <div className="mb-2 flex flex-wrap items-center gap-2">
+          <div className="mb-0.5 flex flex-wrap items-center gap-2">
             <div className="flex flex-wrap gap-1.5">
               {GROUP_COLOR_PRESETS.map((c) => (
                 <button
@@ -2531,7 +2518,10 @@ function WorkflowReactFlowChrome({
                     groupColorDraft === c.value && "ring-2 ring-white/50 ring-offset-2 ring-offset-[#0b0912]",
                   )}
                   style={{ backgroundColor: c.value }}
-                  onClick={() => setGroupColorDraft(c.value)}
+                  onClick={() => {
+                    setGroupColorDraft(c.value);
+                    createGroup(c.value);
+                  }}
                 />
               ))}
             </div>
@@ -2540,45 +2530,15 @@ function WorkflowReactFlowChrome({
               <input
                 type="color"
                 value={/^#[0-9A-Fa-f]{6}$/.test(groupColorDraft) ? groupColorDraft : GROUP_COLOR_PRESETS[0].value}
-                onChange={(e) => setGroupColorDraft(e.target.value)}
+                onChange={(e) => {
+                  const v = e.target.value;
+                  setGroupColorDraft(v);
+                  createGroup(v);
+                }}
                 className="h-7 w-10 cursor-pointer rounded border-0 bg-transparent p-0"
                 title="Custom color"
               />
             </label>
-          </div>
-          <div className="mb-3">
-            <p className="mb-1.5 text-[10px] text-white/40">Preview</p>
-            <div
-              className="overflow-hidden rounded-2xl border-2 border-dashed bg-black/20 shadow-[inset_0_0_0_1px_rgba(255,255,255,0.04)]"
-              style={{ borderColor: groupPreviewColor }}
-              aria-hidden
-            >
-              <div
-                className="rounded-t-[13px] border-b border-white/[0.08] px-2.5 py-2"
-                style={{ backgroundColor: `${groupPreviewColor}18` }}
-              >
-                <span className="block truncate text-left text-[12px] font-semibold leading-tight text-white/90">
-                  {groupPreviewLabel}
-                </span>
-              </div>
-              <div className="min-h-[52px] rounded-b-[13px] bg-black/[0.12]" />
-            </div>
-          </div>
-          <div className="flex gap-2">
-            <button
-              type="button"
-              onClick={() => setFrameOpen(false)}
-              className="flex-1 rounded-lg border border-white/10 bg-white/[0.04] py-2 text-[13px] font-semibold text-white/70 transition hover:bg-white/[0.07] hover:text-white"
-            >
-              Cancel
-            </button>
-            <button
-              type="button"
-              onClick={createGroup}
-              className="flex-1 rounded-lg bg-violet-500/90 py-2 text-[13px] font-semibold text-white transition hover:bg-violet-500"
-            >
-              Create
-            </button>
           </div>
         </div>
       ) : null}
@@ -4351,7 +4311,7 @@ function WorkflowFlowWorkspace({
           minZoom={0.05}
           panOnDrag={readOnly ? true : tool === "pan"}
           selectionOnDrag={readOnly ? false : tool === "select"}
-          selectionMode={SelectionMode.Partial}
+          selectionMode={SelectionMode.Full}
           onEdgeClick={(event, edge) => {
             if (readOnly || tool !== "cutTarget") return;
             event.preventDefault();
