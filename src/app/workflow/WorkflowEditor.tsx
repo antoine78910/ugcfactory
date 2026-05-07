@@ -1009,6 +1009,44 @@ function WorkflowReactFlowChrome({
     viewport,
   ]);
 
+  /**
+   * Tight screen-space rectangle that visually wraps the currently selected
+   * modules. Drawn after the user releases the marquee so it's clear which
+   * modules are about to be grouped — and aligned with the floating
+   * "New group" CTA above it.
+   */
+  const groupSelectionRect = useMemo(() => {
+    if (!canGroup || eligibleForGroup.length < 2) return null;
+    try {
+      const current = getNodes() as WorkflowCanvasNode[];
+      const fresh = eligibleForGroup.map((n) => current.find((x) => x.id === n.id) ?? n);
+      const b = getNodesBounds(fresh);
+      if (!Number.isFinite(b.width) || !Number.isFinite(b.height)) return null;
+      const tl = flowToScreenPosition({ x: b.x, y: b.y });
+      const br = flowToScreenPosition({ x: b.x + b.width, y: b.y + b.height });
+      const PAD = 10;
+      const left = Math.min(tl.x, br.x) - PAD;
+      const top = Math.min(tl.y, br.y) - PAD;
+      const width = Math.abs(br.x - tl.x) + PAD * 2;
+      const height = Math.abs(br.y - tl.y) + PAD * 2;
+      if (!Number.isFinite(width) || !Number.isFinite(height)) return null;
+      return { left, top, width, height };
+    } catch {
+      return null;
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- recomputes when layoutRev / viewport / eligible sigs change
+  }, [
+    canGroup,
+    eligibleForGroup,
+    eligiblePositionsSig,
+    flowToScreenPosition,
+    getNodes,
+    getNodesBounds,
+    groupEligibleIdsKey,
+    layoutRev,
+    viewport,
+  ]);
+
   const newGroupPanelScreen = useMemo(() => {
     if (!frameOpen || !groupSelectionAnchor) return null;
     const GAP = 12;
@@ -2286,6 +2324,29 @@ function WorkflowReactFlowChrome({
             })();
           }}
         />
+      ) : null}
+
+      {/**
+       * Visual outline of the currently marquee-selected modules. Helps the
+       * user understand exactly what would be grouped when they click the
+       * floating "New group" CTA above. Pointer-events:none so it never
+       * intercepts clicks on the underlying nodes.
+       */}
+      {!readOnly && canGroup && !frameOpen && groupSelectionRect ? (
+        <div
+          className="pointer-events-none fixed z-[195]"
+          style={{
+            left: groupSelectionRect.left,
+            top: groupSelectionRect.top,
+            width: groupSelectionRect.width,
+            height: groupSelectionRect.height,
+          }}
+          aria-hidden
+        >
+          <div
+            className="h-full w-full rounded-2xl border border-dashed border-violet-300/55 bg-violet-400/[0.04] shadow-[0_0_0_1px_rgba(167,139,250,0.18),0_18px_48px_rgba(76,29,149,0.18)]"
+          />
+        </div>
       ) : null}
 
       {!readOnly && canGroup && !frameOpen && groupSelectionAnchor ? (
@@ -4414,7 +4475,7 @@ function WorkflowFlowWorkspace({
           minZoom={0.05}
           panOnDrag={readOnly ? true : tool === "pan"}
           selectionOnDrag={readOnly ? false : tool === "select"}
-          selectionMode={SelectionMode.Full}
+          selectionMode={SelectionMode.Partial}
           onEdgeClick={(event, edge) => {
             if (readOnly || tool !== "cutTarget") return;
             event.preventDefault();
