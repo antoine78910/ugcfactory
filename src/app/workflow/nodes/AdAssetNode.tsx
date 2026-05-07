@@ -105,6 +105,7 @@ import {
 import { workflowVideoExportPixelDimensions } from "../workflowVideoExportDimensions";
 import { WorkflowNodeContextToolbar } from "./WorkflowNodeContextToolbar";
 import type { ImageRefNodeData } from "./ImageRefNode";
+import type { PromptListNodeData } from "../workflowPromptListTypes";
 import { buildPromptListNode } from "../workflowNodeFactory";
 import { buildImageRefNode } from "../workflowNodeFactory";
 import { linkToAdProductPhotoPickerUrls, readUniverseFromExtracted, splitAllScriptOptions } from "@/lib/linkToAdUniverse";
@@ -2172,14 +2173,21 @@ export function AdAssetNode({ id, data, selected }: NodeProps<AdAssetNodeType>) 
     patch(id, { aspectRatio: nextAspect, intrinsicAspect: nextIntrinsic });
   }, [data.aspectRatio, data.imageWorkflowPreset, data.intrinsicAspect, data.kind, id, patch]);
 
-  const onGenerate = useCallback(async () => {
+  const onGenerate = useCallback(
+    async (opts?: { promptOverride?: string; resultListNodeId?: string; resultListSlotIndex?: number }) => {
     if (generating) return;
     setLastGenerationError(null);
     setLastGenerationErrorDetails(null);
     setErrorDetailsOpen(false);
 
-    const nodes = getNodes();
-    const edges = getEdges();
+      const nodes = getNodes();
+      const edges = getEdges();
+      const forcedPrompt = opts?.promptOverride?.trim() || "";
+      const targetedResultListId = opts?.resultListNodeId?.trim() || "";
+      const targetedResultListSlot =
+        typeof opts?.resultListSlotIndex === "number" && Number.isFinite(opts.resultListSlotIndex)
+          ? Math.max(0, Math.floor(opts.resultListSlotIndex))
+          : null;
     const promptForRunBase = data.kind === "assistant" ? assistantPromptDraft : prompt;
     const profile360Preset = data.kind === "image" && data.imageWorkflowPreset === "profile_360";
     const linkedPrompts =
@@ -2212,9 +2220,11 @@ export function AdAssetNode({ id, data, selected }: NodeProps<AdAssetNodeType>) 
           ? { batch: null, composedSingle: WORKFLOW_AVATAR_360_PROFILE_PROMPT, fromPromptList: false }
           : collectWorkflowBatchPrompts(nodes, edges, id, [...WORKFLOW_TEXT_INPUT_HANDLES], promptForRunBase)
         : { batch: null, composedSingle: effectivePrompt, fromPromptList: false };
-    const batchPrompts = batchContext.batch?.map((x) => x.trim()).filter(Boolean) ?? null;
-    const singlePrompt = (batchContext.composedSingle || effectivePrompt).trim();
-    const fromPromptList = batchContext.fromPromptList;
+      const batchPrompts = forcedPrompt
+        ? [forcedPrompt]
+        : batchContext.batch?.map((x) => x.trim()).filter(Boolean) ?? null;
+      const singlePrompt = forcedPrompt || (batchContext.composedSingle || effectivePrompt).trim();
+      const fromPromptList = forcedPrompt ? false : batchContext.fromPromptList;
     const requiresPrompt = data.kind !== "motion" && !profile360Preset;
     if (requiresPrompt && !(batchPrompts?.length || singlePrompt)) {
       toast.error("Add a prompt", {
@@ -2813,6 +2823,21 @@ export function AdAssetNode({ id, data, selected }: NodeProps<AdAssetNodeType>) 
             message: msg,
           });
         });
+        if (targetedResultListId && targetedResultListSlot != null && imageResultLines.length > 0) {
+          const targetListNode = nodes.find((n) => n.id === targetedResultListId && n.type === "promptList");
+          const existingLines = Array.isArray((targetListNode?.data as PromptListNodeData | undefined)?.lines)
+            ? ((targetListNode?.data as PromptListNodeData).lines ?? [])
+            : [];
+          if (targetedResultListSlot < existingLines.length) {
+            const nextLines = [...existingLines];
+            nextLines[targetedResultListSlot] = imageResultLines[0] ?? nextLines[targetedResultListSlot] ?? "";
+            patch(targetedResultListId, {
+              lines: nextLines,
+              mode: "results",
+              contentKind: "media",
+            });
+          }
+        }
         const imageResults = imageResultLines.filter(isWorkflowResolvedMediaLine);
         const imageUrl =
           imageResults
@@ -3362,6 +3387,21 @@ export function AdAssetNode({ id, data, selected }: NodeProps<AdAssetNodeType>) 
           message: msg,
         });
       });
+      if (targetedResultListId && targetedResultListSlot != null && videoResultLines.length > 0) {
+        const targetListNode = nodes.find((n) => n.id === targetedResultListId && n.type === "promptList");
+        const existingLines = Array.isArray((targetListNode?.data as PromptListNodeData | undefined)?.lines)
+          ? ((targetListNode?.data as PromptListNodeData).lines ?? [])
+          : [];
+        if (targetedResultListSlot < existingLines.length) {
+          const nextLines = [...existingLines];
+          nextLines[targetedResultListSlot] = videoResultLines[0] ?? nextLines[targetedResultListSlot] ?? "";
+          patch(targetedResultListId, {
+            lines: nextLines,
+            mode: "results",
+            contentKind: "media",
+          });
+        }
+      }
       const videoResults = videoResultLines.filter(isWorkflowResolvedMediaLine);
       const videoUrl =
         videoResults
@@ -3490,9 +3530,20 @@ export function AdAssetNode({ id, data, selected }: NodeProps<AdAssetNodeType>) 
 
   useEffect(() => {
     const onRunNode = (ev: Event) => {
-      const detail = (ev as CustomEvent<{ nodeId?: string }>).detail;
+      const detail = (
+        ev as CustomEvent<{
+          nodeId?: string;
+          promptOverride?: string;
+          resultListNodeId?: string;
+          resultListSlotIndex?: number;
+        }>
+      ).detail;
       if (!detail?.nodeId || detail.nodeId !== id) return;
-      void onGenerate();
+      void onGenerate({
+        promptOverride: detail.promptOverride,
+        resultListNodeId: detail.resultListNodeId,
+        resultListSlotIndex: detail.resultListSlotIndex,
+      });
     };
     window.addEventListener("workflow:run-node", onRunNode as EventListener);
     return () => window.removeEventListener("workflow:run-node", onRunNode as EventListener);

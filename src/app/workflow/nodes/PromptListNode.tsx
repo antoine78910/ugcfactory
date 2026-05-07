@@ -70,16 +70,17 @@ function isPendingMediaToken(s: string): boolean {
   return s.trim().startsWith(WORKFLOW_PENDING_MEDIA_PREFIX);
 }
 
-function parseWorkflowErrorMediaToken(s: string): { nodeId?: string; message?: string } | null {
+function parseWorkflowErrorMediaToken(s: string): { nodeId?: string; message?: string; prompt?: string } | null {
   const t = s.trim();
   if (!t.startsWith(WORKFLOW_ERROR_MEDIA_PREFIX)) return null;
   const raw = t.slice(WORKFLOW_ERROR_MEDIA_PREFIX.length);
   try {
     const decoded = decodeURIComponent(raw);
-    const parsed = JSON.parse(decoded) as { nodeId?: unknown; message?: unknown };
+    const parsed = JSON.parse(decoded) as { nodeId?: unknown; message?: unknown; prompt?: unknown };
     return {
       nodeId: typeof parsed.nodeId === "string" ? parsed.nodeId : undefined,
       message: typeof parsed.message === "string" ? parsed.message : undefined,
+      prompt: typeof parsed.prompt === "string" ? parsed.prompt : undefined,
     };
   } catch {
     return { message: "Generation failed." };
@@ -87,6 +88,7 @@ function parseWorkflowErrorMediaToken(s: string): { nodeId?: string; message?: s
 }
 
 type PromptListMediaGalleryCellProps = {
+  listNodeId: string;
   url: string;
   slotIndex: number;
   onDeleteSlot: (idx: number) => void;
@@ -94,6 +96,7 @@ type PromptListMediaGalleryCellProps = {
 };
 
 const PromptListMediaGalleryCell = memo(function PromptListMediaGalleryCell({
+  listNodeId,
   url,
   slotIndex,
   onDeleteSlot,
@@ -148,7 +151,14 @@ const PromptListMediaGalleryCell = memo(function PromptListMediaGalleryCell({
                 e.stopPropagation();
                 if (errorToken?.nodeId?.trim()) {
                   window.dispatchEvent(
-                    new CustomEvent("workflow:run-node", { detail: { nodeId: errorToken.nodeId.trim() } }),
+                    new CustomEvent("workflow:run-node", {
+                      detail: {
+                        nodeId: errorToken.nodeId.trim(),
+                        promptOverride: errorToken.prompt?.trim() || undefined,
+                        resultListNodeId: listNodeId,
+                        resultListSlotIndex: slotIndex,
+                      },
+                    }),
                   );
                 }
               }}
@@ -524,6 +534,7 @@ export function PromptListNode({ id, data: rawData, selected }: NodeProps<Prompt
                 {nonEmptyLines.map((u, i) => (
                   <PromptListMediaGalleryCell
                     key={`media-slot-${i}`}
+                    listNodeId={id}
                     url={u}
                     slotIndex={i}
                     onDeleteSlot={deleteSlotStable}
