@@ -1212,6 +1212,8 @@ export type WorkflowRunVideoParams = {
   resolution: string;
   /** Seconds; coerced per model if missing or invalid. */
   durationSec?: number;
+  /** Optional native audio switch for models that support it. */
+  nativeAudioEnabled?: boolean;
   linkedImageUrl?: string;
   referenceImageUrl?: string;
   endImageUrl?: string;
@@ -1690,7 +1692,9 @@ async function runWorkflowVideoJobOnce(params: WorkflowRunVideoParams): Promise<
     modelId: seedanceResolvedModel,
     duration,
     audio:
-      modelId === "kling-3.0/video" || modelId === "kling-2.5-turbo/video" || modelId === "kling-2.6/video",
+      modelId === "kling-3.0/video" || modelId === "kling-2.5-turbo/video" || modelId === "kling-2.6/video"
+        ? params.nativeAudioEnabled ?? true
+        : false,
     quality,
     videoResolution: modelId.startsWith("bytedance/seedance") ? seedanceResForCredits : undefined,
   });
@@ -1900,7 +1904,7 @@ async function runWorkflowVideoJobOnce(params: WorkflowRunVideoParams): Promise<
         : undefined,
       sound:
         modelId === "kling-3.0/video" || modelId === "kling-2.5-turbo/video" || modelId === "kling-2.6/video"
-          ? true
+          ? (params.nativeAudioEnabled ?? true)
           : undefined,
       mode: isKling30 || isKling25Turbo || isKling26 || isSoraPicker ? quality : undefined,
       multiShots: isKling30 ? false : undefined,
@@ -2013,6 +2017,7 @@ export function workflowVideoChargeCredits(params: {
   model: string;
   resolution: string;
   durationSec?: number;
+  nativeAudioEnabled?: boolean;
 }): number {
   const modelId = resolveWorkflowVideoModelId(params.model);
   const seedanceResolved = normalizeLegacySeedanceMarketModelId(modelId);
@@ -2025,7 +2030,9 @@ export function workflowVideoChargeCredits(params: {
     modelId: seedanceResolved,
     duration,
     audio:
-      modelId === "kling-3.0/video" || modelId === "kling-2.5-turbo/video" || modelId === "kling-2.6/video",
+      modelId === "kling-3.0/video" || modelId === "kling-2.5-turbo/video" || modelId === "kling-2.6/video"
+        ? params.nativeAudioEnabled ?? true
+        : false,
     quality,
     videoResolution: modelId.startsWith("bytedance/seedance") ? seedanceResForCredits : undefined,
   });
@@ -2088,6 +2095,7 @@ export function estimateWorkflowAdAssetRunCredits(
     model,
     resolution,
     durationSec: data.videoDurationSec,
+    nativeAudioEnabled: data.videoNativeAudioEnabled,
   });
   void multiBatchFromList;
   quantity = 1;

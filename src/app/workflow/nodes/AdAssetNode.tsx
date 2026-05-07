@@ -51,7 +51,7 @@ import {
   userMessageFromCaughtError,
 } from "@/lib/generationUserMessage";
 import { refundPlatformCredits } from "@/lib/refundPlatformCredits";
-import { studioVideoDurationSecOptions } from "@/lib/studioVideoModelCapabilities";
+import { studioVideoDurationSecOptions, studioVideoSupportsNativeAudio } from "@/lib/studioVideoModelCapabilities";
 import { uploadFileToCdn } from "@/lib/uploadBlobUrlToCdn";
 import { uploadBlobUrlToCdn } from "@/lib/uploadBlobUrlToCdn";
 import { parseWorkflowRunCorrelationFromLabel } from "@/lib/workflowRunCorrelation";
@@ -159,6 +159,8 @@ export type AdAssetNodeData = {
   videoEndImageUrl?: string;
   /** Video: clip length in seconds (per model). */
   videoDurationSec?: number;
+  /** Video: native provider audio on/off when the current model supports it. */
+  videoNativeAudioEnabled?: boolean;
   /** Video: Seedance 2 Preview / Fast Preview queue tier (doubles credits when VIP). */
   videoPriority?: "normal" | "vip";
   /** Video node born from video-output chaining flow (restrict picker models). */
@@ -1268,11 +1270,10 @@ export function AdAssetNode({ id, data, selected }: NodeProps<AdAssetNodeType>) 
     const resolvedIds = rawSlotTaskIds.filter((t) => t.length > 0);
     const pendingMediaKind = pending.mediaKind ?? (data.kind === "video" || data.kind === "motion" ? "video" : "image");
     const updatedAt = pending.updatedAt ?? 0;
-    const fresh = updatedAt > 0 && Date.now() - updatedAt < WORKFLOW_RACE_RECOVERY_WINDOW_MS;
     const slotCount = rawSlotTaskIds.length;
-    /** Empty placeholder slots imply we are still awaiting provider task ids (must not widen poll matching loosely). */
+    /** Only resume polling once at least one real provider task id exists. */
     const hasResolvedTasks = resolvedIds.length > 0;
-    if (!hasResolvedTasks && !fresh) return;
+    if (!hasResolvedTasks) return;
 
     let alive = true;
     let timer: ReturnType<typeof setTimeout> | null = null;
@@ -1700,6 +1701,15 @@ export function AdAssetNode({ id, data, selected }: NodeProps<AdAssetNodeType>) 
     () => (data.kind === "video" ? workflowVideoModelSupportsElements(resolvedVideoModelId) : false),
     [data.kind, resolvedVideoModelId],
   );
+  const videoModelSupportsNativeAudioToggle = useMemo(
+    () => (data.kind === "video" ? studioVideoSupportsNativeAudio(resolvedVideoModelId) : false),
+    [data.kind, resolvedVideoModelId],
+  );
+  const videoNativeAudioEnabled = useMemo(() => {
+    if (data.kind !== "video") return false;
+    if (!videoModelSupportsNativeAudioToggle) return false;
+    return data.videoNativeAudioEnabled ?? true;
+  }, [data.kind, data.videoNativeAudioEnabled, videoModelSupportsNativeAudioToggle]);
   const videoModelSeedance2ProLike = useMemo(
     () =>
       data.kind === "video" &&
@@ -1976,6 +1986,7 @@ export function AdAssetNode({ id, data, selected }: NodeProps<AdAssetNodeType>) 
         model,
         resolution,
         durationSec: data.videoDurationSec,
+        nativeAudioEnabled: videoNativeAudioEnabled,
       });
       return oneVideo * runCount;
     }
@@ -1991,10 +2002,12 @@ export function AdAssetNode({ id, data, selected }: NodeProps<AdAssetNodeType>) 
     batchPromptCount,
     data.kind,
     data.videoDurationSec,
+    data.videoNativeAudioEnabled,
     model,
     quantity,
     resolution,
     motionDetectedInputDurationSec,
+    videoNativeAudioEnabled,
   ]);
 
   const runFromHerePlan = useStore(
@@ -2174,7 +2187,12 @@ export function AdAssetNode({ id, data, selected }: NodeProps<AdAssetNodeType>) 
   }, [data.aspectRatio, data.imageWorkflowPreset, data.intrinsicAspect, data.kind, id, patch]);
 
   const onGenerate = useCallback(
-    async (opts?: { promptOverride?: string; resultListNodeId?: string; resultListSlotIndex?: number }) => {
+    async (opts?: {
+      regenerateSingle?: boolean;
+      promptOverride?: string;
+      resultListNodeId?: string;
+      resultListSlotIndex?: number;
+    }) => {
     if (generating) return;
     setLastGenerationError(null);
     setLastGenerationErrorDetails(null);
@@ -2183,6 +2201,7 @@ export function AdAssetNode({ id, data, selected }: NodeProps<AdAssetNodeType>) 
       const nodes = getNodes();
       const edges = getEdges();
       const forcedPrompt = opts?.promptOverride?.trim() || "";
+      const forceSingleRun = Boolean(opts?.regenerateSingle);
       const targetedResultListId = opts?.resultListNodeId?.trim() || "";
       const targetedResultListSlot =
         typeof opts?.resultListSlotIndex === "number" && Number.isFinite(opts.resultListSlotIndex)
@@ -2220,11 +2239,14 @@ export function AdAssetNode({ id, data, selected }: NodeProps<AdAssetNodeType>) 
           ? { batch: null, composedSingle: WORKFLOW_AVATAR_360_PROFILE_PROMPT, fromPromptList: false }
           : collectWorkflowBatchPrompts(nodes, edges, id, [...WORKFLOW_TEXT_INPUT_HANDLES], promptForRunBase)
         : { batch: null, composedSingle: effectivePrompt, fromPromptList: false };
-      const batchPrompts = forcedPrompt
+      const batchPrompts =
+        forceSingleRun
+          ? [forcedPrompt || (batchContext.composedSingle || effectivePrompt).trim()].filter(Boolean)
+          : forcedPrompt
         ? [forcedPrompt]
         : batchContext.batch?.map((x) => x.trim()).filter(Boolean) ?? null;
       const singlePrompt = forcedPrompt || (batchContext.composedSingle || effectivePrompt).trim();
-      const fromPromptList = forcedPrompt ? false : batchContext.fromPromptList;
+      const fromPromptList = forceSingleRun || forcedPrompt ? false : batchContext.fromPromptList;
     const requiresPrompt = data.kind !== "motion" && !profile360Preset;
     if (requiresPrompt && !(batchPrompts?.length || singlePrompt)) {
       toast.error("Add a prompt", {
@@ -2759,13 +2781,6 @@ export function AdAssetNode({ id, data, selected }: NodeProps<AdAssetNodeType>) 
             ? crypto.randomUUID()
             : `wf-${Date.now()}-${Math.random().toString(16).slice(2)}`;
         pendingImageTaskIds = Array.from({ length: promptsForRun.length }, () => "");
-        setPendingWorkflowRun({
-          mediaKind: "image",
-          taskIds: pendingImageTaskIds,
-          progressListId,
-          listLabel: imageResultsListLabel,
-          correlationId: runCorrelationId,
-        });
         emitRunLog(
           "info",
           `Image run config: model=${imageModelForJob}, aspect=${imageAspectForJob}, resolution=${imageResolutionForJob}, prompts=${
@@ -3092,6 +3107,7 @@ export function AdAssetNode({ id, data, selected }: NodeProps<AdAssetNodeType>) 
       model,
       resolution,
       durationSec: data.videoDurationSec,
+      nativeAudioEnabled: videoNativeAudioEnabled,
     });
     const runCount = Math.max(1, batchPrompts?.length ?? 1);
     const vCharge = perVideoCharge * runCount;
@@ -3238,7 +3254,9 @@ export function AdAssetNode({ id, data, selected }: NodeProps<AdAssetNodeType>) 
           promptsForRun.length
         }, promptChars=${promptChars.join("/")}, startImage=${startFrame ? "yes" : "no"}, endImage=${
           endFrame ? "yes" : "no"
-        }, refs=${referenceOnly.length}, promptSample="${promptsForRun[0]?.trim().slice(0, 120) ?? ""}".`,
+        }, audio=${videoModelSupportsNativeAudioToggle ? (videoNativeAudioEnabled ? "on" : "off") : "fixed"}, refs=${
+          referenceOnly.length
+        }, promptSample="${promptsForRun[0]?.trim().slice(0, 120) ?? ""}".`,
       );
       const isSeedanceModel = model.startsWith("bytedance/seedance");
       const seedance2ProLike =
@@ -3309,13 +3327,6 @@ export function AdAssetNode({ id, data, selected }: NodeProps<AdAssetNodeType>) 
           ? crypto.randomUUID()
           : `wf-${Date.now()}-${Math.random().toString(16).slice(2)}`;
       pendingVideoTaskIds = Array.from({ length: promptsForRun.length }, () => "");
-      setPendingWorkflowRun({
-        mediaKind: "video",
-        taskIds: pendingVideoTaskIds,
-        progressListId,
-        listLabel: videoResultsListLabel,
-        correlationId: videoCorrelationId,
-      });
       const videoSettled = await Promise.allSettled(
         promptsForRun.map(async (p, idx) => {
           const indexedStartFrame = pickByIndex(indexedStartImages, idx, startFrame);
@@ -3341,6 +3352,7 @@ export function AdAssetNode({ id, data, selected }: NodeProps<AdAssetNodeType>) 
             aspectRatio,
             resolution,
             durationSec: data.videoDurationSec,
+            nativeAudioEnabled: videoNativeAudioEnabled,
             linkedImageUrl: indexedStartFrame,
             referenceImageUrl: undefined,
             endImageUrl: endFrame,
@@ -3481,6 +3493,7 @@ export function AdAssetNode({ id, data, selected }: NodeProps<AdAssetNodeType>) 
     data.referenceMediaKind,
     data.referencePreviewUrl,
     data.videoDurationSec,
+    data.videoNativeAudioEnabled,
     data.videoStartImageUrl,
     data.videoEndImageUrl,
     generating,
@@ -3489,6 +3502,8 @@ export function AdAssetNode({ id, data, selected }: NodeProps<AdAssetNodeType>) 
     grantCredits,
     id,
     resolvedVideoModelId,
+    videoModelSupportsNativeAudioToggle,
+    videoNativeAudioEnabled,
     model,
     aspectRatio,
     resolution,
@@ -3533,6 +3548,7 @@ export function AdAssetNode({ id, data, selected }: NodeProps<AdAssetNodeType>) 
       const detail = (
         ev as CustomEvent<{
           nodeId?: string;
+          regenerateSingle?: boolean;
           promptOverride?: string;
           resultListNodeId?: string;
           resultListSlotIndex?: number;
@@ -3540,6 +3556,7 @@ export function AdAssetNode({ id, data, selected }: NodeProps<AdAssetNodeType>) 
       ).detail;
       if (!detail?.nodeId || detail.nodeId !== id) return;
       void onGenerate({
+        regenerateSingle: detail.regenerateSingle,
         promptOverride: detail.promptOverride,
         resultListNodeId: detail.resultListNodeId,
         resultListSlotIndex: detail.resultListSlotIndex,
@@ -5343,6 +5360,21 @@ export function AdAssetNode({ id, data, selected }: NodeProps<AdAssetNodeType>) 
                 <span className="inline-flex h-6 shrink-0 items-center rounded-full border border-white/10 bg-black/25 px-1.5 text-[8px] text-white/45">
                   Fixed
                 </span>
+              ) : null}
+              {data.kind === "video" && videoModelSupportsNativeAudioToggle ? (
+                <button
+                  type="button"
+                  onClick={() => patch(id, { videoNativeAudioEnabled: !videoNativeAudioEnabled })}
+                  className={cn(
+                    "inline-flex h-6 shrink-0 items-center rounded-full border px-1.5 text-[9px] font-semibold transition",
+                    videoNativeAudioEnabled
+                      ? "border-emerald-400/45 bg-emerald-500/20 text-emerald-100"
+                      : "border-white/12 bg-black/20 text-white/70 hover:bg-black/30",
+                  )}
+                  title={videoNativeAudioEnabled ? "Disable native audio" : "Enable native audio"}
+                >
+                  Audio {videoNativeAudioEnabled ? "On" : "Off"}
+                </button>
               ) : null}
               <div className="nodrag nopan group/run ml-auto inline-flex shrink-0 items-center gap-1">
                 {estimatedCredits > 0 ? (

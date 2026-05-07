@@ -154,6 +154,7 @@ const PromptListMediaGalleryCell = memo(function PromptListMediaGalleryCell({
                     new CustomEvent("workflow:run-node", {
                       detail: {
                         nodeId: errorToken.nodeId.trim(),
+                        regenerateSingle: true,
                         promptOverride: errorToken.prompt?.trim() || undefined,
                         resultListNodeId: listNodeId,
                         resultListSlotIndex: slotIndex,

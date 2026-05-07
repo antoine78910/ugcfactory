@@ -37,7 +37,7 @@ export type BuildAdAssetNodeOptions = {
 
 function genDefaultsForKind(
   kind: WorkflowDragNodeKind,
-): Pick<AdAssetNodeData, "prompt" | "model" | "aspectRatio" | "resolution" | "quantity"> {
+): Pick<AdAssetNodeData, "prompt" | "model" | "aspectRatio" | "resolution" | "quantity" | "videoNativeAudioEnabled"> {
   if (kind === "motion") {
     return {
       prompt: "",
@@ -54,6 +54,7 @@ function genDefaultsForKind(
       aspectRatio: "9:16",
       resolution: "720p",
       quantity: 1,
+      videoNativeAudioEnabled: true,
     };
   }
   if (kind === "variation" || kind === "assistant") {
