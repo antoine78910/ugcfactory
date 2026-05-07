@@ -36,6 +36,7 @@ import {
 import { SEEDANCE_PRO_MAX_VIDEO_URLS, SEEDANCE_PRO_PROMPT_MAX_CHARS } from "@/lib/piapiSeedance";
 import { uploadBlobUrlToCdn } from "@/lib/uploadBlobUrlToCdn";
 import { guardedFetch } from "@/lib/guardedFetch";
+import { isTaskTerminallyDeadButRetryable } from "@/lib/providerTransientError";
 import { appendWorkflowRunCorrelationToLabel } from "@/lib/workflowRunCorrelation";
 
 import { workflowVideoResolutionToPiapiSeedance } from "./workflowVideoExportDimensions";
@@ -771,6 +772,14 @@ async function pollNanoBananaTask(taskId: string, personalApiKey?: string): Prom
     }
     if (d.successFlag === -1) {
       const errMsg = d.errorMessage?.trim() ?? "";
+      // Kie marks a task `fail` with "Service is currently unavailable due to high
+      // demand. (E003)" when their fleet is overloaded. The task is permanently dead
+      // — we must NOT keep polling forever (that's how 100-prompt batches OOM the
+      // serverless instance). Bubble up so the outer job wrapper can re-submit a
+      // fresh task with backoff.
+      if (errMsg && isTaskTerminallyDeadButRetryable(errMsg)) {
+        throw new Error(errMsg);
+      }
       // Some providers report rate-limit messages on a "failed" envelope even when the task
       // is actually still running. If the message is transient-shaped, keep polling.
       if (errMsg && isImagePollTransientMessage(errMsg)) {
@@ -1074,7 +1083,30 @@ async function ensureWorkflowImageMinEdge(url: string, minEdge = 300): Promise<s
   );
 }
 
-export async function runWorkflowImageJob(params: WorkflowRunImageParams): Promise<{ imageUrl: string; taskId: string }> {
+/**
+ * Max attempts when Kie reports the task is terminally dead with a transient cause
+ * (e.g. "Service is currently unavailable due to high demand. (E003)"). We resubmit
+ * a fresh task on each retry, with a progressive wait so we don't pile onto the
+ * same overloaded backend.
+ */
+const WORKFLOW_IMAGE_TASK_RETRY_MAX_ATTEMPTS = 5;
+const WORKFLOW_IMAGE_TASK_RETRY_BASE_DELAY_MS = 5_000;
+
+function workflowImageTaskRetryDelayMs(attempt: number): number {
+  // ~5s, 10s, 15s, 20s with ±20% jitter to spread retries across parallel jobs.
+  const base = WORKFLOW_IMAGE_TASK_RETRY_BASE_DELAY_MS * (attempt + 1);
+  const jitter = base * 0.2;
+  return Math.max(2_000, Math.floor(base + (Math.random() * 2 - 1) * jitter));
+}
+
+function isRetryableImageTaskMessage(message: string): boolean {
+  if (!message) return false;
+  if (isTaskTerminallyDeadButRetryable(message)) return true;
+  if (isImagePollTransientMessage(message)) return true;
+  return false;
+}
+
+async function runWorkflowImageJobOnce(params: WorkflowRunImageParams): Promise<{ imageUrl: string; taskId: string }> {
   const pickerModel = resolveWorkflowImagePickerModel(params.model);
   if (!params.personalApiKey && !canUseStudioImagePickerModel(params.planId, pickerModel)) {
     throw new Error(
@@ -1129,6 +1161,45 @@ export async function runWorkflowImageJob(params: WorkflowRunImageParams): Promi
   const providerUrl = await pollNanoBananaTask(taskId, params.personalApiKey);
   const imageUrl = await completeStudioGenerationTask(taskId, providerUrl);
   return { imageUrl, taskId };
+}
+
+export async function runWorkflowImageJob(params: WorkflowRunImageParams): Promise<{ imageUrl: string; taskId: string }> {
+  let lastError: Error | null = null;
+  for (let attempt = 0; attempt < WORKFLOW_IMAGE_TASK_RETRY_MAX_ATTEMPTS; attempt++) {
+    try {
+      return await runWorkflowImageJobOnce(params);
+    } catch (err) {
+      const message = err instanceof Error ? err.message : String(err ?? "");
+      // Never retry insufficient-credits or plan-gate errors — these are user-facing and final.
+      if (
+        message === "INSUFFICIENT_CREDITS" ||
+        /subscription upgrade required/i.test(message)
+      ) {
+        throw err instanceof Error ? err : new Error(message);
+      }
+      lastError = err instanceof Error ? err : new Error(message);
+      if (!isRetryableImageTaskMessage(message)) {
+        throw lastError;
+      }
+      if (attempt >= WORKFLOW_IMAGE_TASK_RETRY_MAX_ATTEMPTS - 1) break;
+      const waitMs = workflowImageTaskRetryDelayMs(attempt);
+      if (typeof console !== "undefined" && typeof console.warn === "function") {
+        console.warn("[workflow.image] retrying image job after transient error", {
+          attempt: attempt + 1,
+          maxAttempts: WORKFLOW_IMAGE_TASK_RETRY_MAX_ATTEMPTS,
+          waitMs,
+          message,
+        });
+      }
+      await new Promise((r) => setTimeout(r, waitMs));
+    }
+  }
+  throw (
+    lastError ??
+    new Error(
+      `Image generation failed after ${WORKFLOW_IMAGE_TASK_RETRY_MAX_ATTEMPTS} attempts. The provider is overloaded — please try again in a moment.`,
+    )
+  );
 }
 
 export type WorkflowRunVideoParams = {
@@ -1513,7 +1584,74 @@ export async function runWorkflowMotionControlJob(
   return { videoUrl: finalUrl, taskId: json.taskId, inputDurationSec };
 }
 
+/**
+ * Same retry contract as {@link runWorkflowImageJob}: when Kie reports the task is
+ * terminally dead with a transient cause (e.g. "Service is currently unavailable
+ * due to high demand. (E003)"), we re-submit a fresh task up to 5 times.
+ */
+const WORKFLOW_VIDEO_TASK_RETRY_MAX_ATTEMPTS = 5;
+const WORKFLOW_VIDEO_TASK_RETRY_BASE_DELAY_MS = 6_000;
+
+function workflowVideoTaskRetryDelayMs(attempt: number): number {
+  // ~6s, 12s, 18s, 24s with ±20% jitter — slightly longer than image because video
+  // start endpoints already have their own short retry on transient HTTP errors.
+  const base = WORKFLOW_VIDEO_TASK_RETRY_BASE_DELAY_MS * (attempt + 1);
+  const jitter = base * 0.2;
+  return Math.max(2_000, Math.floor(base + (Math.random() * 2 - 1) * jitter));
+}
+
+function isRetryableVideoTaskMessage(message: string): boolean {
+  if (!message) return false;
+  if (isTaskTerminallyDeadButRetryable(message)) return true;
+  // Reuse the broader image transient list — they cover the same provider error shapes.
+  if (isImagePollTransientMessage(message)) return true;
+  return false;
+}
+
 export async function runWorkflowVideoJob(params: WorkflowRunVideoParams): Promise<{ videoUrl: string; taskId: string }> {
+  let lastError: Error | null = null;
+  for (let attempt = 0; attempt < WORKFLOW_VIDEO_TASK_RETRY_MAX_ATTEMPTS; attempt++) {
+    try {
+      return await runWorkflowVideoJobOnce(params);
+    } catch (err) {
+      const message = err instanceof Error ? err.message : String(err ?? "");
+      // Never retry insufficient-credits or plan-gate errors.
+      if (
+        message === "INSUFFICIENT_CREDITS" ||
+        /subscription upgrade required/i.test(message) ||
+        /motion reference video must be between/i.test(message) ||
+        /this model needs a reference image/i.test(message) ||
+        /elements can not be used inside this model/i.test(message) ||
+        /prompt references @(image|video)\d+/i.test(message)
+      ) {
+        throw err instanceof Error ? err : new Error(message);
+      }
+      lastError = err instanceof Error ? err : new Error(message);
+      if (!isRetryableVideoTaskMessage(message)) {
+        throw lastError;
+      }
+      if (attempt >= WORKFLOW_VIDEO_TASK_RETRY_MAX_ATTEMPTS - 1) break;
+      const waitMs = workflowVideoTaskRetryDelayMs(attempt);
+      if (typeof console !== "undefined" && typeof console.warn === "function") {
+        console.warn("[workflow.video] retrying video job after transient error", {
+          attempt: attempt + 1,
+          maxAttempts: WORKFLOW_VIDEO_TASK_RETRY_MAX_ATTEMPTS,
+          waitMs,
+          message,
+        });
+      }
+      await new Promise((r) => setTimeout(r, waitMs));
+    }
+  }
+  throw (
+    lastError ??
+    new Error(
+      `Video generation failed after ${WORKFLOW_VIDEO_TASK_RETRY_MAX_ATTEMPTS} attempts. The provider is overloaded — please try again in a moment.`,
+    )
+  );
+}
+
+async function runWorkflowVideoJobOnce(params: WorkflowRunVideoParams): Promise<{ videoUrl: string; taskId: string }> {
   const modelId = resolveWorkflowVideoModelId(params.model);
   const pKey = params.personalApiKey;
   const piKey = params.piapiApiKey;

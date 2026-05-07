@@ -7,11 +7,17 @@
  *   - We never throw on transient provider errors (rate-limit / 429-504 / network blips
  *     / "frequency too high"). We just keep polling, because the underlying generation
  *     is almost always still completing fine server-side.
+ *   - EXCEPTION: when the task itself is reported `FAILED` with a "high demand" /
+ *     "Service is currently unavailable. (E003)" message, the task is permanently
+ *     dead on the provider — we surface the error so the outer job wrapper can
+ *     re-submit a fresh task instead of polling indefinitely (which is how we used
+ *     to OOM the Vercel runtime on a 100-prompt batch).
  *   - We use exponential-ish backoff with jitter so 100 parallel jobs don't lock-step
  *     into the same poll instants and bomb the upstream provider.
  *   - We grow the per-job total wait budget so longer (Sora 2 Pro / Veo 3 / Seedance)
  *     jobs don't time out client-side while the provider is still working.
  */
+import { isTaskTerminallyDeadButRetryable } from "@/lib/providerTransientError";
 
 const POLL_BASE_INTERVAL_MS = 4_000;
 const POLL_MAX_INTERVAL_MS = 12_000;
@@ -167,6 +173,11 @@ export async function pollKlingVideo(
     }
     if (st === "FAILED") {
       const errMsg = json.data?.error_message?.trim() ?? "";
+      // Kie market overload: task is terminally dead, surface so the outer job
+      // wrapper can re-submit a fresh task with backoff. Don't keep polling.
+      if (errMsg && isTaskTerminallyDeadButRetryable(errMsg)) {
+        throw new Error(errMsg);
+      }
       // Some providers emit transient-shaped messages on the FAILED envelope while the
       // task is still actually running. Treat those as pending instead of aborting.
       if (errMsg && isTransientPollErrorMessage(errMsg)) {
@@ -272,6 +283,10 @@ export async function pollVeoVideo(taskId: string, personalApiKey?: string): Pro
     }
     if (d.successFlag === 2 || d.successFlag === 3) {
       const errMsg = d.errorMessage?.trim() ?? "";
+      // Kie market overload — the task is dead, propagate so outer wrapper retries.
+      if (errMsg && isTaskTerminallyDeadButRetryable(errMsg)) {
+        throw new Error(errMsg);
+      }
       if (errMsg && isTransientPollErrorMessage(errMsg)) {
         consecutiveTransient = Math.min(consecutiveTransient + 1, 12);
         await new Promise((r) => setTimeout(r, pollDelayMs(i, consecutiveTransient)));

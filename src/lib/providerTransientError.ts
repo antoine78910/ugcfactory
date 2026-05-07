@@ -9,6 +9,7 @@
  *
  * Patterns observed in production:
  *   - "Your call frequency is too high. Please try again later." (Kie / PiAPI throttle)
+ *   - "Service is currently unavailable due to high demand. (E003)" (Kie market overload)
  *   - 429 / 502 / 503 / 504 from the provider gateway
  *   - generic timeout / network blips / server exception
  */
@@ -27,10 +28,35 @@ export function isProviderTransientErrorMessage(raw: string | null | undefined):
     /\b504\b/.test(m) ||
     /try again later/.test(m) ||
     /\btemporar/.test(m) ||
+    /high demand/.test(m) ||
+    /currently unavailable/.test(m) ||
+    /\(e\d{3}\)/.test(m) ||
     /timeout|timed out|deadline exceeded|gateway time/.test(m) ||
     /fetch failed|failed to fetch|networkerror|load failed|econnreset|socket|und_err_socket|other side closed|aborted?/.test(
       m,
     ) ||
     /\b(server exception|internal error|service unavailable|bad gateway|busy|overload)\b/.test(m)
+  );
+}
+
+/**
+ * Subset of transient errors that signal the **task itself** is dead on the provider
+ * (e.g. Kie marks the task as `fail` with "Service is currently unavailable due to
+ * high demand. (E003)"). For these we should NOT keep polling indefinitely — the
+ * task is permanently failed, and the right action is to re-submit a brand-new task
+ * after a short wait.
+ *
+ * This is distinct from "the status endpoint flapped on a 502" or "frequency too
+ * high on the gateway" where the same task is likely still running.
+ */
+export function isTaskTerminallyDeadButRetryable(raw: string | null | undefined): boolean {
+  if (!raw) return false;
+  const m = raw.toLowerCase();
+  return (
+    /high demand/.test(m) ||
+    /currently unavailable/.test(m) ||
+    /service.*unavailable/.test(m) ||
+    /\(e003\)/.test(m) ||
+    /\(e\d{3}\)/.test(m)
   );
 }
