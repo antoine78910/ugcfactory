@@ -23,6 +23,13 @@ export const STUDIO_GENERATION_KIND_WORKFLOW_IMAGE = "workflow_image" as const;
 export const STUDIO_GENERATION_KIND_WORKFLOW_VIDEO = "workflow_video" as const;
 
 /**
+ * Ads Studio final videos. Mirrors `link_to_ad_video`: rows are recorded in `studio_generations`
+ * so the user's Ads Studio "Projects" rail survives localStorage loss / device changes,
+ * but they are filtered out of Create → Video history (Ads Studio is its own surface).
+ */
+export const STUDIO_GENERATION_KIND_ADS_STUDIO_VIDEO = "ads_studio_video" as const;
+
+/**
  * Kinds owned by the Workflow editor: rows survive page reload / navigation so the in-flight
  * "generating" overlay can be rehydrated by polling these specifically (`kind=workflow`).
  */
@@ -53,6 +60,7 @@ export const STUDIO_LIBRARY_KINDS = [
   STUDIO_GENERATION_KIND_LINK_TO_AD_IMAGE,
   "studio_video",
   STUDIO_GENERATION_KIND_LINK_TO_AD_VIDEO,
+  STUDIO_GENERATION_KIND_ADS_STUDIO_VIDEO,
   "studio_audio",
   "studio_upscale",
   "motion_control",

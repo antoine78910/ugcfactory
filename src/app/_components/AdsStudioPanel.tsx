@@ -43,6 +43,11 @@ import type { AdsStudioMentionEntry } from "@/app/_components/AdsStudioMentionMe
 import { loadAvatarUrls } from "@/lib/avatarLibrary";
 import { logGenerationFailure, userMessageFromCaughtError } from "@/lib/generationUserMessage";
 import { guardedFetch } from "@/lib/guardedFetch";
+import { registerStudioGenerationClient } from "@/lib/registerStudioGenerationClient";
+import { completeStudioTask } from "@/lib/studioKlingClientPoll";
+import {
+  STUDIO_GENERATION_KIND_ADS_STUDIO_VIDEO,
+} from "@/lib/studioGenerationKinds";
 
 /** Ads Studio: PiAPI Seedance 2 (non–fast) only. */
 const ADS_STUDIO_SEEDANCE_MODEL = "bytedance/seedance-2" as const;
@@ -293,7 +298,7 @@ function sanitizeAdsStudioHistoryRows(raw: unknown): AdsStudioHistoryItem[] {
       avatarRefUrl,
     });
   }
-  return out.slice(0, 24);
+  return out.slice(0, 60);
 }
 
 function resolveAdsStudioPlaybackUrl(raw: string | undefined): string | null {
@@ -1570,6 +1575,13 @@ export default function AdsStudioPanel() {
   const [selectedSidebarKey, setSelectedSidebarKey] = useState<string | null>(null);
   const [projectDetail, setProjectDetail] = useState<AdsStudioProjectDetail | null>(null);
   const [history, setHistory] = useState<AdsStudioHistoryItem[]>([]);
+  /**
+   * Critical: do not write to localStorage until we've finished reading from it.
+   * Without this flag, the save-effect runs on first render with `history = []`
+   * and overwrites any existing blob before the load-effect's setHistory has applied,
+   * silently destroying the user's project history on every cold mount.
+   */
+  const [historyStorageReady, setHistoryStorageReady] = useState(false);
   const [templateVideosByKind, setTemplateVideosByKind] = useState<Record<AdsStudioTemplateGalleryKind, TemplateVideoItem[]>>({
     product: [],
     app: [],
@@ -1664,21 +1676,120 @@ export default function AdsStudioPanel() {
   useEffect(() => {
     try {
       const raw = localStorage.getItem(LS_ADS_STUDIO_HISTORY);
-      if (!raw) return;
-      const parsed = JSON.parse(raw) as unknown;
-      setHistory(sanitizeAdsStudioHistoryRows(parsed));
+      if (raw) {
+        const parsed = JSON.parse(raw) as unknown;
+        const sanitized = sanitizeAdsStudioHistoryRows(parsed);
+        if (sanitized.length > 0) {
+          setHistory(sanitized);
+        }
+      }
     } catch {
-      /* ignore */
+      /* ignore — never throw away the raw blob on parse failures */
+    } finally {
+      // Mark ready in finally so even on parse error the save-effect can resume safely
+      // for future writes without first wiping the original blob.
+      setHistoryStorageReady(true);
     }
   }, []);
 
   useEffect(() => {
+    if (!historyStorageReady) return;
+    /**
+     * Defensive: never write an empty array if the persisted blob has entries.
+     * This protects against transient empty-state flickers (e.g. server merge
+     * scheduled before localStorage hydration finished, or a sanitize miss).
+     */
+    if (history.length === 0) {
+      try {
+        const existing = localStorage.getItem(LS_ADS_STUDIO_HISTORY);
+        if (existing) {
+          const parsed = JSON.parse(existing) as unknown;
+          if (Array.isArray(parsed) && parsed.length > 0) return;
+        }
+      } catch {
+        /* ignore — fall through to write */
+      }
+    }
     try {
-      localStorage.setItem(LS_ADS_STUDIO_HISTORY, JSON.stringify(history.slice(0, 24)));
+      localStorage.setItem(LS_ADS_STUDIO_HISTORY, JSON.stringify(history.slice(0, 60)));
     } catch {
       /* ignore */
     }
-  }, [history]);
+  }, [history, historyStorageReady]);
+
+  /**
+   * Recovery / cross-device sync: pull `ads_studio_video` rows from the server and merge them into
+   * the local history. This way users see their past projects even after clearing localStorage,
+   * switching browsers, or signing in on a new device.
+   */
+  useEffect(() => {
+    if (!historyStorageReady) return;
+    let cancelled = false;
+    const load = async () => {
+      try {
+        const res = await fetch(
+          `/api/studio/generations?kind=${encodeURIComponent(STUDIO_GENERATION_KIND_ADS_STUDIO_VIDEO)}&limit=60`,
+          { cache: "no-store" },
+        );
+        if (!res.ok) return;
+        const json = (await res.json()) as { data?: Array<Record<string, unknown>> };
+        if (cancelled) return;
+        const rows = Array.isArray(json.data) ? json.data : [];
+        const serverItems: AdsStudioHistoryItem[] = [];
+        for (const row of rows) {
+          if (!row || typeof row !== "object") continue;
+          const id = pickOptionalTrimmedString(row.id, row.studioGenerationId);
+          if (!id) continue;
+          const status = String(row.status ?? "").toLowerCase();
+          if (status !== "ready") continue;
+          const mediaUrl = pickOptionalTrimmedString(row.mediaUrl);
+          if (!mediaUrl) continue;
+          const inputUrlsRaw = Array.isArray(row.inputUrls) ? row.inputUrls : [];
+          const inputUrls = inputUrlsRaw.filter((u): u is string => typeof u === "string" && u.trim().length > 0);
+          const createdAtRaw = row.createdAt;
+          const createdAt =
+            typeof createdAtRaw === "number" && Number.isFinite(createdAtRaw)
+              ? createdAtRaw
+              : typeof createdAtRaw === "string" && Number.isFinite(Date.parse(createdAtRaw))
+                ? Date.parse(createdAtRaw)
+                : Date.now();
+          const promptText = pickOptionalTrimmedString(row.label) ?? "";
+          serverItems.push({
+            id,
+            createdAt,
+            assetType: "product",
+            prompt: promptText,
+            imageUrl: inputUrls[0],
+            videoUrl: mediaUrl,
+            productRefUrl: inputUrls[0],
+            avatarRefUrl: inputUrls[1],
+          });
+        }
+        if (serverItems.length === 0) return;
+        setHistory((prev) => {
+          /**
+           * Dedup by stable identity: id (when both client+server share rowId), then videoUrl
+           * (older local rows that pre-date server registration use random UUIDs).
+           */
+          const seenIds = new Set(prev.map((h) => h.id));
+          const seenVideos = new Set(prev.map((h) => h.videoUrl).filter((u): u is string => !!u));
+          const additions = serverItems.filter(
+            (s) => !seenIds.has(s.id) && (!s.videoUrl || !seenVideos.has(s.videoUrl)),
+          );
+          if (additions.length === 0) return prev;
+          return [...prev, ...additions]
+            .sort((a, b) => b.createdAt - a.createdAt)
+            .slice(0, 60);
+        });
+      } catch {
+        /* best-effort recovery only */
+      }
+    };
+    void load();
+    return () => {
+      cancelled = true;
+    };
+  }, [historyStorageReady]);
 
   useEffect(() => {
     try {
@@ -2041,13 +2152,38 @@ export default function AdsStudioPanel() {
           ),
         );
 
+        /**
+         * Mirror the run in `studio_generations` so the user's Projects rail survives a
+         * cleared localStorage, a different browser, or a different device. We register
+         * BEFORE polling completes so even a tab close mid-render leaves a recoverable row.
+         * Failures are swallowed: server registration is best-effort, never blocks the user's flow.
+         */
+        const adsRefInputs = [productUrl, avUrl].filter((u): u is string => typeof u === "string" && u.length > 0);
+        const adsLabel = (p ?? "").trim().slice(0, 200) || "Ads Studio video";
+        const adsAspect = (snapAspect ?? "9:16").toString();
+        const registerPromise = registerStudioGenerationClient({
+          kind: STUDIO_GENERATION_KIND_ADS_STUDIO_VIDEO,
+          label: adsLabel,
+          taskId: videoJson.taskId,
+          provider: "kie-market",
+          model: ADS_STUDIO_SEEDANCE_MODEL,
+          creditsCharged: generationCredits,
+          personalApiKey: personalApiKey ?? undefined,
+          piapiApiKey: piapiApiKey ?? undefined,
+          inputUrls: adsRefInputs.length > 0 ? adsRefInputs : undefined,
+          aspectRatio: adsAspect,
+        }).catch(() => null);
+
         const vUrl = await pollVideo(videoJson.taskId, personalApiKey ?? undefined, piapiApiKey ?? undefined);
         if (adsStudioDismissedJobIdsRef.current.has(jobId)) {
           adsStudioDismissedJobIdsRef.current.delete(jobId);
           return;
         }
         const previewStillUrl = productUrl || avUrl || undefined;
-        const historyId = crypto.randomUUID();
+        const registeredRowId = await registerPromise;
+        // Use the server-side row id when available so client + server share the same id and the merge
+        // in the loader effect deduplicates correctly across reload / different browsers.
+        const historyId = registeredRowId || crypto.randomUUID();
         const item: AdsStudioHistoryItem = {
           id: historyId,
           createdAt: Date.now(),
@@ -2058,7 +2194,11 @@ export default function AdsStudioPanel() {
           productRefUrl: productUrl || undefined,
           avatarRefUrl: avUrl || undefined,
         };
-        setHistory((prev) => [item, ...prev].slice(0, 24));
+        setHistory((prev) => [item, ...prev].slice(0, 60));
+
+        // Persist the final URL on the server row so it can be recovered after localStorage loss.
+        // Never block the user-facing toast on this network call — fire and forget.
+        void completeStudioTask(videoJson.taskId, vUrl);
 
         setActiveJobs((prev) => prev.filter((j) => j.id !== jobId));
 
@@ -2114,7 +2254,10 @@ export default function AdsStudioPanel() {
             productRefUrl: job.productRefUrl ?? undefined,
             avatarRefUrl: job.avatarRefUrl ?? undefined,
           };
-          setHistory((prev) => [item, ...prev].slice(0, 24));
+          setHistory((prev) => [item, ...prev].slice(0, 60));
+
+          // Mark the server row ready so the recovery loader picks up this URL across devices.
+          void completeStudioTask(taskId, vUrl);
 
           setActiveJobs((prev) => prev.filter((j) => j.id !== jobId));
 
