@@ -27,7 +27,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { compressImageFileForUpload } from "@/lib/compressImageFileForUpload";
-import { uploadFileToCdn } from "@/lib/uploadBlobUrlToCdn";
+import { uploadFileToCdn, uploadBlobUrlToCdn } from "@/lib/uploadBlobUrlToCdn";
 import { STUDIO_IMAGE_FILE_ACCEPT } from "@/lib/studioUploadValidation";
 import { guardedFetch } from "@/lib/guardedFetch";
 import { completeStudioTask, pollKlingVideo } from "@/lib/studioKlingClientPoll";
@@ -115,6 +115,11 @@ export function AdRecreateDialog({
 
   const [generation, setGeneration] = useState<GenerationOutcome>({ kind: "idle" });
 
+  // First frame of the competitor's video — extracted automatically when dialog opens.
+  const [firstFrameDataUrl, setFirstFrameDataUrl] = useState<string | null>(null);
+  const [firstFrameCdnUrl, setFirstFrameCdnUrl] = useState<string | null>(null);
+  const [frameExtracting, setFrameExtracting] = useState(false);
+
   const fileInputRef = useRef<HTMLInputElement>(null);
   const cancelRef = useRef(false);
 
@@ -133,19 +138,87 @@ export function AdRecreateDialog({
     setDraftError(null);
     setPrompt("");
     setGeneration({ kind: "idle" });
-  }, [open, ad?.id]);
+    setFirstFrameDataUrl(null);
+    setFirstFrameCdnUrl(null);
+
+    // Auto-extract the competitor video's first frame for the start-image and style analysis.
+    const videoUrl = ad?.videoUrl?.trim();
+    if (!videoUrl) return;
+    setFrameExtracting(true);
+
+    void (async () => {
+      try {
+        // Fetch via proxy to avoid CORS restrictions on competitor CDN URLs.
+        const res = await fetch(`/api/download?url=${encodeURIComponent(videoUrl)}`, { cache: "no-store" });
+        if (!res.ok || cancelRef.current) return;
+        const blob = await res.blob();
+        if (cancelRef.current) return;
+        const objectUrl = URL.createObjectURL(blob);
+        const video = document.createElement("video");
+        video.preload = "auto";
+        video.muted = true;
+        video.playsInline = true;
+        video.src = objectUrl;
+        await new Promise<void>((resolve, reject) => {
+          const t = setTimeout(() => reject(new Error("timeout")), 20000);
+          const done = () => { clearTimeout(t); resolve(); };
+          video.onloadeddata = done;
+          video.onerror = () => { clearTimeout(t); reject(new Error("load error")); };
+        });
+        if (cancelRef.current) { URL.revokeObjectURL(objectUrl); return; }
+        video.currentTime = 0;
+        await new Promise<void>((resolve) => {
+          const t = setTimeout(resolve, 2500);
+          video.onseeked = () => { clearTimeout(t); resolve(); };
+        });
+        if (cancelRef.current) { URL.revokeObjectURL(objectUrl); return; }
+        const w = video.videoWidth || 480;
+        const h = video.videoHeight || 854;
+        const scale = Math.min(1, 720 / Math.max(w, h, 1));
+        const canvas = document.createElement("canvas");
+        canvas.width = Math.round(w * scale);
+        canvas.height = Math.round(h * scale);
+        const ctx = canvas.getContext("2d");
+        if (!ctx) throw new Error("No 2D context");
+        ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+        const dataUrl = canvas.toDataURL("image/jpeg", 0.85);
+        video.pause();
+        video.removeAttribute("src");
+        video.load();
+        URL.revokeObjectURL(objectUrl);
+        if (cancelRef.current) return;
+        setFirstFrameDataUrl(dataUrl);
+        // Upload to CDN so the server can use it as a start-frame and reference.
+        try {
+          const cdnUrl = await uploadBlobUrlToCdn(dataUrl, "competitor-first-frame.jpg", "image/jpeg", { kind: "image" });
+          if (!cancelRef.current) setFirstFrameCdnUrl(cdnUrl);
+        } catch {
+          // CDN upload failed — script generation will proceed without the start frame.
+        }
+      } catch {
+        // Silently ignore extraction failures; the dialog still works.
+      } finally {
+        if (!cancelRef.current) setFrameExtracting(false);
+      }
+    })();
+  }, [open, ad?.id, ad?.videoUrl]);
 
   const referenceImageUrls = useMemo(() => {
     if (!ad) return [] as string[];
     const out: string[] = [];
-    const candidates = [ad.previewUrl, ad.thumbnailUrl, ad.imageUrl];
-    for (const raw of candidates) {
-      if (typeof raw !== "string") continue;
-      const u = raw.trim();
-      if (u && /^https?:\/\//i.test(u) && !out.includes(u)) out.push(u);
+    // Prefer the extracted first frame (most accurate style reference); fall back to static thumbnails.
+    if (firstFrameCdnUrl) {
+      out.push(firstFrameCdnUrl);
+    } else {
+      const candidates = [ad.previewUrl, ad.thumbnailUrl, ad.imageUrl];
+      for (const raw of candidates) {
+        if (typeof raw !== "string") continue;
+        const u = raw.trim();
+        if (u && /^https?:\/\//i.test(u) && !out.includes(u)) out.push(u);
+      }
     }
     return out;
-  }, [ad]);
+  }, [ad, firstFrameCdnUrl]);
 
   const productCdnUrls = useMemo(
     () => productSlots.map((s) => s.cdnUrl).filter((u): u is string => Boolean(u && u.trim())),
@@ -154,7 +227,9 @@ export function AdRecreateDialog({
 
   const anyUploading = productSlots.some((s) => s.uploading);
   const canDraft =
-    !anyUploading && (productCdnUrls.length > 0 || productDescription.trim().length > 0);
+    !anyUploading &&
+    !frameExtracting &&
+    (productCdnUrls.length > 0 || productDescription.trim().length > 0);
 
   const handlePickFiles = useCallback(() => fileInputRef.current?.click(), []);
 
@@ -225,6 +300,7 @@ export function AdRecreateDialog({
             body: ad.body ?? ad.text,
             platform: ad.platform,
           },
+          videoFirstFrameUrl: firstFrameCdnUrl ?? undefined,
           referenceImageUrls,
           productImageUrls: productCdnUrls,
           productDescription: productDescription.trim(),
@@ -282,10 +358,17 @@ export function AdRecreateDialog({
       piapiApiKey: piapiApiKey ?? undefined,
     };
 
-    if (productCdnUrls.length > 1) {
-      payload.seedanceOmniMedia = productCdnUrls.map((url) => ({ type: "image" as const, url }));
-    } else {
-      payload.imageUrl = productCdnUrls[0];
+    // Build Seedance media refs: competitor first frame (style/start) + product images.
+    // Bundle all as seedanceOmniMedia so the model has both the visual opening and the product.
+    const omniRefs: { type: "image"; url: string }[] = [
+      ...(firstFrameCdnUrl ? [{ type: "image" as const, url: firstFrameCdnUrl }] : []),
+      ...productCdnUrls.map((url) => ({ type: "image" as const, url })),
+    ];
+    if (omniRefs.length > 1) {
+      payload.seedanceOmniMedia = omniRefs;
+    } else if (omniRefs.length === 1) {
+      // Single reference: use as first_frame_url (dedicated start-frame mode).
+      payload.imageUrl = omniRefs[0].url;
     }
 
     try {
@@ -411,6 +494,8 @@ export function AdRecreateDialog({
             {step === "intake" && (
               <IntakeStep
                 ad={ad}
+                firstFrameDataUrl={firstFrameDataUrl}
+                frameExtracting={frameExtracting}
                 referenceImageUrls={referenceImageUrls}
                 productSlots={productSlots}
                 onPickFiles={handlePickFiles}
@@ -431,6 +516,7 @@ export function AdRecreateDialog({
                 onPromptChange={setPrompt}
                 onRegenerate={regenerateDraft}
                 ad={ad}
+                firstFrameDataUrl={firstFrameDataUrl}
                 referenceImageUrls={referenceImageUrls}
                 productImageUrls={productCdnUrls}
               />
@@ -444,7 +530,7 @@ export function AdRecreateDialog({
           {/* Footer */}
           <div className="flex flex-wrap items-center justify-between gap-3 border-t border-white/10 bg-black/40 px-5 py-3">
             <div className="text-[11px] text-white/40">
-              {step === "intake" && "Step 1 of 3 — Add your product"}
+              {step === "intake" && (frameExtracting ? "Extracting video start frame…" : firstFrameCdnUrl ? "Step 1 of 3 — Start frame ready ✓ — Add your product" : "Step 1 of 3 — Add your product")}
               {step === "review" && "Step 2 of 3 — Review the script"}
               {step === "running" && "Step 3 of 3 — Generating with Seedance 2.0 Fast"}
             </div>
@@ -464,15 +550,15 @@ export function AdRecreateDialog({
                 <Button
                   size="sm"
                   onClick={draftScript}
-                  disabled={!canDraft || draftBusy}
+                  disabled={!canDraft || draftBusy || frameExtracting}
                   className="bg-violet-400 text-black hover:bg-violet-300"
                 >
-                  {draftBusy ? (
+                  {draftBusy || frameExtracting ? (
                     <Loader2 className="mr-1.5 h-3.5 w-3.5 animate-spin" />
                   ) : (
                     <Sparkles className="mr-1.5 h-3.5 w-3.5" />
                   )}
-                  {draftBusy ? "Drafting…" : "Draft the script"}
+                  {frameExtracting ? "Extracting frame…" : draftBusy ? "Drafting…" : "Draft the script"}
                 </Button>
               )}
               {step === "review" && (
@@ -564,6 +650,8 @@ function Stepper({ step }: { step: Step }) {
 
 function IntakeStep({
   ad,
+  firstFrameDataUrl,
+  frameExtracting,
   referenceImageUrls,
   productSlots,
   onPickFiles,
@@ -577,6 +665,8 @@ function IntakeStep({
   anyUploading,
 }: {
   ad: TTAd;
+  firstFrameDataUrl: string | null;
+  frameExtracting: boolean;
   referenceImageUrls: string[];
   productSlots: ProductSlot[];
   onPickFiles: () => void;
@@ -589,16 +679,26 @@ function IntakeStep({
   onAspectRatioChange: (v: AspectRatio) => void;
   anyUploading: boolean;
 }) {
-  const reference = referenceImageUrls[0];
+  const reference = firstFrameDataUrl ?? referenceImageUrls[0];
   return (
     <div className="grid gap-5 md:grid-cols-[260px_1fr]">
       <section className="flex flex-col gap-2">
         <p className="text-[11px] font-semibold uppercase tracking-[0.12em] text-white/45">
           Reference ad
+          {firstFrameDataUrl && (
+            <span className="ml-2 rounded-full bg-violet-500/20 px-2 py-0.5 text-[10px] text-violet-200">
+              start frame
+            </span>
+          )}
         </p>
         <div className="overflow-hidden rounded-xl border border-white/10 bg-black/40">
           <div className="relative aspect-[9/16] w-full bg-black">
-            {reference ? (
+            {frameExtracting && !reference ? (
+              <div className="flex h-full w-full flex-col items-center justify-center gap-2 text-xs text-white/40">
+                <Loader2 className="h-5 w-5 animate-spin text-violet-300" />
+                Extracting start frame…
+              </div>
+            ) : reference ? (
               // eslint-disable-next-line @next/next/no-img-element
               <img
                 src={reference}
@@ -608,6 +708,12 @@ function IntakeStep({
             ) : (
               <div className="flex h-full w-full items-center justify-center text-xs text-white/40">
                 No preview
+              </div>
+            )}
+            {frameExtracting && reference && (
+              <div className="absolute inset-x-0 bottom-0 flex items-center gap-1.5 bg-black/70 px-3 py-1.5 text-[10px] text-violet-200">
+                <Loader2 className="h-3 w-3 animate-spin" />
+                Uploading start frame…
               </div>
             )}
           </div>
@@ -741,6 +847,7 @@ function ReviewStep({
   onPromptChange,
   onRegenerate,
   ad,
+  firstFrameDataUrl,
   referenceImageUrls,
   productImageUrls,
 }: {
@@ -748,17 +855,18 @@ function ReviewStep({
   onPromptChange: (v: string) => void;
   onRegenerate: () => void;
   ad: TTAd;
+  firstFrameDataUrl: string | null;
   referenceImageUrls: string[];
   productImageUrls: string[];
 }) {
-  const reference = referenceImageUrls[0];
+  const reference = firstFrameDataUrl ?? referenceImageUrls[0];
   return (
     <div className="grid gap-5 md:grid-cols-[200px_1fr]">
       <aside className="flex flex-col gap-3">
         <div>
-          <p className="mb-1.5 text-[11px] font-semibold uppercase tracking-[0.12em] text-white/45">
-            Reference
-          </p>
+        <p className="mb-1.5 text-[11px] font-semibold uppercase tracking-[0.12em] text-white/45">
+          Reference {firstFrameDataUrl && <span className="rounded-full bg-violet-500/20 px-1.5 py-0.5 text-[10px] text-violet-200">start frame</span>}
+        </p>
           <div className="overflow-hidden rounded-xl border border-white/10 bg-black/40">
             <div className="relative aspect-[9/16] w-full bg-black">
               {reference ? (

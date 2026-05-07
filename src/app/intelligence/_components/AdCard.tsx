@@ -263,7 +263,8 @@ export function AdCard({
           {videoSrc ? (
             <div
               className={cn(
-                "absolute top-2 z-20 flex items-center gap-1 opacity-0 transition group-hover:opacity-100",
+                "absolute top-2 z-20 flex items-center gap-1 transition",
+                hoverPlay ? "opacity-100" : "opacity-0",
                 typeof rank === "number" && Number.isFinite(rank) && rank > 0 ? "right-10" : "right-2",
               )}
             >

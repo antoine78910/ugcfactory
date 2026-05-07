@@ -97,6 +97,16 @@ function intelErrorMessage(e: IntelError): string {
   }
 }
 
+function normalizeAdsPayload(payload: unknown): TTAd[] {
+  if (Array.isArray(payload)) return payload as TTAd[];
+  if (payload && typeof payload === "object") {
+    const obj = payload as { ads?: unknown; data?: unknown };
+    if (Array.isArray(obj.ads)) return obj.ads as TTAd[];
+    if (Array.isArray(obj.data)) return obj.data as TTAd[];
+  }
+  return [];
+}
+
 export function TrackerDetail({
   tracker,
   ownTrackerIds,
@@ -170,13 +180,14 @@ export function TrackerDetail({
                 ...(tracker.domain ? { domain: tracker.domain } : {}),
               }),
             });
-        const parsed = await parseIntelResponse<TTAd[]>(res);
+        const parsed = await parseIntelResponse<unknown>(res);
         if (activeIdRef.current !== tracker.id) return;
         if (!parsed.ok) {
           setAdsError(intelErrorMessage(parsed.error));
           return;
         }
-        setAds((parsed.data ?? []).filter((a) => Boolean(a.videoUrl && a.videoUrl.trim())));
+        const rows = normalizeAdsPayload(parsed.data);
+        setAds(rows.filter((a) => Boolean(a.videoUrl && a.videoUrl.trim())));
         setAdsAt(new Date().toISOString());
       } catch {
         setAdsError("Network error");
@@ -340,7 +351,7 @@ export function TrackerDetail({
           </div>
         )}
         {!adsLoading && !adsError && ads.length === 0 && (
-          <p className="text-sm text-white/40">No ads found.</p>
+          <p className="text-sm text-white/40">No video ads found.</p>
         )}
       </section>
 

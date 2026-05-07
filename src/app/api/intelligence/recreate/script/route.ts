@@ -25,6 +25,12 @@ type Body = {
     body?: string;
     platform?: string;
   };
+  /**
+   * First frame extracted from the competitor's video.
+   * When provided it is the FIRST image sent to Claude (before any reference thumbnails)
+   * and used as the visual composition / opening-shot reference.
+   */
+  videoFirstFrameUrl?: string;
   /** Reference image / preview / thumbnail of the original ad. */
   referenceImageUrls?: string[];
   /** User's product images (1–3). The first image is the canonical product shot. */
@@ -55,26 +61,37 @@ function sanitizeUrls(input: unknown, max: number): string[] {
 function buildSystemPrompt(): string {
   return `You are a creative director cloning a winning short-form UGC ad with a different product.
 
-You will receive:
-- Image #1 (and optionally a couple more) — the reference ad's frame(s).
-- The next images — the user's product photos, in order. They MUST be referenced as @image1, @image2, @image3 in the prompt (in upload order).
-- A short product description and copy text from the original ad.
+You will receive images in this order:
+1. (Optional) First frame extracted from the competitor's video — this is the ACTUAL visual opening of the ad. Analyze its exact composition: framing, subject placement, lighting, colour grading, background, camera distance, and angle. The recreated ad must start from a visually identical or nearly identical opening shot.
+2. (Optional) Additional static reference images of the original ad (thumbnail, etc.).
+3. User's product photos. These MUST be referenced as @image1, @image2, @image3 in the prompt in upload order.
 
-Goal: write ONE Seedance 2.0 prompt that recreates the same ad style, structure, and beat-by-beat as the reference, but selling the user's product.
+Before writing the prompt, silently extract from the product images:
+- Brand name (if visible on packaging / label)
+- Primary + accent colours (hex or colour names)
+- Packaging / product shape (e.g. "60 ml violet glass dropper bottle")
+- Price perception cue (budget / mid-range / premium / luxury)
+- Key visual differentiator (e.g. gradient foil label, minimalist matte finish)
+Use these extracted details to write a highly consistent product description throughout the prompt.
+
+Goal: write ONE Seedance 2.0 prompt that:
+- Recreates the opening shot composition pixel-for-pixel from the first frame reference
+- Faithfully mirrors the original ad's structure, pacing, and beat-by-beat
+- Substitutes the user's product for the competitor's
 
 Hard rules (Seedance 2.0):
 - Length: 100 to 260 words. Plain prose, no bullet lists.
 - Reference uploaded product images strictly as @image1, @image2, @image3 — in the order provided.
 - Forbidden words (do not use): cinematic, professional, stunning, 8k, studio, perfect.
-- For faceless lifestyle: do NOT describe bare legs, bodycon clothing, or shorts (content moderation). Use "light linen wide-leg trousers" or similar covered clothing.
+- For faceless lifestyle: do NOT describe bare legs, bodycon clothing, or shorts. Use "light linen wide-leg trousers" or similar.
 - Always include literally: "No on-screen text, no captions, no subtitles."
 - End with a one-line emotional closing starting with "The feeling of...".
 
 Required structure (in this order, single paragraph or 2 short paragraphs):
-1) Duration, aspect ratio, setting, lighting, time of day.
+1) Duration, aspect ratio, setting, lighting, time of day — matching the first-frame reference exactly.
 2) Character description if any (age, hair, skin, outfit, accessories) — skip for faceless.
-3) Camera setup (angle, distance, handheld vs static, selfie vs tripod).
-4) Scene/product description with @imageN references.
+3) Camera setup (angle, distance, handheld vs static, selfie vs tripod) — mirroring the reference.
+4) Scene/product description with @imageN references and full product visual details extracted above.
 5) Beat-by-beat with timestamps and dialogue (e.g. "0–2s: ...").
 6) Tone description.
 7) Camera movement / grain / film style.
@@ -83,7 +100,12 @@ Required structure (in this order, single paragraph or 2 short paragraphs):
 Output ONLY the final prompt text. No markdown, no preamble, no headings.`;
 }
 
-function buildUserPrompt(body: Required<Body>, refUrls: string[], productUrls: string[]): string {
+function buildUserPrompt(
+  body: Required<Body>,
+  videoFirstFrameUrl: string | null,
+  refUrls: string[],
+  productUrls: string[],
+): string {
   const clipType = (body.clipType ?? "custom").toString().trim().toLowerCase();
   const clipLabel = CLIP_TYPE_LABELS[clipType] ?? CLIP_TYPE_LABELS.custom;
   const aspect = body.aspectRatio ?? "9:16";
@@ -101,22 +123,30 @@ function buildUserPrompt(body: Required<Body>, refUrls: string[], productUrls: s
   if (adBody) lines.push(`Original ad copy: "${adBody}".`);
 
   lines.push("");
-  lines.push(`User product description: ${body.productDescription.trim() || "(not provided)"}.`);
+  lines.push(`User product description (supplement with visual details from the product images): ${body.productDescription.trim() || "(not provided — extract entirely from product images)"}.`);
   lines.push("");
 
-  const refCount = refUrls.length;
+  // Image ordering explanation
+  let imageIdx = 1;
+  if (videoFirstFrameUrl) {
+    lines.push(`Image ${imageIdx}: THE FIRST FRAME of the competitor's video. This is the exact visual opening you must reproduce. Analyze and reproduce its framing, lighting, background, and subject placement.`);
+    imageIdx++;
+  }
+  const combinedRefCount = refUrls.length;
+  if (combinedRefCount > 0) {
+    lines.push(
+      `Image${imageIdx > 1 || combinedRefCount > 1 ? "s" : ""} ${imageIdx}–${imageIdx + combinedRefCount - 1}: Additional static reference frames of the original ad. Use for context only — do not reference them in the prompt.`,
+    );
+    imageIdx += combinedRefCount;
+  }
   const productCount = productUrls.length;
-
-  lines.push(
-    refCount > 0
-      ? `The first ${refCount} image${refCount > 1 ? "s" : ""} I am sending are FRAMES OF THE REFERENCE AD. Analyze them silently to extract the setting, character, camera, and beat structure. Do NOT reference them in the prompt — only use @image1..@image${productCount} for the user's product.`
-      : "(No reference frames provided — infer style from the ad copy above.)",
-  );
-  lines.push(
-    productCount > 0
-      ? `The next ${productCount} image${productCount > 1 ? "s" : ""} are the USER'S PRODUCT photos in order. Refer to them in the prompt as @image1${productCount >= 2 ? ", @image2" : ""}${productCount >= 3 ? ", @image3" : ""} (matching upload order).`
-      : "(No product images provided — describe the product generically based on the description.)",
-  );
+  if (productCount > 0) {
+    lines.push(
+      `Image${productCount > 1 ? "s" : ""} ${imageIdx}–${imageIdx + productCount - 1}: The USER'S PRODUCT photos in order. Before writing the prompt, extract brand name, colours, packaging shape, and price-tier cue from them. Refer to them in the prompt as @image1${productCount >= 2 ? ", @image2" : ""}${productCount >= 3 ? ", @image3" : ""}.`,
+    );
+  } else {
+    lines.push("(No product images provided — describe the product generically based on the description above.)");
+  }
 
   lines.push("");
   lines.push("Now write the Seedance 2.0 prompt following the structure rules. Output ONLY the prompt text.");
@@ -141,6 +171,12 @@ export async function POST(req: Request) {
     return NextResponse.json({ error: "Invalid JSON body." }, { status: 400 });
   }
 
+  const videoFirstFrameUrl =
+    typeof body.videoFirstFrameUrl === "string" &&
+    /^https?:\/\//i.test(body.videoFirstFrameUrl.trim())
+      ? body.videoFirstFrameUrl.trim()
+      : null;
+
   const referenceImageUrls = sanitizeUrls(body.referenceImageUrls, MAX_REFERENCE_IMAGES);
   const productImageUrls = sanitizeUrls(body.productImageUrls, MAX_PRODUCT_IMAGES);
   const productDescription = (body.productDescription ?? "").trim();
@@ -154,6 +190,7 @@ export async function POST(req: Request) {
 
   const safeBody: Required<Body> = {
     ad: body.ad ?? {},
+    videoFirstFrameUrl: videoFirstFrameUrl ?? undefined,
     referenceImageUrls,
     productImageUrls,
     productDescription,
@@ -162,12 +199,18 @@ export async function POST(req: Request) {
     durationSec: typeof body.durationSec === "number" && body.durationSec > 0 ? body.durationSec : 10,
   };
 
-  const orderedImages = [...referenceImageUrls, ...productImageUrls];
+  // Image order: [video first frame?, ...static ref thumbnails, ...product photos]
+  const orderedImages = [
+    ...(videoFirstFrameUrl ? [videoFirstFrameUrl] : []),
+    // Avoid sending the first frame twice if it was also included in referenceImageUrls.
+    ...referenceImageUrls.filter((u) => u !== videoFirstFrameUrl),
+    ...productImageUrls,
+  ];
 
   try {
     const raw = await claudeMessagesTextWithImages({
       system: buildSystemPrompt(),
-      user: buildUserPrompt(safeBody, referenceImageUrls, productImageUrls),
+      user: buildUserPrompt(safeBody, videoFirstFrameUrl, referenceImageUrls.filter((u) => u !== videoFirstFrameUrl), productImageUrls),
       imageUrls: orderedImages,
       model: "claude-opus-4-7",
       maxTokens: 1600,
@@ -182,6 +225,7 @@ export async function POST(req: Request) {
       prompt,
       productImageUrls,
       referenceImageUrls,
+      videoFirstFrameUrl,
       clipType: safeBody.clipType,
       aspectRatio: safeBody.aspectRatio,
       durationSec: safeBody.durationSec,
