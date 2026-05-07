@@ -1307,6 +1307,20 @@ export function AdAssetNode({ id, data, selected }: NodeProps<AdAssetNodeType>) 
         const allResolvedByUrl = orderedUrls.length > 0 && orderedUrls.every((u) => Boolean(u));
         const allTerminal = allTerminalByStatus || allResolvedByUrl;
 
+        // UX: as soon as we have at least one generated image URL, stop showing
+        // the node-level "generating" spinner and surface the preview immediately,
+        // even if other batch slots are still finishing in the background.
+        if (pendingMediaKind === "image" && completedUrls.length > 0) {
+          const lastReady = completedUrls.at(-1) ?? "";
+          if (lastReady) {
+            patch(id, {
+              outputPreviewUrl: lastReady,
+              outputMediaKind: "image",
+            });
+            setGenerating(false);
+          }
+        }
+
         if (pending.progressListId) {
           patch(pending.progressListId, {
             ...(pending.listLabel?.trim() ? { label: pending.listLabel.trim() } : {}),
@@ -1400,6 +1414,14 @@ export function AdAssetNode({ id, data, selected }: NodeProps<AdAssetNodeType>) 
     patch,
     setPendingWorkflowRun,
   ]);
+
+  useEffect(() => {
+    // Safety net: if pending run metadata disappears (cross-tab/page resume races),
+    // never keep a stale local spinner alive on this node.
+    if (!data.pendingWorkflowRun && generating) {
+      setGenerating(false);
+    }
+  }, [data.pendingWorkflowRun, generating]);
 
   const cancelGeneration = useCallback(() => {
     if (!generating) return;
