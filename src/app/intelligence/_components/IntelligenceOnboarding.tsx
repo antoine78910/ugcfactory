@@ -123,6 +123,7 @@ export function IntelligenceOnboarding({
   const refreshSavedCompetitors = useCallback(async () => {
     const rows = await fetchSavedCompetitors();
     setSavedCompetitors(rows.slice(0, 3));
+    return rows.slice(0, 3);
   }, []);
 
   useEffect(() => {
@@ -417,7 +418,7 @@ export function IntelligenceOnboarding({
                 <div>
                   <p className="text-sm font-medium text-white/85">Competitors</p>
                   <p className="mt-1 text-xs text-white/45">
-                    Save up to 3 competitors to keep credits under control.
+                    Save up to 3 competitors to keep credits under control. This step is optional.
                   </p>
                 </div>
                 <span className="rounded-lg border border-white/10 bg-black/20 px-2.5 py-1.5 text-xs font-semibold text-white/70">
@@ -487,13 +488,16 @@ export function IntelligenceOnboarding({
                 <button
                   type="button"
                   onClick={async () => {
-                    await refreshSavedCompetitors();
+                    const nextSaved = await refreshSavedCompetitors();
+                    if (nextSaved.length === 0) {
+                      onDone();
+                      return;
+                    }
                     setStep(3);
                   }}
-                  disabled={savedCount === 0}
                   className="inline-flex items-center gap-2 rounded-xl bg-violet-400 px-4 py-2 text-sm font-semibold text-black shadow-[0_4px_0_0_rgba(76,29,149,0.95)] transition hover:bg-violet-300 hover:shadow-[0_5px_0_0_rgba(76,29,149,0.95)] active:translate-y-[2px] active:shadow-none disabled:opacity-40"
                 >
-                  Continue
+                  {savedCount === 0 ? "Skip for now" : "Continue"}
                   <ChevronRight className="h-4 w-4" />
                 </button>
               </div>
@@ -528,7 +532,7 @@ export function IntelligenceOnboarding({
                   ))}
                 </div>
               ) : (
-                <p className="text-xs text-white/45">No competitors saved yet.</p>
+                <p className="text-xs text-white/45">No competitors saved yet. Go back to add some, or finish setup.</p>
               )}
 
               {activeCompetitor ? (
@@ -647,11 +651,11 @@ export function IntelligenceOnboarding({
                 <button
                   type="button"
                   onClick={() => setStep(4)}
-                  disabled={!selectedAd}
+                  disabled={!selectedAd && savedCompetitors.length > 0}
                   className="inline-flex items-center gap-2 rounded-xl bg-violet-400 px-4 py-2 text-sm font-semibold text-black shadow-[0_4px_0_0_rgba(76,29,149,0.95)] transition hover:bg-violet-300 hover:shadow-[0_5px_0_0_rgba(76,29,149,0.95)] active:translate-y-[2px] active:shadow-none disabled:opacity-40"
-                  title={!selectedAd ? "Open any ad to continue." : "Continue"}
+                  title={!selectedAd && savedCompetitors.length > 0 ? "Open any ad to continue." : "Continue"}
                 >
-                  Continue
+                  {savedCompetitors.length === 0 ? "Finish setup" : "Continue"}
                   <ChevronRight className="h-4 w-4" />
                 </button>
               </div>
