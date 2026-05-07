@@ -410,7 +410,7 @@ export function AdRecreateDialog({
       void completeStudioTask(json.taskId, videoUrl);
       setGeneration({ kind: "success", videoUrl, taskId: json.taskId });
       // Store recreate in DB for the user's Intelligence history.
-      void fetch("/api/intelligence/recreations", {
+      fetch("/api/intelligence/recreations", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
@@ -430,7 +430,18 @@ export function AdRecreateDialog({
             productDescription: productDescription.trim() || null,
           },
         }),
-      }).catch(() => {});
+      })
+        .then(async (r) => {
+          if (!r.ok) {
+            const body = await r.json().catch(() => ({})) as { error?: string };
+            console.error("Recreation save failed:", r.status, body);
+            toast.error(`Recreation not saved: ${body.error ?? `HTTP ${r.status}`}`);
+          }
+        })
+        .catch((err: unknown) => {
+          console.error("Recreation save network error:", err);
+          toast.error("Recreation could not be saved (network error).");
+        });
       toast.success("Recreate ready.");
     } catch (err) {
       if (cancelRef.current) return;
