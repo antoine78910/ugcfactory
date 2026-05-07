@@ -643,13 +643,17 @@ export function CreditsPlanProvider({
 
   const spendCredits = useCallback(
     (n: number) => {
-      // Unlimited accounts are never charged.
+      // Unlimited accounts (founder / staff allowlist) are never charged.
       if (isUnlimited) return;
       const amount = Number(n);
       if (!Number.isFinite(amount) || amount <= 0 || displayCreditsToLedgerTicks(amount) <= 0) return;
       const prev = readState(activeUserId);
-      // Product rule: image/video platform credits are consumed only on free/trial access.
-      if (prev.planId !== "free") return;
+      // Every plan must be debited:
+      //   - free / trial users → consume their free allowance
+      //   - paid Stripe subscribers → consume the monthly subscription grant (refilled by the Stripe webhook)
+      //   - complimentary plans (admin-given partner / creator gifts) → consume the pack grant added at redeem
+      // The previous "free-only" rule meant that creators we gifted plans to were never debited, so the
+      // admin dashboard always showed the same balance for them. Now the ledger drives every account.
       const nextCurrent = Math.max(0, prev.current - amount);
       const nextTotal =
         prev.planId === "free"
@@ -657,7 +661,7 @@ export function CreditsPlanProvider({
           : Math.max(subscriptionCredits(prev.planId), nextCurrent);
       commit({ ...prev, current: nextCurrent, total: nextTotal });
 
-      // Server-side ledger deduction (fire-and-forget)
+      // Server-side ledger deduction (fire-and-forget); the route itself enforces the unlimited allowlist.
       void fetch("/api/me/credits/spend", {
         method: "POST",
         credentials: "include",
