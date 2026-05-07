@@ -76,6 +76,30 @@ function formatUsd(n: number): string {
   return `$${n.toFixed(1)}`;
 }
 
+function similarNicheQueryFromBrandName(name: string): string {
+  const tokens = name
+    .toLowerCase()
+    .replace(/[^a-z0-9\s]/g, " ")
+    .split(/\s+/)
+    .map((t) => t.trim())
+    .filter((t) => t.length >= 4);
+  return tokens[0] ?? "";
+}
+
+function dedupeLookupRows(rows: TTLookupResult[], brandId: string | null): TTLookupResult[] {
+  const seen = new Set<string>();
+  const out: TTLookupResult[] = [];
+  for (const r of rows) {
+    const id = (r.id ?? "").trim();
+    if (!id) continue;
+    if (brandId && id === brandId) continue;
+    if (seen.has(id)) continue;
+    seen.add(id);
+    out.push(r);
+  }
+  return out;
+}
+
 export function IntelligenceOnboarding({
   onDone,
 }: {
@@ -91,6 +115,10 @@ export function IntelligenceOnboarding({
   // Step 2/3 — saved competitors
   const [savedCompetitors, setSavedCompetitors] = useState<IntelligenceCompetitor[]>([]);
   const savedCount = savedCompetitors.length;
+  const [autoCompetitorSuggestions, setAutoCompetitorSuggestions] = useState<TTLookupResult[]>([]);
+  const [autoCompetitorLoading, setAutoCompetitorLoading] = useState(false);
+  const [autoCompetitorMessage, setAutoCompetitorMessage] = useState<string | null>(null);
+  const [autoSavingIds, setAutoSavingIds] = useState<string[]>([]);
 
   const refreshSavedCompetitors = useCallback(async () => {
     const rows = await fetchSavedCompetitors();
@@ -100,6 +128,84 @@ export function IntelligenceOnboarding({
   useEffect(() => {
     void refreshSavedCompetitors();
   }, [refreshSavedCompetitors]);
+
+  const autoSearchCompetitors = useCallback(async () => {
+    if (!brand) {
+      setAutoCompetitorSuggestions([]);
+      setAutoCompetitorMessage(null);
+      return;
+    }
+    setAutoCompetitorLoading(true);
+    setAutoCompetitorMessage(null);
+    try {
+      const primary = (brand.domain?.trim() || brand.name?.trim() || "").trim();
+      if (!primary) {
+        setAutoCompetitorSuggestions([]);
+        setAutoCompetitorMessage("we didn't find competitors for you");
+        return;
+      }
+
+      const runLookup = async (q: string): Promise<TTLookupResult[]> => {
+        if (!q.trim()) return [];
+        const res = await fetch(
+          `/api/intelligence/lookup?q=${encodeURIComponent(q)}&type=${encodeURIComponent("advertiser")}`,
+          { cache: "no-store" },
+        );
+        const json = (await res.json().catch(() => [])) as unknown;
+        return Array.isArray(json) ? (json as TTLookupResult[]) : [];
+      };
+
+      const primaryRows = await runLookup(primary);
+      const fallbackToken = similarNicheQueryFromBrandName(brand.name ?? "");
+      const fallbackRows = primaryRows.length > 0 || !fallbackToken || fallbackToken === primary
+        ? []
+        : await runLookup(fallbackToken);
+      const merged = dedupeLookupRows([...primaryRows, ...fallbackRows], brand.id).slice(0, 8);
+
+      setAutoCompetitorSuggestions(merged);
+      if (merged.length === 0) {
+        setAutoCompetitorMessage("we didn't find competitors for you");
+      } else {
+        setAutoCompetitorMessage(null);
+      }
+    } catch {
+      setAutoCompetitorSuggestions([]);
+      setAutoCompetitorMessage("we didn't find competitors for you");
+    } finally {
+      setAutoCompetitorLoading(false);
+    }
+  }, [brand]);
+
+  useEffect(() => {
+    if (step !== 2) return;
+    void autoSearchCompetitors();
+  }, [autoSearchCompetitors, step]);
+
+  const saveSuggestedCompetitor = useCallback(async (s: TTLookupResult) => {
+    const sid = s.id.trim();
+    if (!sid) return;
+    if (savedCompetitors.some((c) => (c.lookupId ?? c.id) === sid)) return;
+    if (savedCompetitors.length >= 3) return;
+    setAutoSavingIds((prev) => (prev.includes(sid) ? prev : [...prev, sid]));
+    try {
+      const res = await fetch("/api/intelligence/competitors", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          lookupId: sid,
+          name: s.name,
+          domain: s.domain ?? null,
+        }),
+      });
+      const json = (await res.json().catch(() => ({}))) as { error?: string };
+      if (!res.ok) throw new Error(json.error ?? "Save failed");
+      await refreshSavedCompetitors();
+    } catch {
+      // Keep UX lightweight: panel/manual save remains available if this quick-add fails.
+    } finally {
+      setAutoSavingIds((prev) => prev.filter((x) => x !== sid));
+    }
+  }, [refreshSavedCompetitors, savedCompetitors]);
 
   const canContinueStep1 = Boolean(brand);
   const saveBrand = useCallback(async () => {
@@ -320,6 +426,48 @@ export function IntelligenceOnboarding({
               </div>
 
               <div className="rounded-xl border border-white/10 bg-black/20 p-3">
+                <div className="mb-3 rounded-xl border border-violet-400/20 bg-violet-500/8 p-3">
+                  <div className="flex items-center justify-between gap-2">
+                    <p className="text-[11px] font-semibold uppercase tracking-[0.12em] text-violet-100/80">
+                      Suggested for your brand
+                    </p>
+                    {autoCompetitorLoading ? <Loader2 className="h-3.5 w-3.5 animate-spin text-violet-200/75" /> : null}
+                  </div>
+                  {autoCompetitorSuggestions.length > 0 ? (
+                    <div className="mt-2 flex flex-wrap gap-2">
+                      {autoCompetitorSuggestions.map((s) => {
+                        const sid = s.id.trim();
+                        const alreadySaved = savedCompetitors.some((c) => (c.lookupId ?? c.id) === sid);
+                        const saving = autoSavingIds.includes(sid);
+                        const blocked = !alreadySaved && savedCount >= 3;
+                        return (
+                          <button
+                            key={sid}
+                            type="button"
+                            disabled={alreadySaved || saving || blocked}
+                            onClick={() => void saveSuggestedCompetitor(s)}
+                            className={cn(
+                              "inline-flex items-center gap-2 rounded-lg border px-2.5 py-1.5 text-xs transition",
+                              alreadySaved
+                                ? "border-emerald-300/25 bg-emerald-500/10 text-emerald-100"
+                                : "border-violet-300/30 bg-violet-500/10 text-violet-100 hover:bg-violet-500/20",
+                              (saving || blocked) && "opacity-60",
+                            )}
+                            title={alreadySaved ? "Already saved" : blocked ? "You can save up to 3 competitors." : "Add competitor"}
+                          >
+                            {saving ? <Loader2 className="h-3 w-3 animate-spin" /> : null}
+                            <span>{s.name}</span>
+                            <span className="text-[10px] text-white/60">{alreadySaved ? "Saved" : "Add"}</span>
+                          </button>
+                        );
+                      })}
+                    </div>
+                  ) : autoCompetitorLoading ? (
+                    <p className="mt-2 text-xs text-violet-100/70">Finding similar shops and niche competitors…</p>
+                  ) : autoCompetitorMessage ? (
+                    <p className="mt-2 text-xs text-violet-100/70">{autoCompetitorMessage}</p>
+                  ) : null}
+                </div>
                 <CompetitorsPanel
                   maxSaved={3}
                   sortBy="currentRank"

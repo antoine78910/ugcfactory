@@ -150,7 +150,7 @@ export function CompetitorsPanel({
   const [lookupLoading, setLookupLoading] = useState(false);
   const [lookupError, setLookupError] = useState<string | null>(null);
   const [lookupResults, setLookupResults] = useState<TTLookupResult[]>([]);
-  const [selectedLookupId, setSelectedLookupId] = useState<string | null>(null);
+  const [selectedLookup, setSelectedLookup] = useState<TTLookupResult | null>(null);
 
   const [trackers, setTrackers] = useState<TTTracker[]>([]);
   const trackedIds = useMemo(() => new Set(trackers.map((t) => t.id)), [trackers]);
@@ -161,10 +161,7 @@ export function CompetitorsPanel({
 
   const lookupAbortRef = useRef<AbortController | null>(null);
 
-  const selectedLookup = useMemo(() => {
-    if (!selectedLookupId) return null;
-    return lookupResults.find((r) => r.id === selectedLookupId) ?? null;
-  }, [lookupResults, selectedLookupId]);
+  const selectedLookupId = selectedLookup?.id ?? null;
 
   const maxedOut = useMemo(() => {
     if (!selectedLookup) return saved.length >= maxSaved;
@@ -205,7 +202,7 @@ export function CompetitorsPanel({
       setLookupLoading(true);
       setLookupError(null);
       setLookupResults([]);
-      setSelectedLookupId(null);
+      setSelectedLookup(null);
       onPick(null);
       setSearchedOnce(true);
       try {
@@ -223,7 +220,7 @@ export function CompetitorsPanel({
         setLookupResults(limited);
         if (limited.length === 1) {
           const one = limited[0]!;
-          setSelectedLookupId(one.id);
+          setSelectedLookup(one);
           onPick({ lookup: one, isTracked: trackedIds.has(one.id) });
         }
       } catch (e) {
@@ -245,7 +242,7 @@ export function CompetitorsPanel({
       setLookupResults([]);
       setLookupError(null);
       setSearchedOnce(false);
-      setSelectedLookupId(null);
+      setSelectedLookup(null);
       onPick(null);
       setLookupLoading(false);
       return;
@@ -263,7 +260,7 @@ export function CompetitorsPanel({
 
   const selectLookup = useCallback(
     (r: TTLookupResult) => {
-      setSelectedLookupId(r.id);
+      setSelectedLookup(r);
       onPick({ lookup: r, isTracked: trackedIds.has(r.id) });
     },
     [onPick, trackedIds],

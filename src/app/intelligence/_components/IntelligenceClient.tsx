@@ -2,7 +2,7 @@
 
 import { useCallback, useMemo, useState } from "react";
 import * as Dialog from "@radix-ui/react-dialog";
-import { Layers, Users, Wand2, X } from "lucide-react";
+import { Check, Layers, Loader2, Users, Wand2, X } from "lucide-react";
 import type { TTLookupResult } from "@/lib/trendtrack";
 import { TrackerSearch } from "./TrackerSearch";
 import { TrackerList, type SelectedTracker } from "./TrackerList";
@@ -14,10 +14,13 @@ import { WelcomeOverlay } from "./WelcomeOverlay";
 import { IntelligenceOnboarding } from "./IntelligenceOnboarding";
 
 export function IntelligenceClient({ ownTrackerIds }: { ownTrackerIds: string[] }) {
+  const [ownTrackerIdsState, setOwnTrackerIdsState] = useState<string[]>(ownTrackerIds);
   const [selected, setSelected] = useState<SelectedTracker | null>(null);
   const [searchResult, setSearchResult] = useState<TTLookupResult | null>(null);
   const [competitorPick, setCompetitorPick] = useState<CompetitorPick | null>(null);
   const [onboardingDone, setOnboardingDone] = useState(false);
+  const [savingDashboardBrand, setSavingDashboardBrand] = useState(false);
+  const [dashboardBrandMessage, setDashboardBrandMessage] = useState<string | null>(null);
   const [panel, setPanel] = useState<null | "brands" | "competitors" | "recreations">(null);
   const [competitorSortBy, setCompetitorSortBy] = useState<
     | "currentRank"
@@ -52,7 +55,44 @@ export function IntelligenceClient({ ownTrackerIds }: { ownTrackerIds: string[] 
     }
   }, []);
 
-  const hasBrand = useMemo(() => ownTrackerIds.length > 0 || onboardingDone, [ownTrackerIds.length, onboardingDone]);
+  const hasBrand = useMemo(() => ownTrackerIdsState.length > 0 || onboardingDone, [ownTrackerIdsState.length, onboardingDone]);
+
+  const saveSearchAsDashboardBrand = useCallback(async () => {
+    if (!searchResult || savingDashboardBrand) return;
+    if (searchResult.type !== "brandtracker") {
+      setDashboardBrandMessage("Please pick a TrendTrack brand tracker result to set your dashboard brand.");
+      return;
+    }
+    setSavingDashboardBrand(true);
+    setDashboardBrandMessage(null);
+    try {
+      const res = await fetch("/api/intelligence/trackers", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          tracker_id: searchResult.id,
+          name: searchResult.name,
+          logo: searchResult.logo ?? searchResult.logoUrl ?? null,
+          domain: searchResult.domain ?? null,
+        }),
+      });
+      const json = (await res.json().catch(() => ({}))) as { error?: string };
+      if (!res.ok) throw new Error(json.error ?? "Could not save your brand.");
+      setOwnTrackerIdsState((prev) => (prev.includes(searchResult.id) ? prev : [searchResult.id, ...prev]));
+      setSelected({
+        id: searchResult.id,
+        name: searchResult.name,
+        logo: searchResult.logo ?? searchResult.logoUrl,
+        sourceType: "tracker",
+        domain: searchResult.domain ?? undefined,
+      });
+      setDashboardBrandMessage("Brand updated for your dashboard.");
+    } catch (e) {
+      setDashboardBrandMessage(e instanceof Error ? e.message : "Could not save your brand.");
+    } finally {
+      setSavingDashboardBrand(false);
+    }
+  }, [savingDashboardBrand, searchResult]);
 
   return (
     <div className="flex w-full overflow-hidden max-md:h-[calc(100dvh-3.5rem)] md:h-dvh">
@@ -71,6 +111,18 @@ export function IntelligenceClient({ ownTrackerIds }: { ownTrackerIds: string[] 
               <div className="w-full max-w-[540px] max-md:max-w-none">
                 <TrackerSearch onResult={handleSearchResult} />
               </div>
+              {searchResult ? (
+                <button
+                  type="button"
+                  onClick={() => void saveSearchAsDashboardBrand()}
+                  disabled={savingDashboardBrand}
+                  className="inline-flex items-center gap-2 rounded-xl border border-violet-300/30 bg-violet-500/12 px-3 py-2 text-xs font-semibold text-violet-100 transition hover:bg-violet-500/20 disabled:opacity-50"
+                  title="Set this searched brand as your dashboard brand"
+                >
+                  {savingDashboardBrand ? <Loader2 className="h-4 w-4 animate-spin" /> : <Check className="h-4 w-4" />}
+                  Change brand
+                </button>
+              ) : null}
               <button
                 type="button"
                 onClick={() => setPanel("brands")}
@@ -104,6 +156,11 @@ export function IntelligenceClient({ ownTrackerIds }: { ownTrackerIds: string[] 
               ) : null}
             </div>
           </div>
+          {dashboardBrandMessage ? (
+            <div className="px-4 pb-2">
+              <p className="text-[11px] text-violet-200/85">{dashboardBrandMessage}</p>
+            </div>
+          ) : null}
         </div>
 
         {!hasBrand ? (
@@ -113,7 +170,7 @@ export function IntelligenceClient({ ownTrackerIds }: { ownTrackerIds: string[] 
             }}
           />
         ) : selected ? (
-          <TrackerDetail tracker={selected} ownTrackerIds={ownTrackerIds} />
+          <TrackerDetail tracker={selected} ownTrackerIds={ownTrackerIdsState} />
         ) : competitorPick ? (
           <CompetitorDetail competitor={competitorPick.lookup} sortBy={competitorSortBy} />
         ) : (
