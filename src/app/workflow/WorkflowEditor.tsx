@@ -3498,7 +3498,6 @@ function WorkflowFlowWorkspace({
           (kind === "video" || kind === "variation" || kind === "upscale")
         )
           replaceSameHandle = true;
-        if (handleId === "references" && kind === "image") replaceSameHandle = true;
         if (handleId === "startImage" && kind === "assistant") replaceSameHandle = true;
         if (handleId === "endImage" && kind === "video") replaceSameHandle = true;
         if (handleId === "text" && kind === "motion") replaceSameHandle = true;
