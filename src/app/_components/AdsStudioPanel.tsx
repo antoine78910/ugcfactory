@@ -254,25 +254,39 @@ function pickOptionalTrimmedString(...candidates: unknown[]): string | undefined
 function sanitizeAdsStudioHistoryRows(raw: unknown): AdsStudioHistoryItem[] {
   if (!Array.isArray(raw)) return [];
   const out: AdsStudioHistoryItem[] = [];
-  for (const row of raw) {
+  for (let idx = 0; idx < raw.length; idx++) {
+    const row = raw[idx];
     if (!row || typeof row !== "object") continue;
     const x = row as Record<string, unknown>;
-    if (typeof x.id !== "string" || !x.id.trim()) continue;
+    const idRaw = pickOptionalTrimmedString(x.id, x.historyId, x.rowId);
+    const fallbackId =
+      typeof crypto !== "undefined" && typeof crypto.randomUUID === "function"
+        ? `legacy-${crypto.randomUUID()}`
+        : `legacy-${Date.now()}-${idx}`;
+    const id = idRaw?.trim() || fallbackId;
     const createdAt =
-      typeof x.createdAt === "number" && Number.isFinite(x.createdAt) ? x.createdAt : Date.now();
+      typeof x.createdAt === "number" && Number.isFinite(x.createdAt)
+        ? x.createdAt
+        : typeof x.created_at === "string" && Number.isFinite(Date.parse(x.created_at))
+          ? Date.parse(x.created_at)
+          : Date.now();
     const videoRaw = pickOptionalTrimmedString(x.videoUrl, x.clipUrl, x.outputUrl, x.resultUrl);
-    const videoUrl = videoRaw && isAdsStudioStoredMediaUrl(videoRaw) ? videoRaw : undefined;
+    const videoUrl =
+      (videoRaw && (isAdsStudioStoredMediaUrl(videoRaw) ? videoRaw : videoRaw.trim())) || undefined;
     const imageRaw = pickOptionalTrimmedString(x.imageUrl, x.thumbUrl, x.previewUrl);
-    const imageUrl = imageRaw && isAdsStudioStoredMediaUrl(imageRaw) ? imageRaw : undefined;
+    const imageUrl =
+      (imageRaw && (isAdsStudioStoredMediaUrl(imageRaw) ? imageRaw : imageRaw.trim())) || undefined;
     const pr = pickOptionalTrimmedString(x.productRefUrl);
-    const productRefUrl = pr && isAdsStudioStoredMediaUrl(pr) ? pr : undefined;
+    const productRefUrl = (pr && (isAdsStudioStoredMediaUrl(pr) ? pr : pr.trim())) || undefined;
     const ar = pickOptionalTrimmedString(x.avatarRefUrl);
-    const avatarRefUrl = ar && isAdsStudioStoredMediaUrl(ar) ? ar : undefined;
+    const avatarRefUrl = (ar && (isAdsStudioStoredMediaUrl(ar) ? ar : ar.trim())) || undefined;
+    const prompt =
+      pickOptionalTrimmedString(x.prompt, x.promptFull, x.promptSnippet, x.text, x.description) ?? "";
     out.push({
-      id: x.id.trim(),
+      id,
       createdAt,
       assetType: x.assetType === "app" ? "app" : "product",
-      prompt: typeof x.prompt === "string" ? x.prompt : "",
+      prompt,
       imageUrl,
       videoUrl,
       productRefUrl,
