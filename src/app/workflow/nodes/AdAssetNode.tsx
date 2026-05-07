@@ -1635,6 +1635,7 @@ export function AdAssetNode({ id, data, selected }: NodeProps<AdAssetNodeType>) 
     }
 
     if (data.kind === "image" || data.kind === "variation" || data.kind === "assistant" || data.kind === "upscale") {
+      validTargets.add("references");
       validTargets.add("inImage");
     }
 
@@ -1698,21 +1699,20 @@ export function AdAssetNode({ id, data, selected }: NodeProps<AdAssetNodeType>) 
   );
 
   /**
-   * Connected reference image URLs for Image Generator inputs (references/start + node-local upload),
-   * in a stable order so users can reason about which image is "primary" vs extra context.
+   * Connected reference image URLs for Image Generator inputs, preserving wire creation order.
+   * This avoids "random" ref ordering in prompt chips and image job payloads.
    */
   const imageInputRefSignature = useStore(
     useCallback(
       (s) => {
         if (data.kind !== "image") return "";
-        const startUrls = collectLinkedImageUrlsForHandles(s.nodes, s.edges, id, ["startImage"]);
-        const refUrls = collectLinkedImageUrlsForHandles(s.nodes, s.edges, id, ["references"]);
-        const legacyImg = collectLinkedImageUrlsForHandles(s.nodes, s.edges, id, ["inImage"]);
+        // Single pass over handles keeps global edge insertion order across both handles.
+        const linkedRefs = collectLinkedImageUrlsForHandles(s.nodes, s.edges, id, ["references", "inImage"]);
         const nodeRef =
           data.referenceMediaKind === "image" && data.referencePreviewUrl?.trim()
             ? [data.referencePreviewUrl.trim()]
             : [];
-        const all = [...nodeRef, ...startUrls, ...refUrls, ...legacyImg];
+        const all = [...linkedRefs, ...nodeRef];
         const seen = new Set<string>();
         const out: string[] = [];
         for (const u of all) {
@@ -1732,7 +1732,7 @@ export function AdAssetNode({ id, data, selected }: NodeProps<AdAssetNodeType>) 
   );
 
   /**
-   * Connected reference image URLs (start frame + references port + node-local upload), in the
+   * Connected reference image URLs (references port + node-local upload), in the
    * order PiAPI binds them to `@image1, @image2, …`. We feed this to the chip strip below the
    * prompt so users can see the auto-naming and type matching `@imageN` mentions.
    */
@@ -2401,14 +2401,12 @@ export function AdAssetNode({ id, data, selected }: NodeProps<AdAssetNodeType>) 
     if (data.kind === "image") {
       emitRunLog("info", "Image generation started.");
       const imageResultsListLabel = `${(data.label || cfg.title || "Image").trim() || "Image"} results`;
-      const linkedImageReferences = collectLinkedImageUrlsForHandles(nodes, edges, id, [
-        "references",
-        "startImage",
-        "inImage",
-      ]);
-      const mergedImageReferences = Array.from(
-        new Set([...(refImageForImageGen ? [refImageForImageGen] : []), ...linkedImageReferences]),
-      );
+      const linkedImageReferences = collectLinkedImageUrlsForHandles(nodes, edges, id, ["references", "inImage"]);
+      // Preserve user add/connect order from wires first, then fallback to node-local upload.
+      const mergedImageReferences = [...linkedImageReferences];
+      if (refImageForImageGen && !mergedImageReferences.includes(refImageForImageGen)) {
+        mergedImageReferences.push(refImageForImageGen);
+      }
       let refsForJob = mergedImageReferences;
       if (refsForJob.length > WORKFLOW_IMAGE_GENERATOR_REFERENCE_MAX) {
         toast.message("Reference limit", {
@@ -3965,22 +3963,6 @@ export function AdAssetNode({ id, data, selected }: NodeProps<AdAssetNodeType>) 
 
           {data.kind === "image" ? (
             <>
-              {!profile360ImageUi ? (
-                <div className={cn(workflowPortBubbleShellClass, "nodrag nopan")}>
-                  <Handle
-                    id="startImage"
-                    type="target"
-                    position={Position.Left}
-                    className={workflowPortTargetBubbleHandleClass}
-                    aria-label="Primary reference image input"
-                    title="Primary image / start frame (same role as Video Generator)."
-                    onPointerDown={(e) => handleInputBubblePointerDown(e, "startImage")}
-                  />
-                  <span className={workflowPortBubbleIconClass} aria-hidden>
-                    <ImageIcon className="h-4 w-4" strokeWidth={2} aria-hidden="true" />
-                  </span>
-                </div>
-              ) : null}
               <div className={cn(workflowPortBubbleShellClass, "nodrag nopan relative")}>
                 <Handle
                   id="references"

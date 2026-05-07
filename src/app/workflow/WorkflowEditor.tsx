@@ -448,7 +448,7 @@ function targetHandleForNewNodeFromSourceKind(
     const kind = d.kind;
     if (kind === "image" || kind === "variation" || kind === "upscale") {
       if (sourceKind === "text") return "text";
-      if (sourceKind === "image") return "startImage";
+      if (sourceKind === "image") return "references";
       return null;
     }
     if (kind === "video") {
@@ -3495,9 +3495,10 @@ function WorkflowFlowWorkspace({
           replaceSameHandle = true;
         if (
           handleId === "startImage" &&
-          (kind === "image" || kind === "video" || kind === "variation" || kind === "upscale")
+          (kind === "video" || kind === "variation" || kind === "upscale")
         )
           replaceSameHandle = true;
+        if (handleId === "references" && kind === "image") replaceSameHandle = true;
         if (handleId === "startImage" && kind === "assistant") replaceSameHandle = true;
         if (handleId === "endImage" && kind === "video") replaceSameHandle = true;
         if (handleId === "text" && kind === "motion") replaceSameHandle = true;
