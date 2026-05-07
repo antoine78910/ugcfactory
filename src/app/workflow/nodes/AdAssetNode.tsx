@@ -5392,13 +5392,34 @@ export function AdAssetNode({ id, data, selected }: NodeProps<AdAssetNodeType>) 
                 <div className="relative">
                 <button
                   type="button"
-                  title={generating ? "Generating…" : hasGeneratedOutput ? "Regenerate" : "Generate"}
-                  disabled={generating}
-                  className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-white text-zinc-900 shadow-md transition hover:bg-white/95 disabled:cursor-not-allowed disabled:opacity-55"
-                  onClick={onGenerateButtonClick}
+                  title={
+                    generating && (data.kind === "image" || data.kind === "video")
+                      ? "Cancel generation"
+                      : generating
+                        ? "Generating…"
+                        : hasGeneratedOutput
+                          ? "Regenerate"
+                          : "Generate"
+                  }
+                  disabled={generating && !(data.kind === "image" || data.kind === "video")}
+                  className={cn(
+                    "flex h-7 w-7 shrink-0 items-center justify-center rounded-full shadow-md transition disabled:cursor-not-allowed disabled:opacity-55",
+                    generating && (data.kind === "image" || data.kind === "video")
+                      ? "bg-rose-500/90 text-white hover:bg-rose-500"
+                      : "bg-white text-zinc-900 hover:bg-white/95",
+                  )}
+                  onClick={
+                    generating && (data.kind === "image" || data.kind === "video")
+                      ? cancelGeneration
+                      : onGenerateButtonClick
+                  }
                 >
                   {generating ? (
-                    <Loader2 className="h-3.5 w-3.5 animate-spin text-zinc-900" aria-hidden />
+                    data.kind === "image" || data.kind === "video" ? (
+                      <X className="h-3.5 w-3.5" strokeWidth={2.5} aria-hidden />
+                    ) : (
+                      <Loader2 className="h-3.5 w-3.5 animate-spin text-zinc-900" aria-hidden />
+                    )
                   ) : hasGeneratedOutput ? (
                     <RotateCcw className="h-3.5 w-3.5 text-zinc-900" strokeWidth={2.25} />
                   ) : (

@@ -1668,11 +1668,34 @@ async function runWorkflowVideoJobOnce(params: WorkflowRunVideoParams): Promise<
   const resolvedRefVideos = resolvedRefVideoRaw.length
     ? await resolveLocalWorkflowMediaUrlsForServer(resolvedRefVideoRaw)
     : [];
-  const startUrl = startResolvedUrl ? await ensureWorkflowImageMinEdge(startResolvedUrl) : undefined;
-  const endUrl = endResolvedUrl ? await ensureWorkflowImageMinEdge(endResolvedUrl) : undefined;
+  const softNormalizeVideoRefImage = async (
+    rawUrl: string | undefined,
+    label: "start" | "end" | "reference",
+  ): Promise<string | undefined> => {
+    const t = rawUrl?.trim();
+    if (!t) return undefined;
+    try {
+      return await ensureWorkflowImageMinEdge(t);
+    } catch (err) {
+      // Do not hard-fail non-Seedance runs when an optional cached/stale image URL 404s.
+      // We skip invalid refs and continue (e.g. Kling 2.5 text-to-video fallback).
+      if (typeof console !== "undefined" && typeof console.warn === "function") {
+        console.warn("[workflow.video] dropped invalid reference image before provider start", {
+          modelId,
+          label,
+          url: t.slice(0, 180),
+          error: err instanceof Error ? err.message : String(err ?? ""),
+        });
+      }
+      return undefined;
+    }
+  };
+  const startUrl = await softNormalizeVideoRefImage(startResolvedUrl, "start");
+  const endUrl = await softNormalizeVideoRefImage(endResolvedUrl, "end");
   const refUrls: string[] = [];
   for (const u of resolvedRefUrls) {
-    refUrls.push(await ensureWorkflowImageMinEdge(u));
+    const normalized = await softNormalizeVideoRefImage(u, "reference");
+    if (normalized) refUrls.push(normalized);
   }
   const quality = klingQualityFromVideoResolution(params.resolution);
   const duration = coerceWorkflowVideoDurationSec(params.model, params.durationSec);
