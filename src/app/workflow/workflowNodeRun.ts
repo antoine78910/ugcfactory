@@ -1273,8 +1273,6 @@ export function workflowVideoModelSupportsElements(modelId: string): boolean {
 const SEEDANCE_PRO_REF_LIMIT = 12;
 const WORKFLOW_VIDEO_RETRY_ATTEMPTS = 4;
 const WORKFLOW_VIDEO_RETRY_BASE_DELAY_MS = 1200;
-/** Non-Seedance workflow video models: conservative cap for retry prompt compaction. */
-const WORKFLOW_VIDEO_LONG_PROMPT_MAX_CHARS = 3500;
 
 function dedupeKeepOrder(urls: string[]): string[] {
   const seen = new Set<string>();
@@ -1480,12 +1478,6 @@ function workflowVideoDebugContext(args: {
     `seedanceOmniVideoRefs=${args.seedanceProVideoUrlsCount}`,
     `klingElements=${args.klingElementsCount}`,
   ].join(", ");
-}
-
-function compactWorkflowPromptForProvider(prompt: string, maxChars: number): string {
-  const compact = prompt.replace(/\s+/g, " ").trim();
-  if (compact.length <= maxChars) return compact;
-  return compact.slice(0, maxChars).trim();
 }
 
 export type WorkflowRunMotionControlParams = {
@@ -1892,10 +1884,6 @@ async function runWorkflowVideoJobOnce(params: WorkflowRunVideoParams): Promise<
     klingElementsCount: klingElements?.length ?? 0,
   });
 
-  const providerPromptMaxChars = seedanceKie ? SEEDANCE_PRO_PROMPT_MAX_CHARS : WORKFLOW_VIDEO_LONG_PROMPT_MAX_CHARS;
-  const compactPrompt = compactWorkflowPromptForProvider(params.prompt, providerPromptMaxChars);
-  const useCompactPromptRetry = compactPrompt.length > 0 && compactPrompt !== params.prompt.trim();
-
   /**
    * Retry once on transient provider failures (PiAPI Seedance 502, KIE timeouts) so the
    * workflow does not surface a hard error every time the upstream service hiccups.
@@ -1903,8 +1891,7 @@ async function runWorkflowVideoJobOnce(params: WorkflowRunVideoParams): Promise<
   let genJson: { taskId?: string; provider?: string; error?: string } | undefined;
   let lastStatus = 0;
   for (let attempt = 0; attempt < WORKFLOW_VIDEO_RETRY_ATTEMPTS; attempt++) {
-    const promptForAttempt =
-      attempt > 0 && useCompactPromptRetry ? compactPrompt : params.prompt;
+    const promptForAttempt = params.prompt;
     const generatePayload = {
       accountPlan: params.planId,
       marketModel: marketModelForGenerate,
@@ -1959,7 +1946,7 @@ async function runWorkflowVideoJobOnce(params: WorkflowRunVideoParams): Promise<
       console.error("[workflow.video] /api/kling/generate failed", {
         status: genRes.status,
         attempt,
-        compactPromptRetry: attempt > 0 && useCompactPromptRetry,
+        promptChars: promptForAttempt.trim().length,
         error: genJson.error,
         modelId,
         marketModel: marketModelForGenerate,
@@ -1974,6 +1961,14 @@ async function runWorkflowVideoJobOnce(params: WorkflowRunVideoParams): Promise<
       /timeout|timed out|aborted|temporar|try again|gateway|fetch failed|network/.test(errLower);
     if (!transient || attempt >= WORKFLOW_VIDEO_RETRY_ATTEMPTS - 1) {
       const rawErr = (genJson.error ?? "").trim();
+      const promptTooLong = /prompt exceeds maximum length|prompt too long|max(imum)? length/i.test(rawErr);
+      if (promptTooLong) {
+        const chars = promptForAttempt.trim().length;
+        throw new Error(
+          `Kling rejected the prompt length (${chars.toLocaleString("en-US")} chars). ` +
+          "Shorten this prompt and retry.",
+        );
+      }
       const tooGeneric =
         !rawErr ||
         /invalid parameters or inputs|bad request|video task failed|unknown error|something went wrong/i.test(rawErr);

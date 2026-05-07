@@ -686,8 +686,8 @@ export async function POST(req: Request) {
         input.aspect_ratio = body.aspectRatio;
       }
     } else if (isKling26(model) || isKling25Turbo(model)) {
-      input = {
-        prompt,
+        input = {
+          prompt,
         sound: body.sound ?? false,
         duration: String(body.duration ?? 5),
       };
@@ -704,8 +704,8 @@ export async function POST(req: Request) {
       const nFrames = String(body.duration ?? 10);
       const soraAspect = body.aspectRatio === "9:16" ? "portrait" : "landscape";
       const soraSize = (body.mode ?? "pro") === "pro" ? "high" : "standard";
-      input = {
-        prompt,
+        input = {
+          prompt,
         n_frames: nFrames,
         aspect_ratio: soraAspect,
         size: soraSize,
@@ -1048,6 +1048,20 @@ export async function POST(req: Request) {
     logGenerationFailure("kling/generate", err, { model });
     const message = err instanceof Error ? err.message : "Unknown error.";
     const userFacing = userFacingProviderErrorOrDefault(message);
+    const klingPromptTooLong =
+      isKling25Turbo(rawModel) &&
+      /prompt exceeds maximum length|prompt too long|max(imum)? length/i.test(message);
+    if (klingPromptTooLong) {
+      const chars = prompt.trim().length;
+      return NextResponse.json(
+        {
+          error:
+            `Kling 2.5 rejected this prompt as too long (${chars.toLocaleString("en-US")} chars). ` +
+            "Please shorten your prompt and retry.",
+        },
+        { status: 502 },
+      );
+    }
     const isGenericInvalid = /invalid parameters or inputs/i.test(userFacing);
     if (rawModel.startsWith("bytedance/seedance") && isGenericInvalid) {
       const promptTrimmed = normalizeSeedanceGeneratePrompt(prompt);
