@@ -49,6 +49,7 @@ type ClippingTemplateId = "classic" | "split_focus_bottom_webcam";
 
 const TEMPLATE_TOP_RATIO = 0.75;
 const TEMPLATE_BOTTOM_RATIO = 0.25;
+const WEBCAM_CARD_ASPECT = 3 / 4; // portrait 3:4 to avoid soft full-screen webcam stretch
 
 function parseClippingTemplateId(raw: string | null): ClippingTemplateId {
   return raw === "split_focus_bottom_webcam" ? "split_focus_bottom_webcam" : "classic";
@@ -173,6 +174,27 @@ function drawCoverRounded(
     ctx.drawImage(src, cropX, cropY, cropW, cropH, dx, dy, dw, dh);
   }
   ctx.restore();
+}
+
+function fitCenteredRect(
+  boundsX: number,
+  boundsY: number,
+  boundsW: number,
+  boundsH: number,
+  aspect: number,
+  fill = 0.92,
+): { x: number; y: number; w: number; h: number } {
+  const maxW = Math.max(1, boundsW * fill);
+  const maxH = Math.max(1, boundsH * fill);
+  let w = maxW;
+  let h = w / aspect;
+  if (h > maxH) {
+    h = maxH;
+    w = h * aspect;
+  }
+  const x = boundsX + Math.round((boundsW - w) / 2);
+  const y = boundsY + Math.round((boundsH - h) / 2);
+  return { x, y, w: Math.round(w), h: Math.round(h) };
 }
 
 export default function ClippingStudio() {
@@ -443,11 +465,18 @@ export default function ClippingStudio() {
           ctx.fillRect(0, bottomY, CANVAS_WIDTH, bottomH);
 
           if (webcam && webcam.readyState >= 2) {
-            const padX = Math.round(CANVAS_WIDTH * 0.12);
-            const cardW = CANVAS_WIDTH - padX * 2;
-            const cardH = Math.round(bottomH * 0.82);
-            const cardX = padX;
-            const cardY = bottomY + Math.round((bottomH - cardH) / 2);
+            const webcamCard = fitCenteredRect(
+              0,
+              bottomY,
+              CANVAS_WIDTH,
+              bottomH,
+              WEBCAM_CARD_ASPECT,
+              0.9,
+            );
+            const cardW = webcamCard.w;
+            const cardH = webcamCard.h;
+            const cardX = webcamCard.x;
+            const cardY = webcamCard.y;
 
             // Soft glow + rounded webcam card for smoother look.
             ctx.save();
@@ -470,15 +499,30 @@ export default function ClippingStudio() {
           ctx.fillRect(0, topH - 1, CANVAS_WIDTH, 2);
         } else {
           if (webcam && webcam.readyState >= 2) {
-            if (mirrorWebcam) {
-              ctx.save();
-              ctx.translate(CANVAS_WIDTH, 0);
-              ctx.scale(-1, 1);
-              drawCover(ctx, webcam, 0, 0, CANVAS_WIDTH, CANVAS_HEIGHT / 2);
-              ctx.restore();
-            } else {
-              drawCover(ctx, webcam, 0, 0, CANVAS_WIDTH, CANVAS_HEIGHT / 2);
-            }
+            const webcamCard = fitCenteredRect(
+              0,
+              0,
+              CANVAS_WIDTH,
+              CANVAS_HEIGHT / 2,
+              WEBCAM_CARD_ASPECT,
+              0.92,
+            );
+            drawCoverRounded(
+              ctx,
+              webcam,
+              webcamCard.x,
+              webcamCard.y,
+              webcamCard.w,
+              webcamCard.h,
+              28,
+              mirrorWebcam,
+            );
+            ctx.save();
+            roundedRectPath(ctx, webcamCard.x, webcamCard.y, webcamCard.w, webcamCard.h, 28);
+            ctx.strokeStyle = "rgba(255,255,255,0.35)";
+            ctx.lineWidth = 3;
+            ctx.stroke();
+            ctx.restore();
           }
 
           if (template && template.readyState >= 2) {
@@ -500,15 +544,32 @@ export default function ClippingStudio() {
           ctx.fillRect(0, CANVAS_HEIGHT / 2 - 1, CANVAS_WIDTH, 2);
         }
       } else if (webcam && webcam.readyState >= 2) {
-        if (mirrorWebcam) {
-          ctx.save();
-          ctx.translate(CANVAS_WIDTH, 0);
-          ctx.scale(-1, 1);
-          drawCover(ctx, webcam, 0, 0, CANVAS_WIDTH, CANVAS_HEIGHT);
-          ctx.restore();
-        } else {
-          drawCover(ctx, webcam, 0, 0, CANVAS_WIDTH, CANVAS_HEIGHT);
-        }
+        const webcamCard = fitCenteredRect(
+          0,
+          0,
+          CANVAS_WIDTH,
+          CANVAS_HEIGHT,
+          WEBCAM_CARD_ASPECT,
+          0.94,
+        );
+        // During hook phase, keep webcam in a 3:4 portrait card instead of full-screen
+        // to preserve apparent sharpness on lower-quality webcam feeds.
+        drawCoverRounded(
+          ctx,
+          webcam,
+          webcamCard.x,
+          webcamCard.y,
+          webcamCard.w,
+          webcamCard.h,
+          30,
+          mirrorWebcam,
+        );
+        ctx.save();
+        roundedRectPath(ctx, webcamCard.x, webcamCard.y, webcamCard.w, webcamCard.h, 30);
+        ctx.strokeStyle = "rgba(255,255,255,0.3)";
+        ctx.lineWidth = 3;
+        ctx.stroke();
+        ctx.restore();
       }
 
       if (previewCanvas) {
@@ -991,7 +1052,7 @@ export default function ClippingStudio() {
                   <p className="text-xs text-white/60">
                     {templateId === "split_focus_bottom_webcam"
                       ? "Template plays on top (3/4), webcam records in the bottom panel (1/4). Recording continues until the template ends."
-                      : "Webcam stays on top, the template plays below. Recording continues until the template ends."}
+                      : "Webcam stays in a 3:4 portrait frame on top, the template plays below. Recording continues until the template ends."}
                   </p>
                   <div className="flex flex-wrap items-center justify-center gap-2">
                     <button
