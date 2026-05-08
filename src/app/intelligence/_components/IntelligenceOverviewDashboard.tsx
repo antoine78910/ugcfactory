@@ -23,6 +23,7 @@ import { cn } from "@/lib/utils";
 type SortBy =
   | "currentRank"
   | "reach"
+  | "reachDelta1d"
   | "reachDelta7d"
   | "reachDelta30d"
   | "rankDelta7d"
