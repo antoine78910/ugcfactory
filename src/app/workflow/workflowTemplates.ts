@@ -12,6 +12,8 @@ export type WorkflowTemplateMeta = {
   source?: "builtin" | "custom" | "community";
   /** True when current user can remove this template. */
   canDelete?: boolean;
+  /** HTTPS URL of a preview image captured from the workflow at publish time. */
+  thumbnailUrl?: string | null;
 };
 
 /** URL / storage id: `community:` + Supabase row uuid (same for every account). */

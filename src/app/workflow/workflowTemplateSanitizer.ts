@@ -73,3 +73,42 @@ export function sanitizeProjectForCommunityTemplate(
 export function projectHasAnyNode(project: WorkflowProjectStateV1): boolean {
   return project.pages.some((p) => Array.isArray(p.nodes) && p.nodes.length > 0);
 }
+
+function isHttpsUrl(value: unknown): value is string {
+  return typeof value === "string" && value.startsWith("https://");
+}
+
+/**
+ * Scan all nodes in the project and return the first stable HTTPS image URL
+ * that can serve as the template card thumbnail.
+ *
+ * Priority order:
+ *  1. `outputPreviewUrl` for image-kind adAsset nodes (generated image output)
+ *  2. `videoExtractedFirstFrameUrl` / `videoExtractedLastFrameUrl` (video frames)
+ *  3. `referencePreviewUrl` for image-kind adAsset nodes
+ *  4. `imageUrl` on imageRef nodes
+ *
+ * Call this BEFORE `sanitizeProjectForCommunityTemplate` because those fields
+ * are stripped during sanitisation.
+ */
+export function extractWorkflowThumbnailUrl(project: WorkflowProjectStateV1): string | null {
+  for (const page of project.pages) {
+    for (const node of page.nodes ?? []) {
+      const d = node.data as Record<string, unknown>;
+      if (node.type === "adAsset") {
+        if (isHttpsUrl(d.outputPreviewUrl) && (d.outputMediaKind ?? "image") === "image") {
+          return d.outputPreviewUrl as string;
+        }
+        const frame = d.videoExtractedFirstFrameUrl ?? d.videoExtractedLastFrameUrl;
+        if (isHttpsUrl(frame)) return frame as string;
+        if (isHttpsUrl(d.referencePreviewUrl) && (d.referenceMediaKind ?? "image") === "image") {
+          return d.referencePreviewUrl as string;
+        }
+      }
+      if (node.type === "imageRef" && isHttpsUrl(d.imageUrl)) {
+        return d.imageUrl as string;
+      }
+    }
+  }
+  return null;
+}

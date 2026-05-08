@@ -125,6 +125,7 @@ import {
   parseWorkflowCommunityTemplateUuid,
 } from "./workflowTemplates";
 import {
+  extractWorkflowThumbnailUrl,
   projectHasAnyNode,
   sanitizeProjectForCommunityTemplate,
 } from "./workflowTemplateSanitizer";
@@ -5772,6 +5773,9 @@ export function WorkflowEditor({
         toast.error("Add at least one node to your workflow before publishing.");
         return;
       }
+      // Capture the best preview image URL from the live project BEFORE stripping
+      // ephemeral fields, so the template card in the listing can show a thumbnail.
+      const thumbnailUrl = extractWorkflowThumbnailUrl(liveProject);
       // Strip ephemeral run state and per-account media URLs so the template stays
       // small and reusable; without this the payload can exceed the 1.8MB API cap
       // and the template ends up looking empty after a failed publish.
@@ -5784,6 +5788,7 @@ export function WorkflowEditor({
           blurb: blurb || suggestedBlurb,
           project: projectForPublish,
           templateId: publishedTemplateId,
+          ...(thumbnailUrl ? { thumbnailUrl } : {}),
         }),
       });
       const body = (await res.json().catch(() => null)) as { error?: string; template?: { id?: string } } | null;

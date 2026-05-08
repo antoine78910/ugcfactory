@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 
 import { requireSupabaseUser } from "@/lib/supabase/requireUser";
+import { createSupabaseServiceClient } from "@/lib/supabase/admin";
 import type { WorkflowProjectStateV1 } from "@/app/workflow/workflowProjectStorage";
 
 const MAX_PROJECT_BYTES = 1_800_000;
@@ -50,11 +51,16 @@ function templateOwnedByUser(
 
 export async function GET() {
   const auth = await requireSupabaseUser();
-  if (auth.response) return auth.response;
-
-  const { data, error } = await auth.supabase
+  const admin = createSupabaseServiceClient();
+  // Public read: if the user is not authenticated, we still return community templates
+  // so clipping pages can list "everyone-visible" templates.
+  const client = auth.response ? admin : auth.supabase;
+  if (!client) {
+    return NextResponse.json({ error: "Templates unavailable." }, { status: 503 });
+  }
+  const { data, error } = await client
     .from("workflow_community_templates")
-    .select("id, name, blurb, created_at, created_by_name, created_by")
+    .select("id, name, blurb, thumbnail_url, created_at, created_by_name, created_by")
     .order("created_at", { ascending: false })
     .limit(200);
 
@@ -75,9 +81,10 @@ export async function GET() {
     id: row.id,
     name: row.name,
     blurb: row.blurb,
+    thumbnail_url: (row as { thumbnail_url?: string | null }).thumbnail_url ?? null,
     created_at: row.created_at,
     created_by_name: row.created_by_name,
-    created_by_me: templateOwnedByUser(row, auth.user),
+    created_by_me: auth.response ? false : templateOwnedByUser(row, auth.user),
   }));
   return NextResponse.json({ templates });
 }
@@ -103,10 +110,15 @@ export async function POST(req: Request) {
     blurb?: unknown;
     project?: unknown;
     templateId?: unknown;
+    thumbnailUrl?: unknown;
   };
   const name = typeof b.name === "string" ? b.name.trim() : "";
   const blurb = typeof b.blurb === "string" ? b.blurb.trim() : "";
   const templateId = typeof b.templateId === "string" ? b.templateId.trim() : "";
+  const rawThumbnail = typeof b.thumbnailUrl === "string" ? b.thumbnailUrl.trim() : "";
+  // Only accept absolute HTTPS URLs as thumbnails (no blob/data URLs).
+  const thumbnailUrl =
+    rawThumbnail.startsWith("https://") ? rawThumbnail.slice(0, 2000) : null;
   if (!name) {
     return NextResponse.json({ error: "Name is required." }, { status: 400 });
   }
@@ -124,6 +136,7 @@ export async function POST(req: Request) {
     name: name.slice(0, 200),
     blurb: (blurb || "Shared workflow template.").slice(0, 500),
     project: b.project,
+    ...(thumbnailUrl !== null ? { thumbnail_url: thumbnailUrl } : {}),
   };
   const q = auth.supabase.from("workflow_community_templates");
   const { data, error } = isUpdate

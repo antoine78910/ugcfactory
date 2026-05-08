@@ -125,7 +125,7 @@ export function WorkflowSpacesLanding() {
     setCommunityTemplates(
       rows
         .filter((r: { id?: unknown }) => typeof r.id === "string" && /^[0-9a-f-]{36}$/i.test(String(r.id).trim()))
-        .map((r: { id: string; name?: unknown; blurb?: unknown; created_by_name?: unknown; created_by_me?: unknown }) => ({
+        .map((r: { id: string; name?: unknown; blurb?: unknown; created_by_name?: unknown; created_by_me?: unknown; thumbnail_url?: unknown }) => ({
           id: workflowCommunityTemplateId(r.id.trim()),
           name: typeof r.name === "string" && r.name.trim() ? r.name.trim() : "Template",
           blurb: typeof r.blurb === "string" && r.blurb.trim() ? r.blurb.trim() : "",
@@ -135,6 +135,7 @@ export function WorkflowSpacesLanding() {
               : undefined,
           source: "community" as const,
           canDelete: Boolean(r.created_by_me),
+          thumbnailUrl: typeof r.thumbnail_url === "string" && r.thumbnail_url.startsWith("https://") ? r.thumbnail_url : null,
         })),
     );
   }, []);
@@ -655,6 +656,14 @@ export function WorkflowSpacesLanding() {
                       {templatePreviewDataUrlById.get(t.id) ? (
                         <img
                           src={templatePreviewDataUrlById.get(t.id)}
+                          alt={`${t.name} template preview`}
+                          className="absolute inset-0 h-full w-full object-cover"
+                          loading="lazy"
+                          decoding="async"
+                        />
+                      ) : t.thumbnailUrl ? (
+                        <img
+                          src={t.thumbnailUrl}
                           alt={`${t.name} template preview`}
                           className="absolute inset-0 h-full w-full object-cover"
                           loading="lazy"
