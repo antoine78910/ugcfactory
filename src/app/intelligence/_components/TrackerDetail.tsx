@@ -107,6 +107,18 @@ function normalizeAdsPayload(payload: unknown): TTAd[] {
   return [];
 }
 
+type MediaFilter = "videos" | "all" | "images";
+
+function filterAdsByMedia(rows: TTAd[], mediaFilter: MediaFilter): TTAd[] {
+  return rows.filter((ad) => {
+    const hasVideo = Boolean(ad.videoUrl?.trim());
+    const hasImage = Boolean(ad.thumbnailUrl || ad.previewUrl || ad.imageUrl);
+    if (mediaFilter === "videos") return hasVideo;
+    if (mediaFilter === "images") return !hasVideo && hasImage;
+    return hasVideo || hasImage;
+  });
+}
+
 export function TrackerDetail({
   tracker,
   ownTrackerIds,
@@ -157,6 +169,7 @@ export function TrackerDetail({
 
   // Block 2 — Top Ads
   const [ads, setAds] = useState<TTAd[]>([]);
+  const [adsMediaFilter, setAdsMediaFilter] = useState<MediaFilter>("videos");
   const [adsLoading, setAdsLoading] = useState(false);
   const [adsError, setAdsError] = useState<string | null>(null);
 
@@ -187,7 +200,7 @@ export function TrackerDetail({
           return;
         }
         const rows = normalizeAdsPayload(parsed.data);
-        setAds(rows.filter((a) => Boolean(a.videoUrl && a.videoUrl.trim())).slice(0, 10));
+        setAds(rows.slice(0, 10));
         setAdsAt(new Date().toISOString());
       } catch {
         setAdsError("Network error");
@@ -292,6 +305,7 @@ export function TrackerDetail({
 
   const anyLoading =
     overviewLoading || adsLoading || anglesLoading || oppsLoading;
+  const filteredAds = useMemo(() => filterAdsByMedia(ads, adsMediaFilter), [ads, adsMediaFilter]);
 
   useEffect(() => {
     setOverview(null);
@@ -327,7 +341,31 @@ export function TrackerDetail({
       />
 
       <section className="rounded-2xl border border-white/10 bg-white/[0.04] p-5 backdrop-blur-sm">
-        <BlockHeader title="Top Ads" onRefresh={() => fetchAds(true)} loading={adsLoading} />
+        <div className="mb-3 flex items-center justify-between gap-2">
+          <h3 className="text-sm font-semibold text-white/80">Top Ads</h3>
+          <div className="flex items-center gap-2">
+            <button
+              onClick={() => fetchAds(true)}
+              disabled={adsLoading}
+              className="flex items-center gap-1 rounded-lg px-2 py-1 text-xs text-white/40 hover:text-white/70 transition disabled:opacity-30"
+            >
+              <RefreshCw className={`h-3 w-3 ${adsLoading ? "animate-spin" : ""}`} />
+              Refresh
+            </button>
+          <div className="inline-flex rounded-lg border border-white/10 bg-black/25 p-0.5 text-[10px]">
+            {(["videos", "all", "images"] as const).map((m) => (
+              <button
+                key={m}
+                type="button"
+                onClick={() => setAdsMediaFilter(m)}
+                className={m === adsMediaFilter ? "rounded-md bg-white/15 px-2 py-1 text-white" : "rounded-md px-2 py-1 text-white/55 hover:text-white/85"}
+              >
+                {m === "videos" ? "Videos" : m === "images" ? "Images" : "All"}
+              </button>
+            ))}
+          </div>
+          </div>
+        </div>
         {adsLoading && (
           <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5">
             {Array.from({ length: 5 }).map((_, i) => (
@@ -336,9 +374,9 @@ export function TrackerDetail({
           </div>
         )}
         {adsError && <p className="text-xs text-red-400">{adsError}</p>}
-        {!adsLoading && ads.length > 0 && (
+        {!adsLoading && filteredAds.length > 0 && (
           <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5">
-            {ads.map((ad, idx) => (
+            {filteredAds.map((ad, idx) => (
               <AdCard
                 key={ad.id}
                 ad={{ ...ad, rank: idx + 1 }}
@@ -350,8 +388,8 @@ export function TrackerDetail({
             ))}
           </div>
         )}
-        {!adsLoading && !adsError && ads.length === 0 && (
-          <p className="text-sm text-white/40">No video ads found.</p>
+        {!adsLoading && !adsError && filteredAds.length === 0 && (
+          <p className="text-sm text-white/40">No ads found for this media filter.</p>
         )}
       </section>
 

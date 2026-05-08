@@ -289,12 +289,16 @@ export function CompetitorsPanel({
       const json = (await res.json()) as { error?: string };
       if (!res.ok) throw new Error(json.error ?? "Save failed");
       await refreshSaved();
+      // Instantly open the freshly saved competitor view.
+      onPick({ lookup: selectedLookup, isTracked: trackedIds.has(selectedLookup.id) });
+      setQuery("");
+      setLookupResults([]);
     } catch (e) {
       setLookupError(e instanceof Error ? e.message : "Save failed");
     } finally {
       setSaving(false);
     }
-  }, [maxSaved, refreshSaved, saved, saving, selectedLookup]);
+  }, [maxSaved, onPick, refreshSaved, saved, saving, selectedLookup, trackedIds]);
 
   const deleteSaved = useCallback(
     async (id: string) => {

@@ -6,7 +6,6 @@ import {
   ChevronDown,
   ExternalLink,
   Flame,
-  Loader2,
   Sparkles,
   TrendingUp,
   Trophy,
@@ -30,10 +29,19 @@ type SortBy =
   | "rankDelta14d"
   | "rankDelta30d"
   | "longestRunning";
+type MediaFilter = "videos" | "all" | "images";
 
-const LAZY_MODES: SortBy[] = ["reachDelta7d", "longestRunning"];
+function filterAdsByMedia(rows: TTAd[], mediaFilter: MediaFilter): TTAd[] {
+  return rows.filter((ad) => {
+    const hasVideo = Boolean(ad.videoUrl?.trim());
+    const hasImage = Boolean(ad.thumbnailUrl || ad.previewUrl || ad.imageUrl);
+    if (mediaFilter === "videos") return hasVideo;
+    if (mediaFilter === "images") return !hasVideo && hasImage;
+    return hasVideo || hasImage;
+  });
+}
 
-const SORT_TABS: { value: SortBy; label: string; icon: React.ReactNode; lazy?: true; description: string }[] = [
+const SORT_TABS: { value: SortBy; label: string; icon: React.ReactNode; description: string }[] = [
   {
     value: "currentRank",
     label: "Top Rank",
@@ -50,14 +58,12 @@ const SORT_TABS: { value: SortBy; label: string; icon: React.ReactNode; lazy?: t
     value: "reachDelta7d",
     label: "Scaling 7d",
     icon: <Zap className="h-3.5 w-3.5" />,
-    lazy: true,
     description: "Ads gaining reach this week",
   },
   {
     value: "longestRunning",
     label: "Evergreen",
     icon: <CalendarClock className="h-3.5 w-3.5" />,
-    lazy: true,
     description: "Proven ads running the longest",
   },
 ];
@@ -160,34 +166,6 @@ function SectionHeader({
   );
 }
 
-function LazyLoadPrompt({
-  description,
-  loading,
-  onLoad,
-}: {
-  description: string;
-  loading: boolean;
-  onLoad: () => void;
-}) {
-  return (
-    <div className="flex flex-col items-center gap-3 rounded-xl border border-dashed border-white/10 bg-black/15 px-4 py-8 text-center">
-      <p className="text-sm text-white/50">{description}</p>
-      <span className="rounded-full border border-amber-300/25 bg-amber-500/10 px-2.5 py-1 text-[11px] font-semibold text-amber-200/80">
-        ~1 credit · cached 7 days
-      </span>
-      <button
-        type="button"
-        disabled={loading}
-        onClick={onLoad}
-        className="inline-flex items-center gap-2 rounded-xl border border-white/15 bg-white/[0.06] px-5 py-2 text-xs font-semibold text-white/80 transition hover:bg-white/[0.1] disabled:opacity-50"
-      >
-        {loading ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Zap className="h-3.5 w-3.5" />}
-        {loading ? "Loading…" : "Load data"}
-      </button>
-    </div>
-  );
-}
-
 function PodiumRow({ ad, idx }: { ad: TTAd; idx: number }) {
   const medal = idx === 0 ? "🥇" : idx === 1 ? "🥈" : idx === 2 ? "🥉" : null;
   const label = (ad.headline ?? ad.title ?? ad.body ?? ad.text ?? "—").trim();
@@ -242,6 +220,8 @@ export function IntelligenceOverviewDashboard({ sortBy: _sortBy }: { sortBy: Sor
   const [adsLoading, setAdsLoading] = useState<Partial<Record<SortBy, boolean>>>({});
   const [ownAds, setOwnAds] = useState<TTAd[]>([]);
   const [ownAdsLoading, setOwnAdsLoading] = useState(false);
+  const [competitorMediaFilter, setCompetitorMediaFilter] = useState<MediaFilter>("videos");
+  const [ownMediaFilter, setOwnMediaFilter] = useState<MediaFilter>("videos");
 
   const [competitorMode, setCompetitorMode] = useState<SortBy>("currentRank");
 
@@ -265,6 +245,11 @@ export function IntelligenceOverviewDashboard({ sortBy: _sortBy }: { sortBy: Sor
   );
 
   const competitorAds = useMemo(() => adsCache[competitorMode] ?? [], [adsCache, competitorMode]);
+  const filteredCompetitorAds = useMemo(
+    () => filterAdsByMedia(competitorAds, competitorMediaFilter),
+    [competitorAds, competitorMediaFilter],
+  );
+  const filteredOwnAds = useMemo(() => filterAdsByMedia(ownAds, ownMediaFilter), [ownAds, ownMediaFilter]);
   const isLoaded = useMemo(() => competitorMode in adsCache, [adsCache, competitorMode]);
   const isLoadingMode = adsLoading[competitorMode] ?? false;
 
@@ -298,7 +283,7 @@ export function IntelligenceOverviewDashboard({ sortBy: _sortBy }: { sortBy: Sor
       const rows = Array.isArray((json as { ads?: TTAd[] }).ads)
         ? ((json as { ads?: TTAd[] }).ads as TTAd[])
         : Array.isArray(json) ? (json as TTAd[]) : [];
-      setAdsCache((p) => ({ ...p, [mode]: rows.filter((a) => Boolean(a.videoUrl?.trim())).slice(0, 10) }));
+      setAdsCache((p) => ({ ...p, [mode]: rows.slice(0, 10) }));
     } finally {
       setAdsLoading((p) => ({ ...p, [mode]: false }));
     }
@@ -309,7 +294,7 @@ export function IntelligenceOverviewDashboard({ sortBy: _sortBy }: { sortBy: Sor
     try {
       const res = await fetch(`/api/intelligence/trackers/${encodeURIComponent(tracker.id)}/top-ads`);
       const json = (await res.json().catch(() => [])) as unknown;
-      const rows = normalizeAdsPayload(json).filter((a) => Boolean(a.videoUrl?.trim()));
+      const rows = normalizeAdsPayload(json);
       setOwnAds(rows.slice(0, 10));
     } finally { setOwnAdsLoading(false); }
   }, []);
@@ -324,10 +309,17 @@ export function IntelligenceOverviewDashboard({ sortBy: _sortBy }: { sortBy: Sor
     if (!activeCompetitor) { setAdsCache({}); return; }
     void fetchAdsForMode(activeCompetitor, "currentRank");
     void fetchAdsForMode(activeCompetitor, "reach");
+    void fetchAdsForMode(activeCompetitor, "reachDelta1d");
+    void fetchAdsForMode(activeCompetitor, "reachDelta7d");
+    void fetchAdsForMode(activeCompetitor, "reachDelta30d");
+    void fetchAdsForMode(activeCompetitor, "rankDelta7d");
+    void fetchAdsForMode(activeCompetitor, "rankDelta14d");
+    void fetchAdsForMode(activeCompetitor, "rankDelta30d");
+    void fetchAdsForMode(activeCompetitor, "longestRunning");
   }, [activeCompetitor, fetchAdsForMode]);
 
   useEffect(() => {
-    if (!activeCompetitor || LAZY_MODES.includes(competitorMode)) return;
+    if (!activeCompetitor) return;
     if (competitorMode in adsCache) return;
     void fetchAdsForMode(activeCompetitor, competitorMode);
   }, [activeCompetitor, competitorMode, adsCache, fetchAdsForMode]);
@@ -460,38 +452,35 @@ export function IntelligenceOverviewDashboard({ sortBy: _sortBy }: { sortBy: Sor
                 >
                   {tab.icon}
                   {tab.label}
-                  {tab.lazy ? (
-                    <span className="ml-0.5 rounded border border-amber-300/25 bg-amber-500/10 px-1 py-px text-[9px] font-bold uppercase tracking-wide text-amber-300/80">
-                      1cr
-                    </span>
-                  ) : null}
+                </button>
+              ))}
+            </div>
+            <div className="inline-flex self-start rounded-lg border border-white/10 bg-black/25 p-0.5 text-[10px]">
+              {(["videos", "all", "images"] as const).map((m) => (
+                <button
+                  key={m}
+                  type="button"
+                  onClick={() => setCompetitorMediaFilter(m)}
+                  className={m === competitorMediaFilter ? "rounded-md bg-white/15 px-2 py-1 text-white" : "rounded-md px-2 py-1 text-white/55 hover:text-white/85"}
+                >
+                  {m === "videos" ? "Videos" : m === "images" ? "Images" : "All"}
                 </button>
               ))}
             </div>
 
             {competitors.length === 0 ? (
               <p className="text-sm text-white/45">No competitors saved yet. Add some from the Competitors panel.</p>
-            ) : LAZY_MODES.includes(competitorMode) && !isLoaded ? (
-              <LazyLoadPrompt
-                description={
-                  competitorMode === "reachDelta7d"
-                    ? "Load ads that are actively scaling reach this week — the freshest growth signals."
-                    : "Load ads that have been running the longest — evergreen creatives that consistently convert."
-                }
-                loading={isLoadingMode}
-                onLoad={() => activeCompetitor && void fetchAdsForMode(activeCompetitor, competitorMode)}
-              />
             ) : isLoadingMode ? (
               <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-4">
                 {Array.from({ length: 4 }).map((_, i) => (
                   <div key={i} className="aspect-video animate-pulse rounded-xl bg-white/5" />
                 ))}
               </div>
-            ) : competitorAds.length === 0 ? (
-              <p className="text-sm text-white/45">No video ads found for this mode.</p>
+            ) : filteredCompetitorAds.length === 0 ? (
+              <p className="text-sm text-white/45">No ads found for this media filter.</p>
             ) : (
               <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-4">
-                {competitorAds.map((ad, idx) => (
+                {filteredCompetitorAds.map((ad, idx) => (
                   <AdCard
                     key={ad.id}
                     ad={{ ...ad, rank: idx + 1 }}
@@ -581,15 +570,9 @@ export function IntelligenceOverviewDashboard({ sortBy: _sortBy }: { sortBy: Sor
             {(() => {
               const scalingAds = adsCache["reachDelta7d"];
               if (!scalingAds) {
-                return (
-                  <LazyLoadPrompt
-                    description="Load scaling hooks — hooks from ads gaining the most reach this week."
-                    loading={adsLoading["reachDelta7d"] ?? false}
-                    onLoad={() =>
-                      activeCompetitor && void fetchAdsForMode(activeCompetitor, "reachDelta7d")
-                    }
-                  />
-                );
+                return adsLoading["reachDelta7d"] ? (
+                  <p className="text-sm text-white/45">Loading scaling hooks…</p>
+                ) : null;
               }
               const scalingHooks = scalingAds
                 .map((ad) => (ad.headline ?? ad.title ?? "").trim())
@@ -620,15 +603,9 @@ export function IntelligenceOverviewDashboard({ sortBy: _sortBy }: { sortBy: Sor
             {(() => {
               const evergreenAds = adsCache["longestRunning"];
               if (!evergreenAds) {
-                return (
-                  <LazyLoadPrompt
-                    description="Load evergreen hooks — copy from the ads that have been running the longest."
-                    loading={adsLoading["longestRunning"] ?? false}
-                    onLoad={() =>
-                      activeCompetitor && void fetchAdsForMode(activeCompetitor, "longestRunning")
-                    }
-                  />
-                );
+                return adsLoading["longestRunning"] ? (
+                  <p className="text-sm text-white/45">Loading evergreen hooks…</p>
+                ) : null;
               }
               const evHooks = evergreenAds
                 .map((ad) => ({
@@ -705,27 +682,44 @@ export function IntelligenceOverviewDashboard({ sortBy: _sortBy }: { sortBy: Sor
                   <div key={i} className="aspect-video animate-pulse rounded-xl bg-white/5" />
                 ))}
               </div>
-            ) : ownAds.length === 0 ? (
-              <p className="text-sm text-white/45">No video ads found for this brand.</p>
             ) : (
               <>
-                <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-4">
-                  {ownAds.map((ad, idx) => (
-                    <AdCard
-                      key={ad.id}
-                      ad={{ ...ad, rank: idx + 1 }}
-                      playVideoOnHover
-                      showRecreateShortcut
-                      brandName={activeTracker?.name}
-                    />
+                <div className="inline-flex self-start rounded-lg border border-white/10 bg-black/25 p-0.5 text-[10px]">
+                  {(["videos", "all", "images"] as const).map((m) => (
+                    <button
+                      key={m}
+                      type="button"
+                      onClick={() => setOwnMediaFilter(m)}
+                      className={m === ownMediaFilter ? "rounded-md bg-white/15 px-2 py-1 text-white" : "rounded-md px-2 py-1 text-white/55 hover:text-white/85"}
+                    >
+                      {m === "videos" ? "Videos" : m === "images" ? "Images" : "All"}
+                    </button>
                   ))}
                 </div>
-                <div className="rounded-xl border border-white/10 bg-black/20 p-3">
-                  <p className="mb-2 text-[11px] font-semibold uppercase tracking-[0.1em] text-white/40">
-                    Best hooks
-                  </p>
-                  <HooksTable ads={ownAds} brandSlug={activeTracker?.name?.toLowerCase().replace(/\s+/g, "-")} />
-                </div>
+                {filteredOwnAds.length === 0 ? (
+                  <p className="text-sm text-white/45">No ads found for this media filter.</p>
+                ) : null}
+                {filteredOwnAds.length > 0 ? (
+                  <>
+                    <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-4">
+                      {filteredOwnAds.map((ad, idx) => (
+                        <AdCard
+                          key={ad.id}
+                          ad={{ ...ad, rank: idx + 1 }}
+                          playVideoOnHover
+                          showRecreateShortcut
+                          brandName={activeTracker?.name}
+                        />
+                      ))}
+                    </div>
+                    <div className="rounded-xl border border-white/10 bg-black/20 p-3">
+                      <p className="mb-2 text-[11px] font-semibold uppercase tracking-[0.1em] text-white/40">
+                        Best hooks
+                      </p>
+                      <HooksTable ads={filteredOwnAds} brandSlug={activeTracker?.name?.toLowerCase().replace(/\s+/g, "-")} />
+                    </div>
+                  </>
+                ) : null}
               </>
             )}
           </div>

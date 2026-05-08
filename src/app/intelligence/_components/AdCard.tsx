@@ -143,6 +143,7 @@ export function AdCard({
 
   const clickable = typeof onView === "function";
   const showInlineVideo = Boolean(videoSrc && !thumbnail && !videoBroken);
+  const canRecreate = Boolean(videoSrc);
   // When the <video> errors (e.g. image URL, CORS), fall back to <img> using the same URL.
   const brokenVideoFallbackImg = videoBroken && videoSrc && !thumbnail ? videoSrc : null;
 
@@ -364,19 +365,31 @@ export function AdCard({
                 onClick={(e) => {
                   e.preventDefault();
                   e.stopPropagation();
+                  if (!canRecreate) return;
                   setRecreateOpen(true);
                 }}
-                className="inline-flex shrink-0 items-center gap-1 rounded-lg border border-violet-400/35 bg-violet-500/12 px-2 py-0.5 text-[10px] font-semibold text-violet-100 transition hover:bg-violet-500/18"
+                disabled={!canRecreate}
+                className={cn(
+                  "inline-flex shrink-0 items-center gap-1 rounded-lg px-2 py-0.5 text-[10px] font-semibold transition",
+                  canRecreate
+                    ? "border border-violet-400/35 bg-violet-500/12 text-violet-100 hover:bg-violet-500/18"
+                    : "cursor-not-allowed border border-white/10 bg-white/[0.03] text-white/45",
+                )}
               >
                 <Sparkles className="h-3 w-3" />
                 Recreate
+                {!canRecreate ? (
+                  <span className="rounded border border-white/15 bg-white/[0.06] px-1 py-[1px] text-[9px] font-bold uppercase tracking-wide text-white/55">
+                    Soon
+                  </span>
+                ) : null}
               </button>
             ) : null}
           </div>
         </div>
       </div>
 
-      {showRecreateShortcut ? (
+      {showRecreateShortcut && canRecreate ? (
         <AdRecreateDialog ad={ad} open={recreateOpen} onOpenChange={setRecreateOpen} brandName={brandName} />
       ) : null}
     </div>

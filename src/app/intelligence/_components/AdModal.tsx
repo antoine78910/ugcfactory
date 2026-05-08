@@ -38,6 +38,7 @@ export function AdModal({
 
   const thumbnail = ad.thumbnailUrl ?? ad.previewUrl ?? ad.imageUrl;
   const videoSrc = ad.videoUrl?.trim();
+  const canRecreate = Boolean(videoSrc);
   const hook = ad.headline ?? ad.title ?? "";
   const body = ad.body ?? ad.text ?? "";
   const platform = ad.platform ?? "meta";
@@ -113,11 +114,19 @@ export function AdModal({
 
           <div className="mt-2 flex flex-wrap items-center gap-2">
             <button
-              onClick={() => setRecreateOpen(true)}
-              className="flex items-center gap-1.5 rounded-xl bg-violet-400 px-3 py-1.5 text-xs font-semibold text-black shadow-[0_4px_0_0_rgba(76,29,149,0.95)] transition hover:bg-violet-300 active:translate-y-[2px] active:shadow-none"
+              onClick={() => canRecreate && setRecreateOpen(true)}
+              disabled={!canRecreate}
+              className={canRecreate
+                ? "flex items-center gap-1.5 rounded-xl bg-violet-400 px-3 py-1.5 text-xs font-semibold text-black shadow-[0_4px_0_0_rgba(76,29,149,0.95)] transition hover:bg-violet-300 active:translate-y-[2px] active:shadow-none"
+                : "flex cursor-not-allowed items-center gap-1.5 rounded-xl border border-white/10 bg-white/[0.04] px-3 py-1.5 text-xs font-semibold text-white/45"}
             >
               <Sparkles className="h-3 w-3" />
               Recreate with my product
+              {!canRecreate ? (
+                <span className="rounded border border-white/15 bg-white/[0.06] px-1 py-[1px] text-[9px] font-bold uppercase tracking-wide text-white/55">
+                  Soon
+                </span>
+              ) : null}
             </button>
             {hook && (
               <button
@@ -147,12 +156,14 @@ export function AdModal({
         </div>
       </div>
 
-      <AdRecreateDialog
-        ad={ad}
-        open={recreateOpen}
-        onOpenChange={setRecreateOpen}
-        brandName={brandName}
-      />
+      {canRecreate ? (
+        <AdRecreateDialog
+          ad={ad}
+          open={recreateOpen}
+          onOpenChange={setRecreateOpen}
+          brandName={brandName}
+        />
+      ) : null}
     </div>
   );
 }

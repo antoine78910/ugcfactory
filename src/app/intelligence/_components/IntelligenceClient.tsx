@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useState } from "react";
 import * as Dialog from "@radix-ui/react-dialog";
-import { Check, Layers, Loader2, Users, Wand2, X } from "lucide-react";
+import { ArrowLeft, Check, Layers, Loader2, Users, Wand2, X } from "lucide-react";
 import type { TTLookupResult } from "@/lib/intelligenceProvider";
 import { TrackerSearch } from "./TrackerSearch";
 import { TrackerList, type SelectedTracker } from "./TrackerList";
@@ -44,6 +44,8 @@ export function IntelligenceClient({
     | "rankDelta30d"
     | "longestRunning"
   >("currentRank");
+  const isStandalonePanelRoute = initialPanel !== null;
+  const canReturnToDashboard = Boolean(selected || competitorPick);
 
   const handleSearchResult = useCallback((result: TTLookupResult | null) => {
     setSearchResult(result);
@@ -141,6 +143,30 @@ export function IntelligenceClient({
         <div className="sticky top-0 z-[5] border-b border-white/10 bg-[#06070d]/85 backdrop-blur-md">
           <div className="flex flex-wrap items-center justify-between gap-3 px-4 py-3">
             <div className="flex items-center gap-2">
+              {isStandalonePanelRoute ? (
+                <a
+                  href="/intelligence"
+                  className="inline-flex items-center gap-1.5 rounded-xl border border-white/10 bg-white/[0.03] px-2.5 py-1.5 text-xs font-semibold text-white/80 transition hover:bg-white/[0.06]"
+                  title="Return to dashboard"
+                >
+                  <ArrowLeft className="h-3.5 w-3.5" />
+                  Return to dashboard
+                </a>
+              ) : canReturnToDashboard ? (
+                <button
+                  type="button"
+                  onClick={() => {
+                    setSelected(null);
+                    setSearchResult(null);
+                    setCompetitorPick(null);
+                  }}
+                  className="inline-flex items-center gap-1.5 rounded-xl border border-white/10 bg-white/[0.03] px-2.5 py-1.5 text-xs font-semibold text-white/80 transition hover:bg-white/[0.06]"
+                  title="Return to dashboard"
+                >
+                  <ArrowLeft className="h-3.5 w-3.5" />
+                  Return to dashboard
+                </button>
+              ) : null}
               <div className="h-2 w-2 rounded-full bg-violet-400 shadow-[0_0_10px_rgba(167,139,250,0.8)]" />
               <h1 className="text-sm font-semibold text-white/85">Intelligence</h1>
               <span className="ml-1 rounded-md border border-violet-300/35 bg-violet-500/15 px-1.5 py-0.5 text-[9px] font-bold uppercase tracking-wide text-violet-100">
@@ -213,10 +239,27 @@ export function IntelligenceClient({
           <TrackerDetail tracker={selected} ownTrackerIds={ownTrackerIdsState} />
         ) : competitorPick ? (
           <CompetitorDetail competitor={competitorPick.lookup} sortBy={competitorSortBy} />
+        ) : isStandalonePanelRoute && panel === "competitors" ? (
+          <div className="mx-auto w-full max-w-6xl p-6">
+            <div className="rounded-2xl border border-white/10 bg-white/[0.04] p-4 backdrop-blur-sm">
+              <CompetitorsPanel
+                sortBy={competitorSortBy}
+                onSortBy={setCompetitorSortBy}
+                onPick={handleCompetitorPick}
+              />
+            </div>
+          </div>
+        ) : isStandalonePanelRoute && panel === "recreations" ? (
+          <div className="mx-auto w-full max-w-6xl p-6">
+            <div className="rounded-2xl border border-white/10 bg-white/[0.04] p-4 backdrop-blur-sm">
+              <RecreationsPanel />
+            </div>
+          </div>
         ) : (
           <IntelligenceOverviewDashboard sortBy={competitorSortBy} />
         )}
 
+        {!isStandalonePanelRoute ? (
         <Dialog.Root open={panel !== null} onOpenChange={(o) => !o && setPanel(null)}>
           <Dialog.Portal>
             <Dialog.Overlay className="fixed inset-0 z-[70] bg-black/70 backdrop-blur-sm" />
@@ -273,6 +316,7 @@ export function IntelligenceClient({
             </Dialog.Content>
           </Dialog.Portal>
         </Dialog.Root>
+        ) : null}
       </main>
     </div>
   );
