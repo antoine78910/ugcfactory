@@ -39,7 +39,6 @@ function mapCommunityTemplates(rows: unknown): WorkflowTemplateMeta[] {
 
 export default function ClippingWorkflowTemplatesPage() {
   const [communityTemplates, setCommunityTemplates] = useState<WorkflowTemplateMeta[]>([]);
-  const [communityLoadFailed, setCommunityLoadFailed] = useState(false);
 
   useEffect(() => {
     let mounted = true;
@@ -50,19 +49,15 @@ export default function ClippingWorkflowTemplatesPage() {
           cache: "no-store",
         });
         if (!res.ok) {
-          // This endpoint requires an authenticated user. When clippers are not
-          // signed in yet, we skip the warning to avoid a false alarm.
-          if (mounted && res.status !== 401 && res.status !== 403) {
-            setCommunityLoadFailed(true);
-          }
+          // Clipping remains fully usable with built-in/local templates.
+          // Do not surface transient/auth/server noise as a blocking UI error.
           return;
         }
         const json = (await res.json().catch(() => null)) as { templates?: unknown } | null;
         if (!mounted) return;
-        setCommunityLoadFailed(false);
         setCommunityTemplates(mapCommunityTemplates(json?.templates));
       } catch {
-        if (mounted) setCommunityLoadFailed(true);
+        // Ignore network issues here; fallback templates are still listed.
       }
     };
     void load();
@@ -90,12 +85,6 @@ export default function ClippingWorkflowTemplatesPage() {
             Read-only access for clippers. Open any template to review steps and download
             images/videos where available.
           </p>
-          {communityLoadFailed ? (
-            <p className="text-xs text-red-200/80">
-              Community templates could not load right now. Built-in and local templates are still
-              available.
-            </p>
-          ) : null}
         </header>
 
         {templates.length === 0 ? (

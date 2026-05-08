@@ -41,26 +41,36 @@ export function readLinkToAdTemplates(): LinkToAdTemplateSummary[] {
   }
 }
 
-function writeLinkToAdTemplates(rows: LinkToAdTemplateSummary[]): void {
-  if (typeof window === "undefined") return;
+function writeLinkToAdTemplates(rows: LinkToAdTemplateSummary[]): boolean {
+  if (typeof window === "undefined") return false;
   try {
     localStorage.setItem(LINK_TO_AD_TEMPLATES_KEY, JSON.stringify(rows.slice(0, MAX_LINK_TO_AD_TEMPLATES)));
+    return true;
   } catch {
-    // Ignore quota/storage errors.
+    // Quota/privacy mode/storage disabled.
+    return false;
   }
 }
 
-export function upsertLinkToAdTemplate(row: LinkToAdTemplateSummary): LinkToAdTemplateSummary[] {
+export function upsertLinkToAdTemplate(row: LinkToAdTemplateSummary): {
+  rows: LinkToAdTemplateSummary[];
+  persisted: boolean;
+} {
   const current = readLinkToAdTemplates();
   const next = [row, ...current.filter((x) => x.normalizedUrl !== row.normalizedUrl)];
-  writeLinkToAdTemplates(next);
-  return next;
+  const writeOk = writeLinkToAdTemplates(next);
+  const rows = writeOk ? readLinkToAdTemplates() : current;
+  return { rows, persisted: writeOk };
 }
 
-export function removeLinkToAdTemplate(normalizedUrl: string): LinkToAdTemplateSummary[] {
+export function removeLinkToAdTemplate(normalizedUrl: string): {
+  rows: LinkToAdTemplateSummary[];
+  persisted: boolean;
+} {
   const key = normalizedUrl.trim();
   const next = readLinkToAdTemplates().filter((x) => x.normalizedUrl !== key);
-  writeLinkToAdTemplates(next);
-  return next;
+  const writeOk = writeLinkToAdTemplates(next);
+  const rows = writeOk ? readLinkToAdTemplates() : readLinkToAdTemplates();
+  return { rows, persisted: writeOk };
 }
 

@@ -2114,14 +2114,18 @@ export default function AppBrandWizard() {
     }
     const isTemplate = linkToAdTemplateUrls.includes(normalized);
     if (isTemplate) {
-      const next = removeLinkToAdTemplate(normalized);
-      setLinkToAdTemplateUrls(next.map((t) => t.normalizedUrl));
+      const { rows, persisted } = removeLinkToAdTemplate(normalized);
+      setLinkToAdTemplateUrls(rows.map((t) => t.normalizedUrl));
+      if (!persisted) {
+        toast.error("Could not update templates (local storage unavailable).");
+        return;
+      }
       toast.success("Removed from Link to Ad templates.");
       return;
     }
     const thumb =
       universeThumbFromExtracted(latestRun.extracted) ?? latestRun.selected_image_url ?? null;
-    const next = upsertLinkToAdTemplate({
+    const { rows, persisted } = upsertLinkToAdTemplate({
       normalizedUrl: normalized,
       storeUrl: project.storeUrl,
       title: project.title ?? null,
@@ -2129,7 +2133,11 @@ export default function AppBrandWizard() {
       sourceRunId: latestRun.id,
       createdAt: new Date().toISOString(),
     });
-    setLinkToAdTemplateUrls(next.map((t) => t.normalizedUrl));
+    setLinkToAdTemplateUrls(rows.map((t) => t.normalizedUrl));
+    if (!persisted) {
+      toast.error("Template not saved (local storage unavailable).");
+      return;
+    }
     toast.success("Added to Link to Ad templates.");
   }, [linkToAdTemplateUrls]);
 

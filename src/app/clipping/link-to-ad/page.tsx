@@ -4,12 +4,66 @@ import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
 import { readLinkToAdTemplates, removeLinkToAdTemplate, type LinkToAdTemplateSummary } from "@/lib/linkToAdTemplates";
 import { proxiedMediaSrc } from "@/lib/mediaProxyUrl";
+import { readUniverseFromExtracted } from "@/lib/linkToAdUniverse";
+
+type RunRow = {
+  id: string;
+  created_at: string;
+  store_url: string;
+  title: string | null;
+  selected_image_url: string | null;
+  extracted?: unknown;
+};
 
 export default function ClippingLinkToAdTemplatesPage() {
   const [templates, setTemplates] = useState<LinkToAdTemplateSummary[]>([]);
 
   useEffect(() => {
-    setTemplates(readLinkToAdTemplates());
+    const refresh = async () => {
+      const local = readLinkToAdTemplates();
+      // Deep-dive fallback: if local templates are empty or stale, build templates directly
+      // from Link to Ad runs so clipping still shows project cards.
+      try {
+        const res = await fetch("/api/runs/list", { method: "GET", cache: "no-store" });
+        const json = (await res.json().catch(() => null)) as { data?: unknown } | null;
+        const rows = Array.isArray(json?.data) ? (json!.data as RunRow[]) : [];
+        const fromRuns: LinkToAdTemplateSummary[] = rows
+          .filter((r) => Boolean(r?.id && r?.store_url && readUniverseFromExtracted(r.extracted)))
+          .map((r) => ({
+            normalizedUrl: r.store_url.trim().toLowerCase(),
+            storeUrl: r.store_url,
+            title: r.title ?? null,
+            thumbUrl: (readUniverseFromExtracted(r.extracted)?.packshotUrls?.[0] ??
+              readUniverseFromExtracted(r.extracted)?.neutralUploadUrl ??
+              r.selected_image_url ??
+              null) as string | null,
+            sourceRunId: r.id,
+            createdAt: r.created_at,
+          }));
+        const merged = [...local];
+        const seen = new Set(local.map((x) => x.sourceRunId));
+        for (const t of fromRuns) {
+          if (seen.has(t.sourceRunId)) continue;
+          seen.add(t.sourceRunId);
+          merged.push(t);
+        }
+        merged.sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
+        setTemplates(merged);
+      } catch {
+        setTemplates(local);
+      }
+    };
+    void refresh();
+    const onFocus = () => refresh();
+    const onVisibility = () => {
+      if (document.visibilityState === "visible") refresh();
+    };
+    window.addEventListener("focus", onFocus);
+    document.addEventListener("visibilitychange", onVisibility);
+    return () => {
+      window.removeEventListener("focus", onFocus);
+      document.removeEventListener("visibilitychange", onVisibility);
+    };
   }, []);
 
   const hasItems = useMemo(() => templates.length > 0, [templates]);
@@ -68,7 +122,10 @@ export default function ClippingLinkToAdTemplatesPage() {
                     </Link>
                     <button
                       type="button"
-                      onClick={() => setTemplates(removeLinkToAdTemplate(template.normalizedUrl))}
+                      onClick={() => {
+                        const { rows } = removeLinkToAdTemplate(template.normalizedUrl);
+                        setTemplates(rows);
+                      }}
                       className="inline-flex items-center justify-center rounded-xl border border-white/15 bg-black/30 px-3 py-2 text-xs font-semibold text-white/65 transition hover:text-white"
                     >
                       Remove

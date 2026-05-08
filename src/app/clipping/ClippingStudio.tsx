@@ -49,7 +49,7 @@ type ClippingTemplateId = "classic" | "split_focus_bottom_webcam";
 
 const TEMPLATE_TOP_RATIO = 0.75;
 const TEMPLATE_BOTTOM_RATIO = 0.25;
-const WEBCAM_CARD_ASPECT = 3 / 4; // portrait 3:4 to avoid soft full-screen webcam stretch
+const WEBCAM_CARD_ASPECT = 3 / 4; // portrait target
 
 function parseClippingTemplateId(raw: string | null): ClippingTemplateId {
   return raw === "split_focus_bottom_webcam" ? "split_focus_bottom_webcam" : "classic";
@@ -195,6 +195,23 @@ function fitCenteredRect(
   const x = boundsX + Math.round((boundsW - w) / 2);
   const y = boundsY + Math.round((boundsH - h) / 2);
   return { x, y, w: Math.round(w), h: Math.round(h) };
+}
+
+function fitFullWidthRect(
+  boundsX: number,
+  boundsY: number,
+  boundsW: number,
+  boundsH: number,
+  aspect: number,
+  fill = 0.94,
+): { x: number; y: number; w: number; h: number } {
+  const w = Math.max(1, boundsW);
+  const targetH = Math.round(w / aspect);
+  const maxH = Math.max(1, Math.round(boundsH * fill));
+  const h = Math.min(targetH, maxH);
+  const x = boundsX;
+  const y = boundsY + Math.round((boundsH - h) / 2);
+  return { x, y, w: Math.round(w), h };
 }
 
 export default function ClippingStudio() {
@@ -465,7 +482,7 @@ export default function ClippingStudio() {
           ctx.fillRect(0, bottomY, CANVAS_WIDTH, bottomH);
 
           if (webcam && webcam.readyState >= 2) {
-            const webcamCard = fitCenteredRect(
+            const webcamCard = fitFullWidthRect(
               0,
               bottomY,
               CANVAS_WIDTH,
@@ -499,7 +516,7 @@ export default function ClippingStudio() {
           ctx.fillRect(0, topH - 1, CANVAS_WIDTH, 2);
         } else {
           if (webcam && webcam.readyState >= 2) {
-            const webcamCard = fitCenteredRect(
+            const webcamCard = fitFullWidthRect(
               0,
               0,
               CANVAS_WIDTH,
@@ -544,7 +561,7 @@ export default function ClippingStudio() {
           ctx.fillRect(0, CANVAS_HEIGHT / 2 - 1, CANVAS_WIDTH, 2);
         }
       } else if (webcam && webcam.readyState >= 2) {
-        const webcamCard = fitCenteredRect(
+        const webcamCard = fitFullWidthRect(
           0,
           0,
           CANVAS_WIDTH,
