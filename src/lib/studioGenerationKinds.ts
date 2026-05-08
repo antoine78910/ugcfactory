@@ -17,9 +17,9 @@ export const STUDIO_GENERATION_KIND_STUDIO_TRANSLATE_VIDEO = "studio_translate_v
 /** Voice change outputs (ElevenLabs), separate from Translate history. */
 export const STUDIO_GENERATION_KIND_VOICE_CHANGE = "studio_voice_change" as const;
 
-/** Workflow Image Generator nodes (kept out of Studio history / Projects library). */
+/** Workflow Image Generator nodes — visible in Create → Image tab and Projects library. */
 export const STUDIO_GENERATION_KIND_WORKFLOW_IMAGE = "workflow_image" as const;
-/** Workflow Video Generator nodes (kept out of Studio history / Projects library). */
+/** Workflow Video Generator nodes — visible in Create → Video tab and Projects library. */
 export const STUDIO_GENERATION_KIND_WORKFLOW_VIDEO = "workflow_video" as const;
 
 /**
@@ -62,11 +62,13 @@ export const STUDIO_LIBRARY_KINDS = [
   "avatar",
   STUDIO_GENERATION_KIND_STUDIO_IMAGE,
   STUDIO_GENERATION_KIND_LINK_TO_AD_IMAGE,
+  STUDIO_GENERATION_KIND_WORKFLOW_IMAGE,
   "studio_video",
   STUDIO_GENERATION_KIND_LINK_TO_AD_VIDEO,
   STUDIO_GENERATION_KIND_ADS_STUDIO_VIDEO,
   STUDIO_GENERATION_KIND_INTELLIGENCE_VIDEO,
   STUDIO_GENERATION_KIND_INTELLIGENCE_RECREATION,
+  STUDIO_GENERATION_KIND_WORKFLOW_VIDEO,
   "studio_audio",
   "studio_upscale",
   "motion_control",
@@ -76,13 +78,17 @@ export const STUDIO_LIBRARY_KINDS = [
 ] as const;
 
 /** Kinds shown in Create → Image history (excludes Link to Ad and Upscale). */
-export const STUDIO_IMAGE_TAB_KINDS = [STUDIO_GENERATION_KIND_STUDIO_IMAGE] as const;
+export const STUDIO_IMAGE_TAB_KINDS = [
+  STUDIO_GENERATION_KIND_STUDIO_IMAGE,
+  STUDIO_GENERATION_KIND_WORKFLOW_IMAGE,
+] as const;
 
 /** Kinds shown in Create → Video history (excludes Link to Ad). */
 export const STUDIO_VIDEO_TAB_KINDS = [
   "studio_video",
   "studio_watermark",
   STUDIO_GENERATION_KIND_ADS_STUDIO_VIDEO,
+  STUDIO_GENERATION_KIND_WORKFLOW_VIDEO,
 ] as const;
 
 export type StudioLibraryKind = (typeof STUDIO_LIBRARY_KINDS)[number];

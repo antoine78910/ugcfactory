@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import * as Dialog from "@radix-ui/react-dialog";
 import { ArrowLeft, Check, Layers, Loader2, Users, Wand2, X } from "lucide-react";
+import { useRouter } from "next/navigation";
 import type { TTLookupResult } from "@/lib/intelligenceProvider";
 import { TrackerSearch } from "./TrackerSearch";
 import { TrackerList, type SelectedTracker } from "./TrackerList";
@@ -25,6 +26,7 @@ export function IntelligenceClient({
   initialPanel?: IntelligencePanel;
   initialCompetitorId?: string | null;
 }) {
+  const router = useRouter();
   const [ownTrackerIdsState, setOwnTrackerIdsState] = useState<string[]>(ownTrackerIds);
   const [selected, setSelected] = useState<SelectedTracker | null>(null);
   const [searchResult, setSearchResult] = useState<TTLookupResult | null>(null);
@@ -202,7 +204,7 @@ export function IntelligenceClient({
                 <>
                   <button
                     type="button"
-                    onClick={() => setPanel("competitors")}
+                    onClick={() => router.push("/intelligence/competitors")}
                     className="inline-flex items-center gap-2 rounded-xl border border-white/10 bg-white/[0.03] px-3 py-2 text-xs font-semibold text-white/80 transition hover:bg-white/[0.06]"
                     title="Competitors"
                   >
@@ -211,7 +213,7 @@ export function IntelligenceClient({
                   </button>
                   <button
                     type="button"
-                    onClick={() => setPanel("recreations")}
+                    onClick={() => router.push("/intelligence/recreations")}
                     className="inline-flex items-center gap-2 rounded-xl border border-white/10 bg-white/[0.03] px-3 py-2 text-xs font-semibold text-white/80 transition hover:bg-white/[0.06]"
                     title="Recreations"
                   >

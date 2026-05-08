@@ -1372,10 +1372,17 @@ export function AdAssetNode({ id, data, selected }: NodeProps<AdAssetNodeType>) 
         });
         const json = (await res.json().catch(() => ({}))) as {
           data?: WorkflowPollHistoryItem[];
+          refundHints?: { jobId: string; credits: number }[];
           error?: string;
         };
         if (!res.ok) throw new Error(json.error ?? `HTTP ${res.status}`);
         if (!alive) return;
+
+        const hints = json.refundHints ?? [];
+        if (hints.length > 0) {
+          const totalRefund = hints.reduce((sum, h) => sum + (Number(h.credits) || 0), 0);
+          if (totalRefund > 0) grantCredits(totalRefund);
+        }
 
         const items = json.data ?? [];
         const byTask = new Map<string, WorkflowPollHistoryItem>();
@@ -1570,6 +1577,7 @@ export function AdAssetNode({ id, data, selected }: NodeProps<AdAssetNodeType>) 
     data.pendingWorkflowRun,
     emitRunLog,
     finalizeProgressMediaList,
+    grantCredits,
     id,
     patch,
     setPendingWorkflowRun,
@@ -3036,6 +3044,13 @@ export function AdAssetNode({ id, data, selected }: NodeProps<AdAssetNodeType>) 
           }
         }
         ok = imageResults.length === promptsForRun.length;
+        if (!ok && platformCharge > 0 && promptsForRun.length > 0) {
+          const failedCount = promptsForRun.length - imageResults.length;
+          const refundAmount = Math.round((failedCount / promptsForRun.length) * platformCharge);
+          if (refundAmount > 0) {
+            refundPlatformCredits(refundAmount, grantCredits, creditsRef);
+          }
+        }
         emitRunLog(
           ok ? "success" : "error",
           ok
@@ -3558,6 +3573,13 @@ export function AdAssetNode({ id, data, selected }: NodeProps<AdAssetNodeType>) 
         }
       }
       ok = videoResults.length === promptsForRun.length;
+      if (!ok && vPlatformCharge > 0 && promptsForRun.length > 0) {
+        const failedCount = promptsForRun.length - videoResults.length;
+        const refundAmount = Math.round((failedCount / promptsForRun.length) * vPlatformCharge);
+        if (refundAmount > 0) {
+          refundPlatformCredits(refundAmount, grantCredits, creditsRef);
+        }
+      }
       emitRunLog(
         ok ? "success" : "error",
         ok

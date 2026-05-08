@@ -259,11 +259,34 @@ export function CompetitorsPanel({
   }, [executeLookup, onPick, query]);
 
   const selectLookup = useCallback(
-    (r: TTLookupResult) => {
+    async (r: TTLookupResult) => {
       setSelectedLookup(r);
       onPick({ lookup: r, isTracked: trackedIds.has(r.id) });
+      // Auto-save selected competitor so "search + open" also persists it.
+      const alreadySaved = saved.some((c) => (c.lookupId ?? c.id) === r.id);
+      if (alreadySaved) return;
+      if (saved.length >= maxSaved) {
+        setLookupError(`You can save up to ${maxSaved} competitors.`);
+        return;
+      }
+      try {
+        const res = await fetch("/api/intelligence/competitors", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            lookupId: r.id,
+            name: r.name,
+            domain: r.domain ?? null,
+          }),
+        });
+        const json = (await res.json().catch(() => ({}))) as { error?: string };
+        if (!res.ok) throw new Error(json.error ?? "Save failed");
+        await refreshSaved();
+      } catch (e) {
+        setLookupError(e instanceof Error ? e.message : "Save failed");
+      }
     },
-    [onPick, trackedIds],
+    [maxSaved, onPick, refreshSaved, saved, trackedIds],
   );
 
   const saveSelected = useCallback(async () => {
