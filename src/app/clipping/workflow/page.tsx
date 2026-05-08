@@ -113,7 +113,7 @@ export default function ClippingWorkflowTemplatesPage() {
                   <p className="mt-2 text-xs text-white/45">by {template.authorName}</p>
                 ) : null}
                 <Link
-                  href={`/workflow/template/${encodeURIComponent(template.id)}`}
+                  href={`/clipping/workflow/template/${encodeURIComponent(template.id)}`}
                   className="mt-4 inline-flex items-center justify-center rounded-xl border border-white/15 bg-white/[0.03] px-4 py-2 text-xs font-semibold text-white/90 transition hover:bg-white/[0.08]"
                 >
                   Open read-only template
