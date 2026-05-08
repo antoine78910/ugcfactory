@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useRef, useState } from "react";
 import { Search, Loader2 } from "lucide-react";
-import type { TTLookupResult } from "@/lib/trendtrack";
+import type { TTLookupResult } from "@/lib/intelligenceProvider";
 import { SearchDropdown } from "./SearchDropdown";
 
 const LOOKUP_DEBOUNCE_MS = 320;

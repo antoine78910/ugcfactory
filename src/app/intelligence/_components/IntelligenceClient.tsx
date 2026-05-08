@@ -3,7 +3,7 @@
 import { useCallback, useMemo, useState } from "react";
 import * as Dialog from "@radix-ui/react-dialog";
 import { Check, Layers, Loader2, Users, Wand2, X } from "lucide-react";
-import type { TTLookupResult } from "@/lib/trendtrack";
+import type { TTLookupResult } from "@/lib/intelligenceProvider";
 import { TrackerSearch } from "./TrackerSearch";
 import { TrackerList, type SelectedTracker } from "./TrackerList";
 import { TrackerDetail } from "./TrackerDetail";
@@ -61,7 +61,7 @@ export function IntelligenceClient({ ownTrackerIds }: { ownTrackerIds: string[] 
   const saveSearchAsDashboardBrand = useCallback(async () => {
     if (!searchResult || savingDashboardBrand) return;
     if (searchResult.type !== "brandtracker") {
-      setDashboardBrandMessage("Please pick a TrendTrack brand tracker result to set your dashboard brand.");
+      setDashboardBrandMessage("Please pick a brand tracker result to set your dashboard brand.");
       return;
     }
     setSavingDashboardBrand(true);

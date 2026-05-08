@@ -120,6 +120,7 @@ export function studioGenerationModelDisplayLabel(
     case "link_to_ad_video":
     case "ads_studio_video":
     case "intelligence_video":
+    case "intelligence_recreation":
     case "workflow_video":
       if (m.startsWith("studio-edit/")) return studioVideoEditPickerDisplayLabel(m);
       if (m === "motion_control") return "Motion control";
@@ -164,6 +165,7 @@ function rowKindToMediaKind(kind: string, resultUrls: string[], label: string): 
     kind === "link_to_ad_video" ||
     kind === "ads_studio_video" ||
     kind === "intelligence_video" ||
+    kind === "intelligence_recreation" ||
     kind === "studio_translate_video" ||
     kind === "workflow_video"
   ) {

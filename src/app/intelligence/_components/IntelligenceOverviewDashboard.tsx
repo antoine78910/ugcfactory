@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useState } from "react";
-import type { TTAd, TTLookupResult, TTTracker } from "@/lib/trendtrack";
+import type { TTAd, TTLookupResult, TTTracker } from "@/lib/intelligenceProvider";
 import type { IntelligenceCompetitor } from "@/app/api/intelligence/competitors/route";
 import { AdCard } from "./AdCard";
 import { HooksTable } from "./HooksTable";

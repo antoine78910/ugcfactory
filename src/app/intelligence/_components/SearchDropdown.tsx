@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useRef, useState } from "react";
-import type { TTLookupResult } from "@/lib/trendtrack";
+import type { TTLookupResult } from "@/lib/intelligenceProvider";
 
 type Props = {
   results: TTLookupResult[];

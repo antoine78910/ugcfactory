@@ -1,8 +1,8 @@
 "use client";
 
 import { useCallback, useRef, useState } from "react";
-import { CalendarDays, Coins, Copy, Download, Eye, Maximize2, Sparkles, Users } from "lucide-react";
-import type { TTAd } from "@/lib/trendtrack";
+import { CalendarDays, Coins, Copy, Download, ExternalLink, Eye, Maximize2, Sparkles, Users } from "lucide-react";
+import type { TTAd } from "@/lib/intelligenceProvider";
 import { AdRecreateDialog } from "./AdRecreateDialog";
 import { cn } from "@/lib/utils";
 
@@ -129,41 +129,17 @@ export function AdCard({
     if (!videoSrc || downloadingVideo) return;
     setDownloadingVideo(true);
     try {
-      const filenameBase =
-        (ad.headline ?? ad.title ?? ad.id ?? "intelligence-ad")
-          .toLowerCase()
-          .replace(/[^a-z0-9]+/g, "-")
-          .replace(/^-+|-+$/g, "")
-          .slice(0, 64) || "intelligence-ad";
-      const filename = `${filenameBase}.mp4`;
-
-      try {
-        const res = await fetch(videoSrc, { cache: "no-store" });
-        if (!res.ok) throw new Error(`HTTP ${res.status}`);
-        const blob = await res.blob();
-        const objectUrl = URL.createObjectURL(blob);
-        const a = document.createElement("a");
-        a.href = objectUrl;
-        a.download = filename;
-        document.body.appendChild(a);
-        a.click();
-        a.remove();
-        URL.revokeObjectURL(objectUrl);
-      } catch {
-        // Fallback for CORS-restricted media URLs.
-        const a = document.createElement("a");
-        a.href = videoSrc;
-        a.target = "_blank";
-        a.rel = "noopener noreferrer";
-        a.download = filename;
-        document.body.appendChild(a);
-        a.click();
-        a.remove();
-      }
+      const a = document.createElement("a");
+      a.href = `/api/download?url=${encodeURIComponent(videoSrc)}`;
+      a.rel = "noopener noreferrer";
+      a.style.display = "none";
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
     } finally {
       setDownloadingVideo(false);
     }
-  }, [ad.headline, ad.id, ad.title, downloadingVideo, videoSrc]);
+  }, [downloadingVideo, videoSrc]);
 
   const clickable = typeof onView === "function";
   const showInlineVideo = Boolean(videoSrc && !thumbnail && !videoBroken);
@@ -210,7 +186,7 @@ export function AdCard({
             <video
               ref={videoRef}
               src={videoSrc}
-              className="absolute inset-0 h-full w-full object-cover"
+              className="absolute inset-0 h-full w-full object-cover [&:fullscreen]:object-contain [&:fullscreen]:bg-black"
               muted
               playsInline
               preload="metadata"
@@ -240,7 +216,7 @@ export function AdCard({
               ref={videoRef}
               src={videoSrc}
               className={cn(
-                "absolute inset-0 h-full w-full object-cover",
+                "absolute inset-0 h-full w-full object-cover [&:fullscreen]:object-contain [&:fullscreen]:bg-black",
                 hoverPlay ? "opacity-100" : "pointer-events-none opacity-0",
               )}
               muted
@@ -360,20 +336,34 @@ export function AdCard({
 
         <div className="flex items-center justify-between gap-2 text-[11px] text-white/45">
           <span className="min-w-0 truncate">{date ?? ""}</span>
-          {showRecreateShortcut ? (
-            <button
-              type="button"
-              onClick={(e) => {
-                e.preventDefault();
-                e.stopPropagation();
-                setRecreateOpen(true);
-              }}
-              className="inline-flex shrink-0 items-center gap-1 rounded-lg border border-violet-400/35 bg-violet-500/12 px-2 py-0.5 text-[10px] font-semibold text-violet-100 transition hover:bg-violet-500/18"
-            >
-              <Sparkles className="h-3 w-3" />
-              Recreate
-            </button>
-          ) : null}
+          <div className="flex items-center gap-1.5">
+            {ad.adUrl ? (
+              <a
+                href={ad.adUrl}
+                target="_blank"
+                rel="noopener noreferrer"
+                onClick={(e) => e.stopPropagation()}
+                className="inline-flex shrink-0 items-center gap-1 rounded-lg border border-white/15 bg-white/[0.06] px-2 py-0.5 text-[10px] font-semibold text-white/85 transition hover:bg-white/[0.1]"
+              >
+                <ExternalLink className="h-3 w-3" />
+                See the ad
+              </a>
+            ) : null}
+            {showRecreateShortcut ? (
+              <button
+                type="button"
+                onClick={(e) => {
+                  e.preventDefault();
+                  e.stopPropagation();
+                  setRecreateOpen(true);
+                }}
+                className="inline-flex shrink-0 items-center gap-1 rounded-lg border border-violet-400/35 bg-violet-500/12 px-2 py-0.5 text-[10px] font-semibold text-violet-100 transition hover:bg-violet-500/18"
+              >
+                <Sparkles className="h-3 w-3" />
+                Recreate
+              </button>
+            ) : null}
+          </div>
         </div>
       </div>
 

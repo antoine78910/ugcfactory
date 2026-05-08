@@ -2,7 +2,7 @@
 
 import { useEffect, useRef, useState } from "react";
 import { Copy, ExternalLink, Sparkles, X } from "lucide-react";
-import type { TTAd } from "@/lib/trendtrack";
+import type { TTAd } from "@/lib/intelligenceProvider";
 import { AdRecreateDialog } from "./AdRecreateDialog";
 
 const PLATFORM_LABELS: Record<string, string> = {
@@ -140,7 +140,7 @@ export function AdModal({
                 className="flex items-center gap-1.5 rounded-xl border border-white/10 bg-white/5 px-3 py-1.5 text-xs font-medium text-white/80 transition hover:border-violet-400/35 hover:text-white"
               >
                 <ExternalLink className="h-3 w-3" />
-                Original ad
+                See the ad
               </a>
             )}
           </div>

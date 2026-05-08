@@ -30,6 +30,8 @@ export const STUDIO_GENERATION_KIND_WORKFLOW_VIDEO = "workflow_video" as const;
 export const STUDIO_GENERATION_KIND_ADS_STUDIO_VIDEO = "ads_studio_video" as const;
 /** Intelligence-surface final videos (e.g. Recreate in Intelligence modal). */
 export const STUDIO_GENERATION_KIND_INTELLIGENCE_VIDEO = "intelligence_video" as const;
+/** Intelligence recreations saved from Ad Recreate flow. */
+export const STUDIO_GENERATION_KIND_INTELLIGENCE_RECREATION = "intelligence_recreation" as const;
 
 /**
  * Kinds owned by the Workflow editor: rows survive page reload / navigation so the in-flight
@@ -64,6 +66,7 @@ export const STUDIO_LIBRARY_KINDS = [
   STUDIO_GENERATION_KIND_LINK_TO_AD_VIDEO,
   STUDIO_GENERATION_KIND_ADS_STUDIO_VIDEO,
   STUDIO_GENERATION_KIND_INTELLIGENCE_VIDEO,
+  STUDIO_GENERATION_KIND_INTELLIGENCE_RECREATION,
   "studio_audio",
   "studio_upscale",
   "motion_control",
@@ -80,7 +83,6 @@ export const STUDIO_VIDEO_TAB_KINDS = [
   "studio_video",
   "studio_watermark",
   STUDIO_GENERATION_KIND_ADS_STUDIO_VIDEO,
-  STUDIO_GENERATION_KIND_INTELLIGENCE_VIDEO,
 ] as const;
 
 export type StudioLibraryKind = (typeof STUDIO_LIBRARY_KINDS)[number];

@@ -3,6 +3,10 @@ export const runtime = "nodejs";
 import { NextResponse } from "next/server";
 import { requireSupabaseUser } from "@/lib/supabase/requireUser";
 import { normalizeResultUrls } from "@/lib/studioGenerationsMap";
+import {
+  STUDIO_GENERATION_KIND_INTELLIGENCE_RECREATION,
+  STUDIO_GENERATION_KIND_INTELLIGENCE_VIDEO,
+} from "@/lib/studioGenerationKinds";
 
 type RecreationRow = {
   id: string;
@@ -88,7 +92,7 @@ export async function GET() {
       const { data: fallbackData, error: fallbackError } = await supabase
         .from("studio_generations")
         .select("id, kind, label, model, external_task_id, result_urls, created_at")
-        .eq("kind", "intelligence_video")
+        .in("kind", [STUDIO_GENERATION_KIND_INTELLIGENCE_RECREATION, STUDIO_GENERATION_KIND_INTELLIGENCE_VIDEO])
         .order("created_at", { ascending: false })
         .limit(200);
       if (fallbackError) return NextResponse.json({ error: fallbackError.message }, { status: 500 });
@@ -166,7 +170,7 @@ export async function POST(req: Request) {
         const { data: fb, error: fbError } = await supabase
           .from("studio_generations")
           .select("id, kind, label, model, external_task_id, result_urls, created_at")
-          .eq("kind", "intelligence_video")
+          .in("kind", [STUDIO_GENERATION_KIND_INTELLIGENCE_RECREATION, STUDIO_GENERATION_KIND_INTELLIGENCE_VIDEO])
           .eq("external_task_id", taskId)
           .order("created_at", { ascending: false })
           .limit(1)

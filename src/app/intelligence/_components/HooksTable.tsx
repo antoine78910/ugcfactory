@@ -2,7 +2,7 @@
 
 import { useMemo, useState } from "react";
 import { Copy, Download } from "lucide-react";
-import type { TTAd } from "@/lib/trendtrack";
+import type { TTAd } from "@/lib/intelligenceProvider";
 
 function formatReach(n?: number): string {
   if (!n) return "—";

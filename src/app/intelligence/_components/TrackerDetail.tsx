@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { RefreshCw } from "lucide-react";
-import type { TTOverview, TTAd } from "@/lib/trendtrack";
+import type { TTOverview, TTAd } from "@/lib/intelligenceProvider";
 import type { Angle } from "@/app/api/intelligence/trackers/[id]/angles/route";
 import type { Opportunity } from "@/app/api/intelligence/trackers/[id]/opportunities/route";
 import type { SelectedTracker } from "./TrackerList";
@@ -83,15 +83,15 @@ async function parseIntelResponse<T>(res: Response): Promise<
 function intelErrorMessage(e: IntelError): string {
   switch (e.code) {
     case "auth":
-      return "TrendTrack key invalid. Contact admin.";
+      return "Data provider key is invalid. Contact admin.";
     case "rate_limit":
       return e.retryAfterSec
         ? `Rate-limited. Retry in ${e.retryAfterSec}s.`
         : "Rate-limited. Try again shortly.";
     case "not_found":
-      return "No data on TrendTrack for this brand.";
+      return "No data found for this brand.";
     case "server":
-      return "TrendTrack momentarily unavailable.";
+      return "Data provider is temporarily unavailable.";
     default:
       return e.message || "Network error";
   }
@@ -173,7 +173,7 @@ export function TrackerDetail({
           : await fetch(endpoint, {
               method: "POST",
               headers: { "Content-Type": "application/json" },
-              // TrendTrack query payloads vary; send both keys and the domain hint when available.
+              // Provider query payloads vary; send both keys and the domain hint when available.
               body: JSON.stringify({
                 advertiser: tracker.id,
                 advertiser_id: tracker.id,
@@ -187,7 +187,7 @@ export function TrackerDetail({
           return;
         }
         const rows = normalizeAdsPayload(parsed.data);
-        setAds(rows.filter((a) => Boolean(a.videoUrl && a.videoUrl.trim())));
+        setAds(rows.filter((a) => Boolean(a.videoUrl && a.videoUrl.trim())).slice(0, 10));
         setAdsAt(new Date().toISOString());
       } catch {
         setAdsError("Network error");

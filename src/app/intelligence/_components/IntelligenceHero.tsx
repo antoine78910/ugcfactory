@@ -1,7 +1,7 @@
 "use client";
 
 import { ExternalLink, RefreshCw } from "lucide-react";
-import type { TTOverview } from "@/lib/trendtrack";
+import type { TTOverview } from "@/lib/intelligenceProvider";
 import type { SelectedTracker } from "./TrackerList";
 import { CreditsChip } from "./CreditsChip";
 

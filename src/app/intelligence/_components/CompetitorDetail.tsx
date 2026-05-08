@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import type { TTAd, TTLookupResult } from "@/lib/trendtrack";
+import type { TTAd, TTLookupResult } from "@/lib/intelligenceProvider";
 import { AdModal } from "./AdModal";
 import { AdCard } from "./AdCard";
 import { HooksTable } from "./HooksTable";
@@ -104,7 +104,7 @@ export function CompetitorDetail({
           setAdsError(intelErrorMessage(parsed.error));
           return;
         }
-        setAds((parsed.data.ads ?? []).filter((a) => Boolean(a.videoUrl && a.videoUrl.trim())));
+        setAds((parsed.data.ads ?? []).filter((a) => Boolean(a.videoUrl && a.videoUrl.trim())).slice(0, 10));
         setStaleAt(parsed.staleAt ?? null);
       } catch {
         setAdsError("Network error");

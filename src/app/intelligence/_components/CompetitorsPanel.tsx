@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Loader2, Search, Star, Trash2 } from "lucide-react";
-import type { TTLookupResult, TTTracker } from "@/lib/trendtrack";
+import type { TTLookupResult, TTTracker } from "@/lib/intelligenceProvider";
 import { proxiedMediaSrc } from "@/lib/mediaProxyUrl";
 import { cn } from "@/lib/utils";
 import type { IntelligenceCompetitor } from "@/app/api/intelligence/competitors/route";
@@ -15,8 +15,8 @@ export type CompetitorPick = {
 };
 
 /**
- * Prefer TrendTrack avatar when present, else Clearbit logo from domain, then Google favicon —
- * all free; no extra TrendTrack calls.
+ * Prefer provider avatar when present, else Clearbit logo from domain, then Google favicon —
+ * all free; no extra provider calls.
  */
 function CompetitorDomainAvatar({
   domain,

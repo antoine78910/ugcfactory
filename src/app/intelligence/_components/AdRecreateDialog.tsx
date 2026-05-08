@@ -15,7 +15,7 @@ import {
   X,
 } from "lucide-react";
 import { toast } from "sonner";
-import type { TTAd } from "@/lib/trendtrack";
+import type { TTAd } from "@/lib/intelligenceProvider";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
@@ -38,7 +38,7 @@ import {
 } from "@/app/_components/CreditsPlanContext";
 import { cn } from "@/lib/utils";
 import { registerStudioGenerationClient } from "@/lib/registerStudioGenerationClient";
-import { STUDIO_GENERATION_KIND_INTELLIGENCE_VIDEO } from "@/lib/studioGenerationKinds";
+import { STUDIO_GENERATION_KIND_INTELLIGENCE_RECREATION } from "@/lib/studioGenerationKinds";
 
 const MAX_PRODUCT_IMAGES = 3;
 
@@ -389,7 +389,7 @@ export function AdRecreateDialog({
       const recreateInputUrls = productCdnUrls.filter((u): u is string => typeof u === "string" && u.trim().length > 0);
       const recreateLabel = trimmedPrompt.slice(0, 200) || "Intelligence recreate video";
       const registerPromise = registerStudioGenerationClient({
-        kind: STUDIO_GENERATION_KIND_INTELLIGENCE_VIDEO,
+        kind: STUDIO_GENERATION_KIND_INTELLIGENCE_RECREATION,
         label: recreateLabel,
         taskId: json.taskId,
         provider: "kie-market",

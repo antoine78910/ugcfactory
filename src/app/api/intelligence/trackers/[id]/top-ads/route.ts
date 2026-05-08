@@ -6,7 +6,8 @@ import { ttGetTopAds, ttListAdvertiserAds } from "@/lib/trendtrack";
 import { getCached, setCached, deleteCached } from "@/lib/trendtrackCache";
 import { respondTrendTrackError } from "@/app/api/intelligence/_errors";
 
-const TTL = 60 * 60;
+// Keep own brand top ads cached for one week to reduce provider credit usage.
+const TTL = 7 * 24 * 60 * 60;
 
 /** TrendTrack brandtracker endpoints require a canonical UUID (v4/v7). */
 function isCanonicalUuid(s: string): boolean {

@@ -8,6 +8,21 @@ export type StructuredError = {
   retryAfterSec?: number;
 };
 
+function safeClientErrorMessage(code: StructuredError["code"]): string {
+  switch (code) {
+    case "auth":
+      return "Data provider key invalid.";
+    case "rate_limit":
+      return "Rate-limited. Try again shortly.";
+    case "not_found":
+      return "No data found.";
+    case "server":
+      return "Provider temporarily unavailable.";
+    default:
+      return "Network error";
+  }
+}
+
 export async function respondTrendTrackError<T>(
   err: unknown,
   staleKey: string | null
@@ -23,15 +38,14 @@ export async function respondTrendTrackError<T>(
       }
     }
     const body: StructuredError = {
-      error: err.message,
+      error: safeClientErrorMessage(err.code),
       code: err.code,
       retryAfterSec: err.retryAfterSec,
     };
     return NextResponse.json(body, { status: err.status });
   }
-  const message = err instanceof Error ? err.message : "Unknown error";
   return NextResponse.json(
-    { error: message, code: "unknown" } satisfies StructuredError,
+    { error: safeClientErrorMessage("unknown"), code: "unknown" } satisfies StructuredError,
     { status: 502 }
   );
 }

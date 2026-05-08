@@ -59,7 +59,7 @@ async function ttFetch<T>(path: string, init?: RequestInit): Promise<T> {
       code: classifyTrendTrackStatus(res.status),
       retryAfterSec: Number.isFinite(retryAfterSec) ? retryAfterSec : undefined,
       raw: body,
-      message: `TrendTrack ${res.status} ${path}: ${body || "(no body)"}`,
+      message: `Data provider ${res.status} ${path}: ${body || "(no body)"}`,
     });
   }
   return res.json() as Promise<T>;

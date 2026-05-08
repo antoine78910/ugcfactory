@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { Check, ChevronRight, Loader2, Sparkles } from "lucide-react";
-import type { TTAd, TTLookupResult } from "@/lib/trendtrack";
+import type { TTAd, TTLookupResult } from "@/lib/intelligenceProvider";
 import { TrackerSearch } from "./TrackerSearch";
 import { CreditsChip } from "./CreditsChip";
 import { CompetitorsPanel } from "./CompetitorsPanel";
@@ -371,7 +371,7 @@ export function IntelligenceOnboarding({
               <div>
                 <p className="text-sm font-medium text-white/85">Your brand</p>
                 <p className="mt-1 text-xs text-white/45">
-                  Enter your brand domain or name to connect TrendTrack. If you don’t have it yet, you can skip and start with competitors.
+                  Enter your brand domain or name to connect your data source. If you don’t have it yet, you can skip and start with competitors.
                 </p>
               </div>
 

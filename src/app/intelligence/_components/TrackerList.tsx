@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import type { TTTracker, TTLookupResult } from "@/lib/trendtrack";
+import type { TTTracker, TTLookupResult } from "@/lib/intelligenceProvider";
 import { proxiedMediaSrc } from "@/lib/mediaProxyUrl";
 
 function Skeleton() {
@@ -128,7 +128,7 @@ export type SelectedTracker = {
   logo?: string;
   sourceType: "tracker" | "search";
   domain?: string;
-  /** From tracker list TrendTrack snapshot; fills hero metrics when overview lacks fields. */
+  /** From tracker list provider snapshot; fills hero metrics when overview lacks fields. */
   activeAds?: number;
   totalTraffic?: number;
   rank?: number;

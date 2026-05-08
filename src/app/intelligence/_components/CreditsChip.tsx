@@ -60,7 +60,7 @@ export function CreditsChip() {
   return (
     <span
       className={`inline-flex items-center gap-1.5 rounded-md border px-2 py-1 text-[11px] font-semibold ${t.ring} ${t.bg} ${t.text}`}
-      title={`Remaining TrendTrack credits${usage.plan ? ` · ${usage.plan}` : ""}`}
+      title={`Remaining data credits${usage.plan ? ` · ${usage.plan}` : ""}`}
     >
       <CircleDollarSign className="h-3 w-3" aria-hidden />
       {formatCredits(usage.remaining)} credits
