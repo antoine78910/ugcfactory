@@ -28,18 +28,26 @@ export default function ClippingLinkToAdTemplatesPage() {
         const json = (await res.json().catch(() => null)) as { data?: unknown } | null;
         const rows = Array.isArray(json?.data) ? (json!.data as RunRow[]) : [];
         const fromRuns: LinkToAdTemplateSummary[] = rows
-          .filter((r) => Boolean(r?.id && r?.store_url && readUniverseFromExtracted(r.extracted)))
-          .map((r) => ({
-            normalizedUrl: r.store_url.trim().toLowerCase(),
-            storeUrl: r.store_url,
-            title: r.title ?? null,
-            thumbUrl: (readUniverseFromExtracted(r.extracted)?.packshotUrls?.[0] ??
-              readUniverseFromExtracted(r.extracted)?.neutralUploadUrl ??
+          .map((r) => {
+            const snap = readUniverseFromExtracted(r.extracted);
+            if (!r?.id || !r?.store_url || !snap) return null;
+            const thumbUrl =
+              (Array.isArray(snap.productOnlyImageUrls) ? snap.productOnlyImageUrls[0] : null) ??
+              (Array.isArray(snap.userPhotoUrls) ? snap.userPhotoUrls[0] : null) ??
+              snap.nanoBananaImageUrl ??
+              snap.neutralUploadUrl ??
               r.selected_image_url ??
-              null) as string | null,
-            sourceRunId: r.id,
-            createdAt: r.created_at,
-          }));
+              null;
+            return {
+              normalizedUrl: r.store_url.trim().toLowerCase(),
+              storeUrl: r.store_url,
+              title: r.title ?? null,
+              thumbUrl,
+              sourceRunId: r.id,
+              createdAt: r.created_at,
+            } satisfies LinkToAdTemplateSummary;
+          })
+          .filter((x): x is LinkToAdTemplateSummary => x !== null);
         const merged = [...local];
         const seen = new Set(local.map((x) => x.sourceRunId));
         for (const t of fromRuns) {
