@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import * as Dialog from "@radix-ui/react-dialog";
 import { Check, Layers, Loader2, Users, Wand2, X } from "lucide-react";
 import type { TTLookupResult } from "@/lib/intelligenceProvider";
@@ -14,7 +14,17 @@ import { WelcomeOverlay } from "./WelcomeOverlay";
 import { IntelligenceOnboarding } from "./IntelligenceOnboarding";
 import { IntelligenceOverviewDashboard } from "./IntelligenceOverviewDashboard";
 
-export function IntelligenceClient({ ownTrackerIds }: { ownTrackerIds: string[] }) {
+type IntelligencePanel = null | "brands" | "competitors" | "recreations";
+
+export function IntelligenceClient({
+  ownTrackerIds,
+  initialPanel = null,
+  initialCompetitorId = null,
+}: {
+  ownTrackerIds: string[];
+  initialPanel?: IntelligencePanel;
+  initialCompetitorId?: string | null;
+}) {
   const [ownTrackerIdsState, setOwnTrackerIdsState] = useState<string[]>(ownTrackerIds);
   const [selected, setSelected] = useState<SelectedTracker | null>(null);
   const [searchResult, setSearchResult] = useState<TTLookupResult | null>(null);
@@ -22,7 +32,7 @@ export function IntelligenceClient({ ownTrackerIds }: { ownTrackerIds: string[] 
   const [onboardingDone, setOnboardingDone] = useState(false);
   const [savingDashboardBrand, setSavingDashboardBrand] = useState(false);
   const [dashboardBrandMessage, setDashboardBrandMessage] = useState<string | null>(null);
-  const [panel, setPanel] = useState<null | "brands" | "competitors" | "recreations">(null);
+  const [panel, setPanel] = useState<IntelligencePanel>(initialPanel);
   const [competitorSortBy, setCompetitorSortBy] = useState<
     | "currentRank"
     | "reach"
@@ -57,6 +67,35 @@ export function IntelligenceClient({ ownTrackerIds }: { ownTrackerIds: string[] 
   }, []);
 
   const hasBrand = useMemo(() => ownTrackerIdsState.length > 0 || onboardingDone, [ownTrackerIdsState.length, onboardingDone]);
+
+  useEffect(() => {
+    if (!initialCompetitorId || !hasBrand) return;
+    let cancelled = false;
+    void fetch("/api/intelligence/competitors", { cache: "no-store" })
+      .then((r) => r.json().catch(() => []))
+      .then((rows) => {
+        if (cancelled || !Array.isArray(rows)) return;
+        const match = rows.find((row) => row && typeof row === "object" && row.id === initialCompetitorId) as
+          | { id: string; name?: string; lookupId?: string; domain?: string; logoUrl?: string | null }
+          | undefined;
+        if (!match) return;
+        setSelected(null);
+        setSearchResult(null);
+        setCompetitorPick({
+          lookup: {
+            id: (match.lookupId ?? match.id).trim(),
+            name: (match.name ?? "Competitor").trim() || "Competitor",
+            type: "advertiser",
+            domain: match.domain ?? undefined,
+            logoUrl: match.logoUrl ?? undefined,
+          },
+          isTracked: false,
+        });
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [initialCompetitorId, hasBrand]);
 
   const saveSearchAsDashboardBrand = useCallback(async () => {
     if (!searchResult || savingDashboardBrand) return;

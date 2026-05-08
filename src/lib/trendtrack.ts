@@ -114,6 +114,15 @@ export type TTAd = {
   adUrl?: string;
 };
 
+/**
+ * Returns true when a URL points to a raster/vector image rather than a video,
+ * based on the path extension (before any query string).
+ */
+function isImageUrl(url: string): boolean {
+  const path = url.split("?")[0] ?? url;
+  return /\.(jpe?g|png|gif|webp|avif|bmp|svg|tiff?)$/i.test(path);
+}
+
 function numOrUndefined(v: unknown): number | undefined {
   const n = typeof v === "number" ? v : typeof v === "string" ? Number(v) : NaN;
   return Number.isFinite(n) ? n : undefined;
@@ -224,6 +233,16 @@ function normalizeTTAd(raw: unknown): TTAd {
     content.description ??
     content.secondaryText) as unknown;
 
+  // Resolve the generic "mediaUrl" from the provider, then classify it as image or video
+  // based on the declared media type and the URL extension so we never store an image
+  // path in `videoUrl` (which would cause the <video> element to error and show "No preview").
+  const mediaRawUrl = String(
+    media.mediaUrl ?? media.media_url ?? media.sourceUrl ?? media.source_url ?? "",
+  ).trim();
+  const mediaTypeStr = String(media.type ?? media.mediaType ?? media.media_type ?? "").toLowerCase();
+  const mediaIsImage =
+    mediaRawUrl !== "" && (mediaTypeStr.includes("image") || isImageUrl(mediaRawUrl));
+
   const thumbnailUrl = (o.thumbnailUrl ??
     o.thumbnail_url ??
     o.thumbnail ??
@@ -231,6 +250,7 @@ function normalizeTTAd(raw: unknown): TTAd {
     media.thumbnail_url ??
     media.imageUrl ??
     media.image_url ??
+    (mediaIsImage ? mediaRawUrl : undefined) ??
     media.previewUrl ??
     media.preview ??
     media.image) as unknown;
@@ -243,16 +263,18 @@ function normalizeTTAd(raw: unknown): TTAd {
     media.preview_url ??
     media.videoPreviewUrl ??
     media.video_preview_url) as unknown;
-  const imageUrl =
-    (o.imageUrl ?? o.image_url ?? o.image ?? media.imageUrl ?? media.image_url ?? media.url) as unknown;
+  const imageUrl = (o.imageUrl ??
+    o.image_url ??
+    o.image ??
+    media.imageUrl ??
+    media.image_url ??
+    (mediaIsImage ? mediaRawUrl : undefined) ??
+    media.url) as unknown;
   const videoUrl = (o.videoUrl ??
     o.video_url ??
-    media.mediaUrl ??
-    media.media_url ??
+    (!mediaIsImage && mediaRawUrl !== "" ? mediaRawUrl : undefined) ??
     media.videoUrl ??
-    media.video_url ??
-    media.sourceUrl ??
-    media.source_url) as unknown;
+    media.video_url) as unknown;
 
   const platform = (o.platform ?? o.publisher_platform ?? o.publisherPlatform) as unknown;
   const reach = numOrUndefined(

@@ -143,6 +143,8 @@ export function AdCard({
 
   const clickable = typeof onView === "function";
   const showInlineVideo = Boolean(videoSrc && !thumbnail && !videoBroken);
+  // When the <video> errors (e.g. image URL, CORS), fall back to <img> using the same URL.
+  const brokenVideoFallbackImg = videoBroken && videoSrc && !thumbnail ? videoSrc : null;
 
   return (
     <div
@@ -205,6 +207,13 @@ export function AdCard({
                 setVideoBroken(true);
                 setVideoReady(false);
               }}
+            />
+          ) : brokenVideoFallbackImg ? (
+            <img
+              src={brokenVideoFallbackImg}
+              alt={ad.headline ?? ad.title ?? "Ad"}
+              className="h-full w-full object-cover"
+              onError={(e) => { (e.currentTarget as HTMLImageElement).style.display = "none"; }}
             />
           ) : (
             <div className="flex h-full w-full items-center justify-center text-xs text-white/30">
