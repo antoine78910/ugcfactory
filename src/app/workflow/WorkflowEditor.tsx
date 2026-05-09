@@ -3779,7 +3779,7 @@ function WorkflowFlowWorkspace({
         return;
       }
 
-      const now = Date.now();
+      const holdNow = Date.now();
       const hold = alignHoldCandidateRef.current;
       const sameGuide = (a: number | null | undefined, b: number | null | undefined) => {
         if (a == null && b == null) return true;
@@ -3792,11 +3792,16 @@ function WorkflowFlowWorkspace({
         sameGuide(hold.guideX, bestX?.guide) &&
         sameGuide(hold.guideY, bestY?.guide);
       if (!isSameCandidate) {
-        alignHoldCandidateRef.current = { nodeId: node.id, guideX: bestX?.guide ?? null, guideY: bestY?.guide ?? null, sinceMs: now };
+        alignHoldCandidateRef.current = {
+          nodeId: node.id,
+          guideX: bestX?.guide ?? null,
+          guideY: bestY?.guide ?? null,
+          sinceMs: holdNow,
+        };
         setAlignGuides({ x: null, y: null });
         return;
       }
-      if (now - hold.sinceMs < ALIGN_HOLD_MS) {
+      if (holdNow - hold.sinceMs < ALIGN_HOLD_MS) {
         setAlignGuides({ x: null, y: null });
         return;
       }
