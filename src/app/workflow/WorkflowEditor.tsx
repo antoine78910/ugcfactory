@@ -5389,14 +5389,21 @@ export function WorkflowEditor({
           setSpaceSource(cloud.isOwn ? "local" : "shared");
           setSpaceRole(cloud.role);
           setSpaceName(cloud.name || "Untitled workflow");
-          setPublishedTemplateId(cloud.publishedCommunityTemplateId ?? null);
+          // Prefer cloud's publishedCommunityTemplateId, but fall back to the local value if
+          // the cloud is missing it — this happens when router.push unmounted the editor before
+          // the debounced cloud-save could fire with the newly set publishedCommunityTemplateId.
+          const mergedTemplateId =
+            (cloud.publishedCommunityTemplateId ?? "").trim() ||
+            (localMeta.publishedCommunityTemplateId ?? "").trim() ||
+            null;
+          setPublishedTemplateId(mergedTemplateId);
           setWorkflowProject(cloud.state);
           saveProjectForSpace(storageScope, resolvedSpaceId, cloud.state);
           updateSpaceMeta(storageScope, resolvedSpaceId, {
             name: cloud.name || localMeta.name,
             updatedAt: Number.isFinite(cloudUpdatedAtMs) ? cloudUpdatedAtMs : Date.now(),
             previewDataUrl: cloud.previewDataUrl ?? undefined,
-            publishedCommunityTemplateId: cloud.publishedCommunityTemplateId ?? undefined,
+            publishedCommunityTemplateId: mergedTemplateId ?? undefined,
           });
           // Hydration already saved everything — skip the reactive save effects that
           // fire on the initial workflowProject assignment to avoid a timestamp bump.
@@ -5639,7 +5646,14 @@ export function WorkflowEditor({
 
         lastCloudUpdatedAtRef.current = cloud.updatedAt;
         setSpaceName(cloud.name || "Untitled workflow");
-        setPublishedTemplateId(cloud.publishedCommunityTemplateId ?? null);
+        // Merge: if the cloud is still missing publishedCommunityTemplateId (e.g. the
+        // eager save from publishing raced with the visibility refetch), keep whatever
+        // is currently in React state so the CTA doesn't regress to "Publish template".
+        const visibilityMergedTemplateId =
+          (cloud.publishedCommunityTemplateId ?? "").trim() ||
+          publishedTemplateId?.trim() ||
+          null;
+        setPublishedTemplateId(visibilityMergedTemplateId);
         // Prevent the reactive save effects from re-saving what we just fetched.
         skipNextCloudSaveRef.current = true;
         setWorkflowProject(cloud.state);
@@ -5651,7 +5665,7 @@ export function WorkflowEditor({
             name: cloud.name || undefined,
             updatedAt: cloudMs,
             previewDataUrl: cloud.previewDataUrl ?? undefined,
-            publishedCommunityTemplateId: cloud.publishedCommunityTemplateId ?? undefined,
+            publishedCommunityTemplateId: visibilityMergedTemplateId ?? undefined,
           });
         }
       })();
@@ -5659,7 +5673,7 @@ export function WorkflowEditor({
 
     document.addEventListener("visibilitychange", handleVisibility);
     return () => document.removeEventListener("visibilitychange", handleVisibility);
-  }, [workflowHydrated, authUserId, resolvedSpaceId, spaceSource, storageScope]);
+  }, [workflowHydrated, authUserId, resolvedSpaceId, spaceSource, storageScope, publishedTemplateId]);
 
   const workflowPreviewSavedDataUrl = useMemo(
     () => buildWorkflowPreviewDataUrl(workflowProject),
@@ -5806,6 +5820,19 @@ export function WorkflowEditor({
         if (storageScope) {
           updateSpaceMeta(storageScope, resolvedSpaceId, { publishedCommunityTemplateId: publishedId });
         }
+        // Eagerly push publishedCommunityTemplateId to the cloud before navigating away.
+        // The debounced cloud-save effect won't fire after router.push unmounts this component,
+        // so without this the cloud record keeps publishedCommunityTemplateId = null and the
+        // "Push modification" CTA reverts to "Publish template" on every subsequent load.
+        void saveCloudWorkflowSpace({
+          spaceId: resolvedSpaceId,
+          name: spaceName,
+          state: workflowProject,
+          publishedCommunityTemplateId: publishedId,
+          expectedUpdatedAt: lastCloudUpdatedAtRef.current,
+        }).then((res) => {
+          if (res.ok && res.updatedAt) lastCloudUpdatedAtRef.current = res.updatedAt;
+        });
         router.push(`/workflow/template/${encodeURIComponent(`community:${publishedId}`)}`);
       }
     } catch {
@@ -5819,6 +5846,7 @@ export function WorkflowEditor({
     publishTemplateBlurb,
     publishedTemplateId,
     router,
+    spaceName,
     workflowProject,
     storageScope,
     resolvedSpaceId,
