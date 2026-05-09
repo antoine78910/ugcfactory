@@ -9489,7 +9489,7 @@ export default function LinkToAdUniverse({
       </div>
     ) : null}
     <LinkToAdUrlFlowProgressOverlay
-      open={showUrlFlowProgressOverlay && isWorking}
+      open={false}
       assetKind={linkToAdAssetType === "app" ? "app" : "product"}
       stage={stage}
       serverPipelineStepIndex={serverPipelineStepIndex}
