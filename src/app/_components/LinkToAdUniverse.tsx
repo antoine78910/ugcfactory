@@ -1473,6 +1473,8 @@ export default function LinkToAdUniverse({
   const [isUploadingPersonaPhotos, setIsUploadingPersonaPhotos] = useState(false);
   const personaPhotoInputRef = useRef<HTMLInputElement>(null);
   const [imgError, setImgError] = useState(false);
+  // Try proxy first (better against hotlink/CORS), then fall back to direct URL.
+  const [previewDirectFallback, setPreviewDirectFallback] = useState(false);
   const [showAiImagePicker, setShowAiImagePicker] = useState(false);
   const [brandFaviconFailed, setBrandFaviconFailed] = useState(false);
   const photoInputRef = useRef<HTMLInputElement>(null);
@@ -2865,6 +2867,7 @@ export default function LinkToAdUniverse({
 
   useEffect(() => {
     setImgError(false);
+    setPreviewDirectFallback(false);
   }, [resolvedPreviewUrl]);
   useEffect(() => {
     if (aiAlternativeUrls.length > 0) return;
@@ -7000,13 +7003,19 @@ export default function LinkToAdUniverse({
                     {resolvedPreviewUrl && !imgError ? (
                       // eslint-disable-next-line @next/next/no-img-element
                       <img
-                        key={resolvedPreviewUrl}
-                        src={proxiedMediaSrc(resolvedPreviewUrl)}
+                        key={`${resolvedPreviewUrl}-${previewDirectFallback ? "direct" : "proxy"}`}
+                        src={previewDirectFallback ? resolvedPreviewUrl : proxiedMediaSrc(resolvedPreviewUrl)}
                         alt="Product"
                         className="h-full w-full object-cover object-center"
                         loading="eager"
                         referrerPolicy="no-referrer"
-                        onError={() => setImgError(true)}
+                        onError={() => {
+                          if (!previewDirectFallback) {
+                            setPreviewDirectFallback(true);
+                            return;
+                          }
+                          setImgError(true);
+                        }}
                       />
                     ) : (
                       <div className="flex h-full items-center justify-center px-1 text-center text-[10px] leading-tight text-white/35">
@@ -7300,13 +7309,19 @@ export default function LinkToAdUniverse({
                       {resolvedPreviewUrl && !imgError ? (
                         // eslint-disable-next-line @next/next/no-img-element
                         <img
-                          key={resolvedPreviewUrl}
-                          src={proxiedMediaSrc(resolvedPreviewUrl)}
+                          key={`${resolvedPreviewUrl}-${previewDirectFallback ? "direct" : "proxy"}`}
+                          src={previewDirectFallback ? resolvedPreviewUrl : proxiedMediaSrc(resolvedPreviewUrl)}
                           alt="Product"
                           className="h-full w-full object-cover object-center"
                           loading="eager"
                           referrerPolicy="no-referrer"
-                          onError={() => setImgError(true)}
+                          onError={() => {
+                            if (!previewDirectFallback) {
+                              setPreviewDirectFallback(true);
+                              return;
+                            }
+                            setImgError(true);
+                          }}
                         />
                       ) : (
                         <div className="flex h-full items-center justify-center px-1 text-center text-[10px] leading-tight text-white/35">
