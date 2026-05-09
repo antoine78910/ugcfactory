@@ -4,15 +4,17 @@ import type { WorkflowCanvasNode } from "./workflowFlowTypes";
 /**
  * Fields on a workflow node's `data` that are runtime-only / per-account and
  * should not ship inside a published community template:
- *  - generated outputs (output preview URLs and frame data URLs are tied to
- *    the original creator's media bucket entries)
- *  - reference uploads (often `blob:` URLs that won't resolve elsewhere)
+ *  - reference inputs (often `blob:` URLs that won't resolve on other accounts,
+ *    or private creator media — start/end frames, reference photos/videos)
  *  - in-flight job descriptors
  *  - last-run timestamps
+ *
+ * NOTE: `outputPreviewUrl` and `outputMediaKind` are intentionally kept so that
+ * generated results remain visible when the template is loaded by other users.
+ * These are stable HTTPS URLs (Supabase Storage / provider CDN) that are already
+ * publicly accessible (the same URLs back the template thumbnail cards).
  */
 const EPHEMERAL_DATA_FIELDS = [
-  "outputPreviewUrl",
-  "outputMediaKind",
   "referencePreviewUrl",
   "referenceSource",
   "referenceMediaKind",
