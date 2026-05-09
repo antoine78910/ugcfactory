@@ -27,6 +27,27 @@ const DEFAULT_HOOK_DURATION = 10;
 /** Countdown shown before each phase. */
 const COUNTDOWN_SECONDS = 3;
 
+/**
+ * Top position of the hook title as a fraction of canvas height.
+ * 0.18 keeps the title in the upper third — over the webcam, above the face.
+ */
+const HOOK_TITLE_TOP_RATIO = 0.18;
+/** Maximum title width as a fraction of canvas width. */
+const HOOK_TITLE_MAX_WIDTH_RATIO = 0.88;
+/** Base font size (px) at the canvas's native 1080px width. Scales down if too wide. */
+const HOOK_TITLE_BASE_FONT_PX = 78;
+
+/**
+ * Suggested hook titles. Newlines split lines; users can edit freely after picking.
+ */
+const HOOK_TITLE_EXAMPLES: readonly string[] = [
+  "Making $600 without talking",
+  "Making a doctor salary in 67 min\n(watch me cook)",
+  "Making $1k without speaking challenge",
+  "Making $10k/mo without speaking challenge\n(watch me cook)",
+  "Making $1k in a minute without speaking challenge",
+];
+
 type Stage =
   | "permission"
   | "setup"
@@ -176,6 +197,63 @@ function drawCoverRounded(
   ctx.restore();
 }
 
+/**
+ * Draws a multi-line hook title centered horizontally near the top of the canvas.
+ * Auto-scales the font down so the widest line fits within `maxWidth`. White fill
+ * with a thick black stroke + drop shadow for legibility against any webcam feed.
+ */
+function drawHookTitle(
+  ctx: CanvasRenderingContext2D,
+  text: string,
+  canvasWidth: number,
+  canvasHeight: number,
+): void {
+  const trimmed = text.trim();
+  if (!trimmed) return;
+  const lines = text.split(/\r?\n/).map((l) => l.trimEnd());
+  while (lines.length > 0 && lines[lines.length - 1] === "") lines.pop();
+  while (lines.length > 0 && lines[0] === "") lines.shift();
+  if (lines.length === 0) return;
+
+  const maxWidth = canvasWidth * HOOK_TITLE_MAX_WIDTH_RATIO;
+  let fontSize = HOOK_TITLE_BASE_FONT_PX;
+  const fontFamily = '"Inter", "Helvetica Neue", Helvetica, Arial, sans-serif';
+  ctx.save();
+  ctx.font = `900 ${fontSize}px ${fontFamily}`;
+  let widest = 0;
+  for (const line of lines) {
+    const w = ctx.measureText(line).width;
+    if (w > widest) widest = w;
+  }
+  if (widest > maxWidth && widest > 0) {
+    fontSize = Math.max(28, Math.floor(fontSize * (maxWidth / widest)));
+    ctx.font = `900 ${fontSize}px ${fontFamily}`;
+  }
+
+  const lineHeight = Math.round(fontSize * 1.18);
+  const topY = Math.round(canvasHeight * HOOK_TITLE_TOP_RATIO);
+  const centerX = Math.round(canvasWidth / 2);
+
+  ctx.textAlign = "center";
+  ctx.textBaseline = "top";
+  ctx.lineJoin = "round";
+  ctx.miterLimit = 2;
+  ctx.shadowColor = "rgba(0, 0, 0, 0.55)";
+  ctx.shadowBlur = 22;
+  ctx.shadowOffsetX = 0;
+  ctx.shadowOffsetY = 6;
+  ctx.strokeStyle = "rgba(0, 0, 0, 0.92)";
+  ctx.lineWidth = Math.max(6, Math.round(fontSize * 0.13));
+  ctx.fillStyle = "#ffffff";
+
+  for (let i = 0; i < lines.length; i++) {
+    const y = topY + i * lineHeight;
+    ctx.strokeText(lines[i], centerX, y);
+    ctx.fillText(lines[i], centerX, y);
+  }
+  ctx.restore();
+}
+
 function fitCenteredRect(
   boundsX: number,
   boundsY: number,
@@ -230,6 +308,7 @@ export default function ClippingStudio() {
   const [cameras, setCameras] = useState<CamDevice[]>([]);
   const [selectedCameraId, setSelectedCameraId] = useState<string | null>(null);
   const [mirrorWebcam, setMirrorWebcam] = useState(true);
+  const [hookTitle, setHookTitle] = useState<string>("");
 
   const [templateFile, setTemplateFile] = useState<File | null>(null);
   const [templateObjectUrl, setTemplateObjectUrl] = useState<string | null>(null);
@@ -265,6 +344,15 @@ export default function ClippingStudio() {
   useEffect(() => {
     stageRef.current = stage;
   }, [stage]);
+
+  /**
+   * Latest hook title exposed to the render loop. Kept in a ref so typing in
+   * the textarea updates the canvas live without re-creating the draw loop.
+   */
+  const hookTitleRef = useRef<string>("");
+  useEffect(() => {
+    hookTitleRef.current = hookTitle;
+  }, [hookTitle]);
 
   /* ------------------------------ Cleanup ------------------------------ */
   const stopRenderLoop = useCallback(() => {
@@ -587,6 +675,8 @@ export default function ClippingStudio() {
         ctx.lineWidth = 3;
         ctx.stroke();
         ctx.restore();
+
+        drawHookTitle(ctx, hookTitleRef.current, CANVAS_WIDTH, CANVAS_HEIGHT);
       }
 
       if (previewCanvas) {
@@ -1244,6 +1334,53 @@ export default function ClippingStudio() {
               >
                 Choose video
               </button>
+            </div>
+
+            <div className="flex flex-col gap-2 text-sm">
+              <label
+                htmlFor="hook-title-input"
+                className="text-xs font-semibold uppercase tracking-widest text-white/45"
+              >
+                Hook title
+              </label>
+              <textarea
+                id="hook-title-input"
+                value={hookTitle}
+                onChange={(e) => setHookTitle(e.target.value)}
+                placeholder="Optional title shown over the hook"
+                rows={2}
+                disabled={!canEditControls}
+                className="rounded-xl border border-white/10 bg-black/40 px-3 py-2 text-xs text-white/85 placeholder:text-white/30 focus:border-violet-400/60 focus:outline-none disabled:cursor-not-allowed disabled:opacity-50"
+              />
+              <div className="flex flex-col gap-1">
+                <span className="text-[10px] uppercase tracking-widest text-white/35">
+                  Examples
+                </span>
+                <div className="flex flex-col gap-1">
+                  {HOOK_TITLE_EXAMPLES.map((example) => (
+                    <button
+                      key={example}
+                      type="button"
+                      onClick={() => setHookTitle(example)}
+                      disabled={!canEditControls}
+                      title={example}
+                      className="truncate rounded-lg border border-white/10 bg-white/[0.03] px-2 py-1 text-left text-[10px] font-medium text-white/75 transition hover:border-violet-400/40 hover:bg-white/[0.07] hover:text-white disabled:cursor-not-allowed disabled:opacity-40"
+                    >
+                      {example.replace(/\n/g, " · ")}
+                    </button>
+                  ))}
+                  {hookTitle ? (
+                    <button
+                      type="button"
+                      onClick={() => setHookTitle("")}
+                      disabled={!canEditControls}
+                      className="self-start rounded-lg border border-white/10 bg-transparent px-2 py-1 text-[10px] font-medium text-white/45 transition hover:text-white/75 disabled:cursor-not-allowed disabled:opacity-40"
+                    >
+                      Clear title
+                    </button>
+                  ) : null}
+                </div>
+              </div>
             </div>
 
             <div className="flex flex-col gap-2 text-sm">
