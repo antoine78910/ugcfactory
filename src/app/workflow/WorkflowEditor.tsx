@@ -2682,6 +2682,8 @@ function WorkflowFlowWorkspace({
   const [alignGuides, setAlignGuides] = useState<{ x: number | null; y: number | null }>({ x: null, y: null });
   const alignHoldCandidateRef = useRef<{ nodeId: string; guideX: number | null; guideY: number | null; sinceMs: number } | null>(null);
   const lastAlignTargetRef = useRef<{ nodeId: string; x: number | null; y: number | null } | null>(null);
+  /** Timestamp of last onNodeDrag alignment pass — throttled to ~60 fps. */
+  const lastDragAlignAtRef = useRef(0);
   const [tool, setTool] = useState<Tool>("pan");
   const [addOpen, setAddOpen] = useState(false);
   const [frameOpen, setFrameOpen] = useState(false);
@@ -2867,6 +2869,12 @@ function WorkflowFlowWorkspace({
     },
     [setProject, setNodes],
   );
+
+  // Stable ref to project so callbacks can read the latest value without
+  // having to list `project` (or `project.pages`) as a dependency, which
+  // would cause all context consumers to re-render on every node change.
+  const projectRef = useRef(project);
+  projectRef.current = project;
 
   /**
    * Remove a node and any incident edges, regardless of which page it lives on.
@@ -3704,6 +3712,11 @@ function WorkflowFlowWorkspace({
     (_event: unknown, node: WorkflowCanvasNode) => {
       if (readOnly) return;
       if (node.type === "workflowGroup") return;
+      // Throttle the alignment computation to ~60 fps to keep dragging smooth
+      // with many nodes on the canvas.
+      const now = performance.now();
+      if (now - lastDragAlignAtRef.current < 16) return;
+      lastDragAlignAtRef.current = now;
       const ALIGN_HOLD_MS = 280;
       const selected = (getNodes() as WorkflowCanvasNode[]).filter((n) => n.selected);
       if (selected.length !== 1 || selected[0]?.id !== node.id) {
@@ -4031,7 +4044,7 @@ function WorkflowFlowWorkspace({
         const liveNodes = nodesEdgesRef.current?.nodes ?? [];
         let targetNode: WorkflowCanvasNode | undefined = liveNodes.find((n) => n.id === nodeId);
         if (!targetNode) {
-          for (const p of project.pages) {
+          for (const p of projectRef.current.pages) {
             const found = p.nodes.find((n) => n.id === nodeId);
             if (found) {
               targetNode = found as WorkflowCanvasNode;
@@ -4058,7 +4071,7 @@ function WorkflowFlowWorkspace({
       }
       patchNodeDataAcrossPages(nodeId, patch);
     },
-    [runFromHereParamLock, project.pages, patchNodeDataAcrossPages],
+    [runFromHereParamLock, patchNodeDataAcrossPages],
   );
 
   const cloneSelection = useCallback(
@@ -4433,6 +4446,18 @@ function WorkflowFlowWorkspace({
     return () => window.removeEventListener("keydown", onKey);
   }, [readOnly, tool, setTool]);
 
+  const defaultEdgeOptions = useMemo(
+    () => ({
+      style: { stroke: "rgba(167, 139, 250, 0.42)", strokeWidth: 2 },
+      ...(!readOnly && tool === "cutTarget"
+        ? { interactionWidth: 44 }
+        : !readOnly && tool === "select"
+          ? { interactionWidth: 28 }
+          : {}),
+    }),
+    [readOnly, tool],
+  );
+
   return (
     <div
       ref={workspaceRootRef}
@@ -4644,14 +4669,7 @@ function WorkflowFlowWorkspace({
             !readOnly && tool === "stickyPlace" && "workflow-sticky-place-mode",
             !readOnly && tool === "cutTarget" && "workflow-cut-target-mode",
           )}
-          defaultEdgeOptions={{
-            style: { stroke: "rgba(167, 139, 250, 0.42)", strokeWidth: 2 },
-            ...(!readOnly && tool === "cutTarget"
-              ? { interactionWidth: 44 }
-              : !readOnly && tool === "select"
-                ? { interactionWidth: 28 }
-                : {}),
-          }}
+          defaultEdgeOptions={defaultEdgeOptions}
         >
           {!readOnly && tool === "cutTarget" && cutTrailPoints.length >= 1 ? (
             <svg className="pointer-events-none absolute inset-0 z-[130]" aria-hidden>

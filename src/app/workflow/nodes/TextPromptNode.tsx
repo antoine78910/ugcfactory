@@ -2,7 +2,7 @@
 
 import { Handle, Position, type Node, type NodeProps } from "@xyflow/react";
 import { FileText, Type } from "lucide-react";
-import { useCallback, useEffect, useRef, useState } from "react";
+import { memo, useCallback, useEffect, useRef, useState } from "react";
 
 import { PromptEnhanceCornerButton } from "@/app/_components/PromptEnhanceCornerButton";
 import { cn } from "@/lib/utils";
@@ -19,7 +19,7 @@ export type TextPromptNodeType = Node<TextPromptNodeData, "textPrompt">;
 
 const defaultData: TextPromptNodeData = { prompt: "" };
 
-export function TextPromptNode({ id, data: rawData, selected }: NodeProps<TextPromptNodeType>) {
+function TextPromptNodeBase({ id, data: rawData, selected }: NodeProps<TextPromptNodeType>) {
   const data = { ...defaultData, ...rawData };
   const patchAll = useWorkflowNodePatch();
   const patch = useCallback((p: Partial<TextPromptNodeData>) => patchAll(id, p), [id, patchAll]);
@@ -99,3 +99,5 @@ export function TextPromptNode({ id, data: rawData, selected }: NodeProps<TextPr
     </>
   );
 }
+
+export const TextPromptNode = memo(TextPromptNodeBase);

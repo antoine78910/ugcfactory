@@ -2,7 +2,7 @@
 
 import { NodeResizer, useReactFlow, type Node, type NodeProps } from "@xyflow/react";
 import { Maximize2, Minimize2, Pencil } from "lucide-react";
-import { useCallback, useEffect, useRef, useState } from "react";
+import { memo, useCallback, useEffect, useRef, useState } from "react";
 import { toast } from "sonner";
 
 import { cn } from "@/lib/utils";
@@ -52,7 +52,7 @@ function toNumberSize(v: unknown): number | null {
   return null;
 }
 
-export function WorkflowGroupNode({ id, data, selected, width, height }: NodeProps<WorkflowGroupNodeType>) {
+function WorkflowGroupNodeBase({ id, data, selected, width, height }: NodeProps<WorkflowGroupNodeType>) {
   const patch = useWorkflowNodePatch();
   const { setNodes, getNodes } = useReactFlow<WorkflowGroupNodeType>();
   const collapsed = Boolean(data.collapsed);
@@ -327,3 +327,5 @@ export function WorkflowGroupNode({ id, data, selected, width, height }: NodePro
     </>
   );
 }
+
+export const WorkflowGroupNode = memo(WorkflowGroupNodeBase);

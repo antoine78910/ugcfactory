@@ -33,7 +33,7 @@ import {
   Wand2,
   X,
 } from "lucide-react";
-import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
+import { memo, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { HoverCard } from "radix-ui";
 import { toast } from "sonner";
@@ -667,7 +667,7 @@ function adAssetNodeLooksLikeImageUrl(s: string): boolean {
   return /\.(png|jpe?g|webp|gif)(\?|$)/i.test(u) || u.includes("/image");
 }
 
-export function AdAssetNode({ id, data, selected }: NodeProps<AdAssetNodeType>) {
+function AdAssetNodeBase({ id, data, selected }: NodeProps<AdAssetNodeType>) {
   const patch = useWorkflowNodePatch();
   const { getNodes, getEdges, setNodes, setEdges } = useReactFlow();
   const storeApi = useStoreApi();
@@ -5989,3 +5989,5 @@ export function AdAssetNode({ id, data, selected }: NodeProps<AdAssetNodeType>) 
     </>
   );
 }
+
+export const AdAssetNode = memo(AdAssetNodeBase);

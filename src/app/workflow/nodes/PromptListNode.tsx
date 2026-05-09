@@ -252,7 +252,7 @@ const PromptListMediaGalleryCell = memo(function PromptListMediaGalleryCell({
   );
 });
 
-export function PromptListNode({ id, data: rawData, selected }: NodeProps<PromptListNodeType>) {
+function PromptListNodeBase({ id, data: rawData, selected }: NodeProps<PromptListNodeType>) {
   const data = { ...PROMPT_LIST_DEFAULT_DATA, ...rawData };
   const mode = data.mode ?? "prompts";
   const contentKind = data.contentKind ?? "text";
@@ -791,3 +791,5 @@ export function PromptListNode({ id, data: rawData, selected }: NodeProps<Prompt
     </>
   );
 }
+
+export const PromptListNode = memo(PromptListNodeBase);

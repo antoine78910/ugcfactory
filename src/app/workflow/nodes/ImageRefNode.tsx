@@ -3,7 +3,7 @@
 import { Handle, Position, useReactFlow, type Node, type NodeProps } from "@xyflow/react";
 import { Clapperboard, CopyPlus, ImageIcon, Loader2, Maximize2, Trash2, Upload, X } from "lucide-react";
 import { createPortal } from "react-dom";
-import { useCallback, useEffect, useMemo, useRef, useState, type ChangeEvent } from "react";
+import { memo, useCallback, useEffect, useMemo, useRef, useState, type ChangeEvent } from "react";
 import { toast } from "sonner";
 
 import { cn } from "@/lib/utils";
@@ -133,7 +133,7 @@ function frameDimensions(intrinsicAspect?: number): { width: number; height: num
 
 const noop = () => {};
 
-export function ImageRefNode({ id, data }: NodeProps<ImageRefNodeType>) {
+function ImageRefNodeBase({ id, data }: NodeProps<ImageRefNodeType>) {
   const { getNodes, getEdges, setNodes, setEdges } = useReactFlow();
   /**
    * Cross-page-safe data patch (works even if user navigates pages mid-upload).
@@ -712,3 +712,5 @@ export function ImageRefNode({ id, data }: NodeProps<ImageRefNodeType>) {
     </>
   );
 }
+
+export const ImageRefNode = memo(ImageRefNodeBase);

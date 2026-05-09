@@ -2,7 +2,7 @@
 
 import { Handle, Position, useReactFlow, type NodeProps } from "@xyflow/react";
 import { GripVertical, Trash2 } from "lucide-react";
-import { useCallback, useEffect, useRef } from "react";
+import { memo, useCallback, useEffect, useRef } from "react";
 import { toast } from "sonner";
 
 import { cn } from "@/lib/utils";
@@ -29,7 +29,7 @@ function mergeStickyData(data: StickyNoteNodeData): StickyNoteNodeData {
   return { ...STICKY_NOTE_DEFAULT_DATA, ...data };
 }
 
-export function StickyNoteNode({ id, data: rawData, selected }: NodeProps<StickyNoteNodeType>) {
+function StickyNoteNodeBase({ id, data: rawData, selected }: NodeProps<StickyNoteNodeType>) {
   const data = mergeStickyData(rawData);
   const patchAll = useWorkflowNodePatch();
   const editorRef = useRef<HTMLDivElement>(null);
@@ -186,3 +186,5 @@ export function StickyNoteNode({ id, data: rawData, selected }: NodeProps<Sticky
     </>
   );
 }
+
+export const StickyNoteNode = memo(StickyNoteNodeBase);
