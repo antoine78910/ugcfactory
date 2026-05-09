@@ -5,6 +5,7 @@ import type { TTAd, TTLookupResult } from "@/lib/intelligenceProvider";
 import { AdModal } from "./AdModal";
 import { AdCard } from "./AdCard";
 import { HooksTable } from "./HooksTable";
+import { filterAdsByMedia, type MediaFilter } from "./mediaFilter";
 import { Copy } from "lucide-react";
 import { cn } from "@/lib/utils";
 
@@ -18,18 +19,6 @@ type SortBy =
   | "rankDelta14d"
   | "rankDelta30d"
   | "longestRunning";
-
-type MediaFilter = "videos" | "all" | "images";
-
-function filterAdsByMedia(rows: TTAd[], mediaFilter: MediaFilter): TTAd[] {
-  return rows.filter((ad) => {
-    const hasVideo = Boolean(ad.videoUrl?.trim());
-    const hasImage = Boolean(ad.thumbnailUrl || ad.previewUrl || ad.imageUrl);
-    if (mediaFilter === "videos") return hasVideo;
-    if (mediaFilter === "images") return !hasVideo && hasImage;
-    return hasVideo || hasImage;
-  });
-}
 
 type IntelError =
   | { code: "auth"; message: string }

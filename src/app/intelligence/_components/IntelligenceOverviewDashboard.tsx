@@ -17,6 +17,7 @@ import type { TTAd, TTTracker } from "@/lib/intelligenceProvider";
 import type { IntelligenceCompetitor } from "@/app/api/intelligence/competitors/route";
 import { AdCard } from "./AdCard";
 import { HooksTable } from "./HooksTable";
+import { filterAdsByMedia, type MediaFilter } from "./mediaFilter";
 import { cn } from "@/lib/utils";
 
 type SortBy =
@@ -29,18 +30,6 @@ type SortBy =
   | "rankDelta14d"
   | "rankDelta30d"
   | "longestRunning";
-type MediaFilter = "videos" | "all" | "images";
-
-function filterAdsByMedia(rows: TTAd[], mediaFilter: MediaFilter): TTAd[] {
-  return rows.filter((ad) => {
-    const hasVideo = Boolean(ad.videoUrl?.trim());
-    const hasImage = Boolean(ad.thumbnailUrl || ad.previewUrl || ad.imageUrl);
-    if (mediaFilter === "videos") return hasVideo;
-    if (mediaFilter === "images") return !hasVideo && hasImage;
-    return hasVideo || hasImage;
-  });
-}
-
 const SORT_TABS: { value: SortBy; label: string; icon: React.ReactNode; description: string }[] = [
   {
     value: "currentRank",

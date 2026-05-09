@@ -12,6 +12,7 @@ import { AdModal } from "./AdModal";
 import { HooksTable } from "./HooksTable";
 import { AnglesChart } from "./AnglesChart";
 import { OpportunitiesPanel } from "./OpportunitiesPanel";
+import { filterAdsByMedia, type MediaFilter } from "./mediaFilter";
 
 function BlockHeader({
   title,
@@ -105,18 +106,6 @@ function normalizeAdsPayload(payload: unknown): TTAd[] {
     if (Array.isArray(obj.data)) return obj.data as TTAd[];
   }
   return [];
-}
-
-type MediaFilter = "videos" | "all" | "images";
-
-function filterAdsByMedia(rows: TTAd[], mediaFilter: MediaFilter): TTAd[] {
-  return rows.filter((ad) => {
-    const hasVideo = Boolean(ad.videoUrl?.trim());
-    const hasImage = Boolean(ad.thumbnailUrl || ad.previewUrl || ad.imageUrl);
-    if (mediaFilter === "videos") return hasVideo;
-    if (mediaFilter === "images") return !hasVideo && hasImage;
-    return hasVideo || hasImage;
-  });
 }
 
 export function TrackerDetail({
