@@ -97,6 +97,12 @@ interface CamDevice {
   label: string;
 }
 
+type ClippingTemplateLibraryItem = {
+  filename: string;
+  label: string;
+  url: string;
+};
+
 type ClippingTemplateId = "classic" | "split_focus_bottom_webcam";
 
 const TEMPLATE_TOP_RATIO = 0.75;
@@ -344,6 +350,9 @@ export default function ClippingStudio() {
   const [templateFile, setTemplateFile] = useState<File | null>(null);
   const [templateObjectUrl, setTemplateObjectUrl] = useState<string | null>(null);
   const [templateDurationSec, setTemplateDurationSec] = useState<number | null>(null);
+  const [templateLibrary, setTemplateLibrary] = useState<ClippingTemplateLibraryItem[]>([]);
+  const [templateLibraryLoading, setTemplateLibraryLoading] = useState(false);
+  const [selectedLibraryTemplateUrl, setSelectedLibraryTemplateUrl] = useState<string | null>(null);
 
   const [exportedBlob, setExportedBlob] = useState<Blob | null>(null);
   const [exportedUrl, setExportedUrl] = useState<string | null>(null);
@@ -461,12 +470,37 @@ export default function ClippingStudio() {
     }
   }, []);
 
+  const revokeTemplateObjectUrlIfNeeded = useCallback((url: string | null | undefined) => {
+    const u = (url ?? "").trim();
+    if (!u.startsWith("blob:")) return;
+    try {
+      URL.revokeObjectURL(u);
+    } catch {
+      /* ignore */
+    }
+  }, []);
+
+  const probeTemplateDuration = useCallback((url: string) => {
+    const probe = document.createElement("video");
+    probe.preload = "metadata";
+    probe.muted = true;
+    probe.src = url;
+    probe.onloadedmetadata = () => {
+      if (Number.isFinite(probe.duration) && probe.duration > 0) {
+        setTemplateDurationSec(probe.duration);
+      }
+    };
+    probe.onerror = () => {
+      setTemplateDurationSec(null);
+    };
+  }, []);
+
   useEffect(() => {
     return () => {
       stopRenderLoop();
       clearTimers();
       stopAllStreams();
-      if (templateObjectUrl) URL.revokeObjectURL(templateObjectUrl);
+      revokeTemplateObjectUrlIfNeeded(templateObjectUrl);
       if (exportedUrl) URL.revokeObjectURL(exportedUrl);
     };
     // We deliberately run cleanup once on unmount only.
@@ -562,29 +596,66 @@ export default function ClippingStudio() {
   /* --------------------------- Template upload --------------------------- */
   const onTemplateFile = useCallback(
     (file: File | null) => {
-      if (templateObjectUrl) URL.revokeObjectURL(templateObjectUrl);
+      revokeTemplateObjectUrlIfNeeded(templateObjectUrl);
       if (!file) {
         setTemplateFile(null);
         setTemplateObjectUrl(null);
+        setSelectedLibraryTemplateUrl(null);
         setTemplateDurationSec(null);
         return;
       }
       const url = URL.createObjectURL(file);
       setTemplateFile(file);
       setTemplateObjectUrl(url);
-
-      const probe = document.createElement("video");
-      probe.preload = "metadata";
-      probe.muted = true;
-      probe.src = url;
-      probe.onloadedmetadata = () => {
-        if (Number.isFinite(probe.duration) && probe.duration > 0) {
-          setTemplateDurationSec(probe.duration);
-        }
-      };
+      setSelectedLibraryTemplateUrl(null);
+      probeTemplateDuration(url);
     },
-    [templateObjectUrl],
+    [probeTemplateDuration, revokeTemplateObjectUrlIfNeeded, templateObjectUrl],
   );
+
+  const useLibraryTemplate = useCallback(
+    (template: ClippingTemplateLibraryItem) => {
+      revokeTemplateObjectUrlIfNeeded(templateObjectUrl);
+      setTemplateFile(null);
+      setTemplateObjectUrl(template.url);
+      setSelectedLibraryTemplateUrl(template.url);
+      probeTemplateDuration(template.url);
+    },
+    [probeTemplateDuration, revokeTemplateObjectUrlIfNeeded, templateObjectUrl],
+  );
+
+  useEffect(() => {
+    let cancelled = false;
+    const load = async () => {
+      setTemplateLibraryLoading(true);
+      try {
+        const res = await fetch("/api/clipping/templates", { method: "GET", cache: "no-store" });
+        const json = (await res.json().catch(() => null)) as { templates?: unknown } | null;
+        if (cancelled) return;
+        const rows = Array.isArray(json?.templates) ? json.templates : [];
+        const parsed = rows
+          .filter((row) => row && typeof row === "object")
+          .map((row) => {
+            const t = row as { filename?: unknown; label?: unknown; url?: unknown };
+            const filename = typeof t.filename === "string" ? t.filename.trim() : "";
+            const label = typeof t.label === "string" ? t.label.trim() : "";
+            const url = typeof t.url === "string" ? t.url.trim() : "";
+            if (!filename || !url) return null;
+            return { filename, label: label || filename, url } satisfies ClippingTemplateLibraryItem;
+          })
+          .filter((item): item is ClippingTemplateLibraryItem => item !== null);
+        setTemplateLibrary(parsed);
+      } catch {
+        if (!cancelled) setTemplateLibrary([]);
+      } finally {
+        if (!cancelled) setTemplateLibraryLoading(false);
+      }
+    };
+    void load();
+    return () => {
+      cancelled = true;
+    };
+  }, []);
 
   /* ----------------------------- Render loop ----------------------------- */
   const startRenderLoop = useCallback(() => {
@@ -1913,9 +1984,11 @@ export default function ClippingStudio() {
               />
               {templateFile ? (
                 <span className="text-white/85">{templateFile.name}</span>
+              ) : selectedLibraryTemplateUrl ? (
+                <span className="text-white/85">Using saved template</span>
               ) : (
                 <>
-                  <span className="text-white/80">Drop or pick a video</span>
+                  <span className="text-white/80">Upload your template video</span>
                   <span className="text-white/40">
                     {templateId === "split_focus_bottom_webcam"
                       ? "It plays on the top 3/4 during phase 2"
@@ -1934,8 +2007,42 @@ export default function ClippingStudio() {
                 disabled={!canEditControls}
                 className="mt-2 rounded-lg border border-white/20 bg-white/[0.04] px-3 py-1.5 text-[11px] font-semibold text-white/85 hover:bg-white/[0.08] disabled:cursor-not-allowed disabled:opacity-40"
               >
-                Choose video
+                Upload template
               </button>
+            </div>
+            <div className="rounded-2xl border border-white/10 bg-white/[0.02] p-2.5">
+              <p className="text-[10px] font-semibold uppercase tracking-widest text-white/50">
+                Or use an existing template
+              </p>
+              {templateLibraryLoading ? (
+                <p className="mt-2 text-[11px] text-white/50">Loading templates…</p>
+              ) : templateLibrary.length === 0 ? (
+                <p className="mt-2 text-[11px] text-white/50">
+                  No saved templates found in <code>/public/studio/template</code>.
+                </p>
+              ) : (
+                <div className="mt-2 flex max-h-36 flex-col gap-1 overflow-auto pr-1">
+                  {templateLibrary.map((item) => {
+                    const selected = selectedLibraryTemplateUrl === item.url;
+                    return (
+                      <button
+                        key={item.filename}
+                        type="button"
+                        onClick={() => useLibraryTemplate(item)}
+                        disabled={!canEditControls}
+                        className={`truncate rounded-lg border px-2 py-1 text-left text-[11px] font-medium transition disabled:cursor-not-allowed disabled:opacity-40 ${
+                          selected
+                            ? "border-violet-400/60 bg-violet-500/15 text-white"
+                            : "border-white/10 bg-white/[0.03] text-white/75 hover:border-violet-400/35 hover:bg-white/[0.08]"
+                        }`}
+                        title={item.filename}
+                      >
+                        {item.label}
+                      </button>
+                    );
+                  })}
+                </div>
+              )}
             </div>
 
             <div className="flex flex-col gap-2 text-sm">
