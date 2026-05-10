@@ -2030,14 +2030,14 @@ export default function ClippingStudio() {
                         type="button"
                         onClick={() => useLibraryTemplate(item)}
                         disabled={!canEditControls}
-                        className={`truncate rounded-lg border px-2 py-1 text-left text-[11px] font-medium transition disabled:cursor-not-allowed disabled:opacity-40 ${
+                        className={`min-h-8 rounded-lg border px-2 py-1.5 text-left text-[11px] font-medium leading-snug break-all whitespace-normal transition disabled:cursor-not-allowed disabled:opacity-40 ${
                           selected
                             ? "border-violet-400/60 bg-violet-500/15 text-white"
-                            : "border-white/10 bg-white/[0.03] text-white/75 hover:border-violet-400/35 hover:bg-white/[0.08]"
+                            : "border-white/10 bg-white/[0.03] text-white/90 hover:border-violet-400/35 hover:bg-white/[0.08]"
                         }`}
                         title={item.filename}
                       >
-                        {item.label}
+                        {item.label?.trim() || item.filename}
                       </button>
                     );
                   })}
