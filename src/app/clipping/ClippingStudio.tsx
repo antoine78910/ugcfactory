@@ -6,13 +6,44 @@ import { useSearchParams } from "next/navigation";
 import {
   CircleDot,
   Download,
+  Image as ImageIcon,
   Loader2,
   RefreshCw,
+  Sparkles,
   Square,
   UploadCloud,
   Video,
   Wand2,
 } from "lucide-react";
+
+import { calculateMotionControlCreditsFromDuration } from "@/lib/pricing";
+import { registerStudioGenerationClient } from "@/lib/registerStudioGenerationClient";
+import {
+  completeStudioTask,
+  pollKlingVideo,
+} from "@/lib/studioKlingClientPoll";
+import {
+  patchMotionPendingJob,
+  removeMotionPendingJob,
+  upsertMotionPendingJob,
+} from "@/lib/motionControlPendingSession";
+
+type MotionQuality = "720p" | "1080p";
+type MotionImageSource = "auto" | "upload";
+type MotionStatus =
+  | "idle"
+  | "uploading"
+  | "submitting"
+  | "polling"
+  | "ready"
+  | "error";
+
+/** Kling 3.0 motion-control accepts up to ~30s per call. The hook slider is capped at 30s. */
+const MOTION_CONTROL_MAX_SECONDS_PER_JOB = 30;
+/** Kind label used when registering the studio_generations row. */
+const MOTION_CONTROL_GENERATION_KIND = "kling/motion-control";
+/** Provider returned by /api/kling/motion-control (for sessionStorage + DB row). */
+const MOTION_CONTROL_PROVIDER = "kie-market";
 
 /**
  * Output canvas resolution. 9:16 is the only supported aspect ratio because
@@ -319,6 +350,20 @@ export default function ClippingStudio() {
   const [exportedExt, setExportedExt] = useState<string>("webm");
   const [awaitingFinalDecision, setAwaitingFinalDecision] = useState(false);
 
+  /* ----- Motion control (Kling 3.0) on the hook portion only ----- */
+  const [hookBlob, setHookBlob] = useState<Blob | null>(null);
+  const [hookExt, setHookExt] = useState<string>("webm");
+  const [hookFrameBlob, setHookFrameBlob] = useState<Blob | null>(null);
+  const [hookFramePreviewUrl, setHookFramePreviewUrl] = useState<string | null>(null);
+
+  const [motionImageSource, setMotionImageSource] = useState<MotionImageSource>("auto");
+  const [customCharacterFile, setCustomCharacterFile] = useState<File | null>(null);
+  const [customCharacterPreviewUrl, setCustomCharacterPreviewUrl] = useState<string | null>(null);
+  const [motionQuality, setMotionQuality] = useState<MotionQuality>("720p");
+  const [motionStatus, setMotionStatus] = useState<MotionStatus>("idle");
+  const [motionResultUrl, setMotionResultUrl] = useState<string | null>(null);
+  const [motionError, setMotionError] = useState<string | null>(null);
+
   /** Refs that should not trigger re-renders. */
   const webcamVideoRef = useRef<HTMLVideoElement | null>(null);
   const templateVideoRef = useRef<HTMLVideoElement | null>(null);
@@ -336,6 +381,13 @@ export default function ClippingStudio() {
   const animationFrameRef = useRef<number | null>(null);
   const phaseTimerRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const countdownTimerRef = useRef<ReturnType<typeof setInterval> | null>(null);
+
+  /** Parallel recorder that captures the hook phase only (used as motion reference). */
+  const hookRecorderRef = useRef<MediaRecorder | null>(null);
+  const hookChunksRef = useRef<Blob[]>([]);
+  const hookMimeRef = useRef<string | undefined>(undefined);
+  /** Mid-hook canvas snapshot timer, fires once. */
+  const hookSnapshotTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   /**
    * Latest stage exposed to the render loop. We keep it in a ref because the
    * draw loop is started once and reads the current phase on every frame.
@@ -402,6 +454,10 @@ export default function ClippingStudio() {
     if (countdownTimerRef.current) {
       clearInterval(countdownTimerRef.current);
       countdownTimerRef.current = null;
+    }
+    if (hookSnapshotTimerRef.current) {
+      clearTimeout(hookSnapshotTimerRef.current);
+      hookSnapshotTimerRef.current = null;
     }
   }, []);
 
@@ -788,6 +844,45 @@ export default function ClippingStudio() {
     };
     recorder.start(250);
     recorderRef.current = recorder;
+
+    // Start a parallel video-only recorder that captures the hook phase only.
+    // Same canvas, fresh captureStream — the WebRTC spec allows multiple consumers.
+    // Used later as the motion-reference for Kling 3.0 motion control.
+    try {
+      const hookStream = canvas.captureStream(RECORDING_FPS);
+      hookMimeRef.current = mime;
+      hookChunksRef.current = [];
+      let hookRecorder: MediaRecorder | null = null;
+      try {
+        hookRecorder = new MediaRecorder(
+          hookStream,
+          mime ? { mimeType: mime, videoBitsPerSecond: 6_000_000 } : undefined,
+        );
+      } catch {
+        try {
+          hookRecorder = new MediaRecorder(hookStream);
+        } catch {
+          hookRecorder = null;
+        }
+      }
+      if (hookRecorder) {
+        hookRecorder.ondataavailable = (ev) => {
+          if (ev.data && ev.data.size > 0) hookChunksRef.current.push(ev.data);
+        };
+        hookRecorder.onstop = () => {
+          const finalMime = hookMimeRef.current ?? "video/webm";
+          const blob = new Blob(hookChunksRef.current, { type: finalMime });
+          if (blob.size > 0) {
+            setHookBlob(blob);
+            setHookExt(fileExtensionFromMime(finalMime));
+          }
+        };
+        hookRecorder.start(250);
+        hookRecorderRef.current = hookRecorder;
+      }
+    } catch {
+      /* hook capture is best-effort; main recording continues */
+    }
     return true;
   }, [ensureAudioGraph]);
 
@@ -824,6 +919,27 @@ export default function ClippingStudio() {
     beginCountdownThen(() => {
       const ok = startMediaRecorder();
       if (!ok) return;
+
+      // Reset any motion-control state from a prior take (the user is starting fresh).
+      setHookBlob(null);
+      setHookFrameBlob(null);
+      setMotionResultUrl(null);
+        setMotionStatus("idle");
+      setMotionError(null);
+
+      // Mid-hook snapshot becomes the default character image for motion control.
+      if (hookSnapshotTimerRef.current) clearTimeout(hookSnapshotTimerRef.current);
+      hookSnapshotTimerRef.current = setTimeout(() => {
+        const c = canvasRef.current;
+        if (!c) return;
+        c.toBlob(
+          (b) => {
+            if (b) setHookFrameBlob(b);
+          },
+          "image/png",
+        );
+      }, Math.max(500, Math.floor((hookDuration * 1000) / 2)));
+
       setStage("recording_hook");
       let left = hookDuration;
       setPhaseSecondsLeft(left);
@@ -842,13 +958,32 @@ export default function ClippingStudio() {
           } catch {
             /* ignore */
           }
+          // Stop the hook-only recorder — its job is done.
+          try {
+            const hr = hookRecorderRef.current;
+            if (hr && hr.state !== "inactive") hr.stop();
+          } catch {
+            /* ignore */
+          }
+          // Fallback: capture a frame now if the mid-hook snapshot somehow missed.
+          if (!hookFrameBlob) {
+            const c = canvasRef.current;
+            if (c) {
+              c.toBlob(
+                (b) => {
+                  if (b) setHookFrameBlob(b);
+                },
+                "image/png",
+              );
+            }
+          }
           setStage("ready_for_video");
         } else {
           setPhaseSecondsLeft(left);
         }
       }, 1000);
     });
-  }, [beginCountdownThen, hookDuration, startMediaRecorder]);
+  }, [beginCountdownThen, hookDuration, hookFrameBlob, startMediaRecorder]);
 
   const startVideoCountdown = useCallback(() => {
     if (!templateObjectUrl) {
@@ -933,6 +1068,19 @@ export default function ClippingStudio() {
     }
     recorderRef.current = null;
     recorderChunksRef.current = [];
+
+    const hr = hookRecorderRef.current;
+    if (hr && hr.state !== "inactive") {
+      try {
+        hr.ondataavailable = null;
+        hr.onstop = null;
+        hr.stop();
+      } catch {
+        /* ignore */
+      }
+    }
+    hookRecorderRef.current = null;
+    hookChunksRef.current = [];
   }, []);
 
   const retakeHookPhase = useCallback(() => {
@@ -942,6 +1090,11 @@ export default function ClippingStudio() {
     setErrorMessage(null);
     setAwaitingFinalDecision(false);
     discardCurrentRecording();
+    setHookBlob(null);
+    setHookFrameBlob(null);
+    setMotionResultUrl(null);
+    setMotionStatus("idle");
+    setMotionError(null);
     if (templateVideoRef.current) {
       try {
         templateVideoRef.current.pause();
@@ -963,6 +1116,11 @@ export default function ClippingStudio() {
     if (exportedUrl) URL.revokeObjectURL(exportedUrl);
     setExportedUrl(null);
     setExportedBlob(null);
+    setHookBlob(null);
+    setHookFrameBlob(null);
+    setMotionResultUrl(null);
+    setMotionStatus("idle");
+    setMotionError(null);
     if (templateVideoRef.current) {
       try {
         templateVideoRef.current.pause();
@@ -973,6 +1131,234 @@ export default function ClippingStudio() {
     }
     setStage("ready_for_hook");
   }, [clearTimers, discardCurrentRecording, exportedUrl]);
+
+  /* --------------------------- Motion control --------------------------- */
+  // Object-URL lifecycle for the auto-extracted hook frame preview.
+  useEffect(() => {
+    if (!hookFrameBlob) {
+      setHookFramePreviewUrl((prev) => {
+        if (prev) URL.revokeObjectURL(prev);
+        return null;
+      });
+      return;
+    }
+    const url = URL.createObjectURL(hookFrameBlob);
+    setHookFramePreviewUrl((prev) => {
+      if (prev) URL.revokeObjectURL(prev);
+      return url;
+    });
+    return () => URL.revokeObjectURL(url);
+  }, [hookFrameBlob]);
+
+  // Object-URL lifecycle for the user-uploaded character image preview.
+  useEffect(() => {
+    if (!customCharacterFile) {
+      setCustomCharacterPreviewUrl((prev) => {
+        if (prev) URL.revokeObjectURL(prev);
+        return null;
+      });
+      return;
+    }
+    const url = URL.createObjectURL(customCharacterFile);
+    setCustomCharacterPreviewUrl((prev) => {
+      if (prev) URL.revokeObjectURL(prev);
+      return url;
+    });
+    return () => URL.revokeObjectURL(url);
+  }, [customCharacterFile]);
+
+  /** Credit cost mirrors the server preflight in /api/kling/motion-control. */
+  const motionCreditCost = useMemo(
+    () => calculateMotionControlCreditsFromDuration(hookDuration, motionQuality),
+    [hookDuration, motionQuality],
+  );
+  /** Always 1 with the current 30s hook cap; future-proofed for longer hooks. */
+  const motionJobsNeeded = Math.max(
+    1,
+    Math.ceil(hookDuration / MOTION_CONTROL_MAX_SECONDS_PER_JOB),
+  );
+
+  const motionBusy =
+    motionStatus === "uploading" ||
+    motionStatus === "submitting" ||
+    motionStatus === "polling";
+  const motionReady = motionStatus === "ready" && Boolean(motionResultUrl);
+
+  const motionStatusLabel = useMemo(() => {
+    switch (motionStatus) {
+      case "uploading":
+        return "Uploading hook & character…";
+      case "submitting":
+        return "Sending to Kling 3.0…";
+      case "polling":
+        return "Generating motion control… (~2 min)";
+      case "ready":
+        return "Motion control ready";
+      case "error":
+        return "Motion control failed";
+      default:
+        return null;
+    }
+  }, [motionStatus]);
+
+  const onSubmitMotionControl = useCallback(async () => {
+    if (motionBusy) return;
+    if (!hookBlob) {
+      setMotionError("Hook clip not captured. Retake the hook and try again.");
+      setMotionStatus("error");
+      return;
+    }
+    if (hookDuration < 3) {
+      setMotionError("Hook must be at least 3 seconds for motion control.");
+      setMotionStatus("error");
+      return;
+    }
+    const characterSource: Blob | null =
+      motionImageSource === "upload" ? customCharacterFile : hookFrameBlob;
+    if (!characterSource) {
+      setMotionError(
+        motionImageSource === "upload"
+          ? "Choose a character image first."
+          : "Hook frame not captured yet — record the hook again.",
+      );
+      setMotionStatus("error");
+      return;
+    }
+
+    setMotionError(null);
+    setMotionResultUrl(null);
+    setMotionStatus("uploading");
+
+    let taskIdLocal: string | null = null;
+    try {
+      // 1. Upload hook video (motion reference).
+      const videoForm = new FormData();
+      const videoFile = new File(
+        [hookBlob],
+        `clip-hook-${clipId ?? "session"}.${hookExt}`,
+        { type: hookBlob.type || `video/${hookExt}` },
+      );
+      videoForm.append("file", videoFile);
+      const videoUploadRes = await fetch("/api/uploads", {
+        method: "POST",
+        body: videoForm,
+      });
+      const videoJson = (await videoUploadRes.json().catch(() => ({}))) as {
+        url?: string;
+        error?: string;
+      };
+      if (!videoUploadRes.ok || !videoJson.url) {
+        throw new Error(videoJson.error || "Hook upload failed.");
+      }
+      const motionVideoUrl = videoJson.url;
+
+      // 2. Upload character image.
+      const imgForm = new FormData();
+      const imgFile =
+        characterSource instanceof File
+          ? characterSource
+          : new File([characterSource], "character.png", {
+              type: characterSource.type || "image/png",
+            });
+      imgForm.append("file", imgFile);
+      const imgUploadRes = await fetch("/api/uploads", {
+        method: "POST",
+        body: imgForm,
+      });
+      const imgJson = (await imgUploadRes.json().catch(() => ({}))) as {
+        url?: string;
+        error?: string;
+      };
+      if (!imgUploadRes.ok || !imgJson.url) {
+        throw new Error(imgJson.error || "Character image upload failed.");
+      }
+      const motionImageUrl = imgJson.url;
+
+      // 3. Dispatch motion-control task.
+      setMotionStatus("submitting");
+      const dispatchRes = await fetch("/api/kling/motion-control", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          imageUrl: motionImageUrl,
+          videoUrl: motionVideoUrl,
+          quality: motionQuality,
+          motionFamily: "kling-3.0",
+          backgroundSource: "input_video",
+          videoDurationSeconds: hookDuration,
+        }),
+      });
+      const dispatchJson = (await dispatchRes.json().catch(() => ({}))) as {
+        taskId?: string;
+        model?: string;
+        provider?: string;
+        error?: string;
+        code?: string;
+      };
+      if (!dispatchRes.ok || !dispatchJson.taskId) {
+        throw new Error(dispatchJson.error || "Motion control could not start.");
+      }
+      const taskId = dispatchJson.taskId;
+      const model = dispatchJson.model || "kling-3.0/motion-control";
+      const provider = dispatchJson.provider || MOTION_CONTROL_PROVIDER;
+      taskIdLocal = taskId;
+
+      // Track in sessionStorage so a page reload mid-job can resume.
+      const creditsCharged = calculateMotionControlCreditsFromDuration(
+        hookDuration,
+        motionQuality,
+      );
+      upsertMotionPendingJob({
+        taskId,
+        label: "Motion control (Clipping)",
+        model,
+        kind: MOTION_CONTROL_GENERATION_KIND,
+        provider,
+        inputUrls: [motionImageUrl, motionVideoUrl],
+        creditsCharged,
+        startedAt: Date.now(),
+      });
+      const rowId = await registerStudioGenerationClient({
+        kind: MOTION_CONTROL_GENERATION_KIND,
+        label: "Motion control (Clipping)",
+        taskId,
+        provider,
+        model,
+        creditsCharged,
+        inputUrls: [motionImageUrl, motionVideoUrl],
+      });
+      if (rowId) patchMotionPendingJob(taskId, { rowId });
+
+      // 4. Poll until success.
+      setMotionStatus("polling");
+      const url = await pollKlingVideo(taskId);
+      void completeStudioTask(taskId, url);
+      removeMotionPendingJob(taskId);
+      setMotionResultUrl(url);
+      setMotionStatus("ready");
+    } catch (err) {
+      if (taskIdLocal) {
+        try {
+          removeMotionPendingJob(taskIdLocal);
+        } catch {
+          /* ignore */
+        }
+      }
+      const msg = err instanceof Error ? err.message : "Motion control failed.";
+      setMotionError(msg);
+      setMotionStatus("error");
+    }
+  }, [
+    motionBusy,
+    hookBlob,
+    hookDuration,
+    hookExt,
+    hookFrameBlob,
+    customCharacterFile,
+    motionImageSource,
+    motionQuality,
+    clipId,
+  ]);
 
   /* ------------------------------- UI ------------------------------- */
   const currentLabel = useMemo(() => {
@@ -1280,6 +1666,222 @@ export default function ClippingStudio() {
                   File: {exportedBlob ? `${(exportedBlob.size / 1024 / 1024).toFixed(1)} MB` : "—"} ·{" "}
                   {exportedExt.toUpperCase()}
                 </p>
+
+                {/* Motion control panel (Kling 3.0) */}
+                <div className="mt-3 w-full rounded-2xl border border-white/8 bg-black/35 p-4">
+                  <div className="flex items-center gap-2">
+                    <Sparkles className="size-4 text-violet-300" aria-hidden />
+                    <h3 className="text-sm font-semibold">Motion control (Kling 3.0)</h3>
+                  </div>
+                  <p className="mt-1 text-[11px] text-white/55">
+                    Re-animate the hook with Kling 3.0. The hook recording is the motion
+                    reference; choose a still character image to drive.
+                  </p>
+
+                  {!hookBlob ? (
+                    <p className="mt-3 rounded-lg border border-amber-400/20 bg-amber-500/[0.06] px-3 py-2 text-[11px] text-amber-100/80">
+                      Hook clip not captured (browser may not support a parallel recorder).
+                      Retake the hook to enable motion control.
+                    </p>
+                  ) : (
+                    <>
+                      <div className="mt-3 flex flex-col gap-2">
+                        <span className="text-[10px] font-semibold uppercase tracking-widest text-white/45">
+                          Character image
+                        </span>
+                        <div className="flex gap-2">
+                          <button
+                            type="button"
+                            onClick={() => setMotionImageSource("auto")}
+                            disabled={motionBusy}
+                            className={`flex-1 rounded-lg border px-3 py-2 text-[11px] font-semibold transition disabled:cursor-not-allowed disabled:opacity-50 ${
+                              motionImageSource === "auto"
+                                ? "border-violet-400/60 bg-violet-500/15 text-white"
+                                : "border-white/10 bg-white/[0.03] text-white/70 hover:bg-white/[0.07]"
+                            }`}
+                          >
+                            Use hook frame
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => setMotionImageSource("upload")}
+                            disabled={motionBusy}
+                            className={`flex-1 rounded-lg border px-3 py-2 text-[11px] font-semibold transition disabled:cursor-not-allowed disabled:opacity-50 ${
+                              motionImageSource === "upload"
+                                ? "border-violet-400/60 bg-violet-500/15 text-white"
+                                : "border-white/10 bg-white/[0.03] text-white/70 hover:bg-white/[0.07]"
+                            }`}
+                          >
+                            Upload image
+                          </button>
+                        </div>
+
+                        <div className="mt-1 flex items-center gap-3 rounded-lg border border-white/5 bg-white/[0.02] p-2">
+                          <div className="grid h-16 w-12 shrink-0 place-items-center overflow-hidden rounded-md border border-white/10 bg-black">
+                            {motionImageSource === "auto" ? (
+                              hookFramePreviewUrl ? (
+                                /* eslint-disable-next-line @next/next/no-img-element */
+                                <img
+                                  src={hookFramePreviewUrl}
+                                  alt="Hook frame preview"
+                                  className="h-full w-full object-cover"
+                                />
+                              ) : (
+                                <ImageIcon className="size-4 text-white/40" aria-hidden />
+                              )
+                            ) : customCharacterPreviewUrl ? (
+                              /* eslint-disable-next-line @next/next/no-img-element */
+                              <img
+                                src={customCharacterPreviewUrl}
+                                alt="Custom character preview"
+                                className="h-full w-full object-cover"
+                              />
+                            ) : (
+                              <ImageIcon className="size-4 text-white/40" aria-hidden />
+                            )}
+                          </div>
+                          <div className="flex-1 text-[11px] text-white/65">
+                            {motionImageSource === "auto" ? (
+                              hookFrameBlob ? (
+                                <span>
+                                  Auto-extracted mid-hook frame ({Math.round(
+                                    (hookFrameBlob.size / 1024) * 10,
+                                  ) / 10}{" "}
+                                  KB)
+                                </span>
+                              ) : (
+                                <span className="text-white/40">
+                                  No frame captured yet — retake the hook.
+                                </span>
+                              )
+                            ) : customCharacterFile ? (
+                              <span className="truncate">{customCharacterFile.name}</span>
+                            ) : (
+                              <label className="cursor-pointer text-violet-200 hover:text-violet-100">
+                                Click to upload an image
+                                <input
+                                  type="file"
+                                  accept="image/png,image/jpeg,image/webp"
+                                  className="hidden"
+                                  onChange={(e) => {
+                                    const f = e.target.files?.[0] ?? null;
+                                    if (f) setCustomCharacterFile(f);
+                                  }}
+                                  disabled={motionBusy}
+                                />
+                              </label>
+                            )}
+                          </div>
+                          {motionImageSource === "upload" && customCharacterFile ? (
+                            <button
+                              type="button"
+                              onClick={() => setCustomCharacterFile(null)}
+                              disabled={motionBusy}
+                              className="rounded-md border border-white/10 px-2 py-1 text-[10px] font-semibold text-white/60 hover:bg-white/[0.05] disabled:cursor-not-allowed disabled:opacity-40"
+                            >
+                              Replace
+                            </button>
+                          ) : null}
+                        </div>
+                      </div>
+
+                      <div className="mt-3 flex flex-col gap-2">
+                        <span className="text-[10px] font-semibold uppercase tracking-widest text-white/45">
+                          Quality
+                        </span>
+                        <div className="flex gap-2">
+                          <button
+                            type="button"
+                            onClick={() => setMotionQuality("720p")}
+                            disabled={motionBusy}
+                            className={`flex-1 rounded-lg border px-3 py-2 text-[11px] font-semibold transition disabled:cursor-not-allowed disabled:opacity-50 ${
+                              motionQuality === "720p"
+                                ? "border-violet-400/60 bg-violet-500/15 text-white"
+                                : "border-white/10 bg-white/[0.03] text-white/70 hover:bg-white/[0.07]"
+                            }`}
+                          >
+                            720p · 0.85 cr/s
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => setMotionQuality("1080p")}
+                            disabled={motionBusy}
+                            className={`flex-1 rounded-lg border px-3 py-2 text-[11px] font-semibold transition disabled:cursor-not-allowed disabled:opacity-50 ${
+                              motionQuality === "1080p"
+                                ? "border-violet-400/60 bg-violet-500/15 text-white"
+                                : "border-white/10 bg-white/[0.03] text-white/70 hover:bg-white/[0.07]"
+                            }`}
+                          >
+                            1080p · 1.3 cr/s
+                          </button>
+                        </div>
+                      </div>
+
+                      <div className="mt-3 flex items-center justify-between rounded-lg border border-white/5 bg-white/[0.02] px-3 py-2 text-[11px] text-white/70">
+                        <span>
+                          Hook · {hookDuration}s · {motionJobsNeeded} generation
+                          {motionJobsNeeded > 1 ? "s" : ""}
+                        </span>
+                        <span className="rounded-md bg-violet-500/15 px-2 py-0.5 text-[11px] font-semibold tabular-nums text-violet-100">
+                          {motionCreditCost} credits
+                        </span>
+                      </div>
+
+                      {motionReady && motionResultUrl ? (
+                        <div className="mt-3 flex flex-col items-center gap-2">
+                          <video
+                            src={motionResultUrl}
+                            controls
+                            className="w-full max-w-[320px] rounded-xl border border-white/10 bg-black"
+                            style={{ aspectRatio: "9 / 16" }}
+                          />
+                          <a
+                            href={motionResultUrl}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            download={`clip-motion-${clipId ?? "session"}.mp4`}
+                            className="inline-flex items-center gap-2 rounded-lg border border-emerald-400/30 bg-emerald-500/15 px-3 py-1.5 text-[11px] font-semibold text-emerald-100 hover:bg-emerald-500/25"
+                          >
+                            <Download className="size-3.5" aria-hidden /> Download motion clip
+                          </a>
+                        </div>
+                      ) : motionBusy ? (
+                        <div className="mt-3 flex items-center gap-3 rounded-lg border border-white/8 bg-black/40 px-3 py-3">
+                          <Loader2
+                            className="size-4 animate-spin text-violet-300"
+                            aria-hidden
+                          />
+                          <span className="text-[11px] text-white/75">
+                            {motionStatusLabel}
+                          </span>
+                        </div>
+                      ) : (
+                        <button
+                          type="button"
+                          onClick={onSubmitMotionControl}
+                          disabled={
+                            motionBusy ||
+                            !hookBlob ||
+                            (motionImageSource === "auto" && !hookFrameBlob) ||
+                            (motionImageSource === "upload" && !customCharacterFile)
+                          }
+                          className="mt-3 inline-flex w-full items-center justify-center gap-2 rounded-xl bg-violet-600 px-4 py-2.5 text-sm font-semibold hover:bg-violet-500 disabled:cursor-not-allowed disabled:opacity-50"
+                        >
+                          <Sparkles className="size-4" aria-hidden /> Generate motion control
+                          <span className="rounded-md bg-white/15 px-2 py-0.5 text-[12px] tabular-nums">
+                            {motionCreditCost}
+                          </span>
+                        </button>
+                      )}
+
+                      {motionStatus === "error" && motionError ? (
+                        <p className="mt-2 rounded-lg border border-red-400/20 bg-red-500/[0.08] px-3 py-2 text-[11px] text-red-100/85">
+                          {motionError}
+                        </p>
+                      ) : null}
+                    </>
+                  )}
+                </div>
               </div>
             ) : null}
           </section>
