@@ -18,6 +18,7 @@
  *     jobs don't time out client-side while the provider is still working.
  */
 import { isTaskTerminallyDeadButRetryable } from "@/lib/providerTransientError";
+import { studioBrowserApiUrl } from "@/lib/studioAppOrigin";
 
 const POLL_BASE_INTERVAL_MS = 4_000;
 const POLL_MAX_INTERVAL_MS = 12_000;
@@ -71,7 +72,11 @@ async function fetchStatusWithTimeout(url: string): Promise<Response> {
   const ac = new AbortController();
   const timer = setTimeout(() => ac.abort(), STATUS_FETCH_TIMEOUT_MS);
   try {
-    return await fetch(url, { cache: "no-store", signal: ac.signal });
+    return await fetch(url, {
+      cache: "no-store",
+      credentials: "include",
+      signal: ac.signal,
+    });
   } finally {
     clearTimeout(timer);
   }
@@ -105,9 +110,10 @@ async function readKlingStatusResponse(res: Response): Promise<KlingStatusJson> 
 
 export async function completeStudioTask(taskId: string, resultUrl: string): Promise<void> {
   try {
-    const res = await fetch("/api/studio/generations/complete", {
+    const res = await fetch(studioBrowserApiUrl("/api/studio/generations/complete"), {
       method: "POST",
       headers: { "Content-Type": "application/json" },
+      credentials: "include",
       body: JSON.stringify({ taskId, resultUrl }),
     });
     if (!res.ok) {
@@ -136,7 +142,9 @@ export async function pollKlingVideo(
     let res: Response;
     let json: KlingStatusJson;
     try {
-      res = await fetchStatusWithTimeout(`/api/kling/status?taskId=${encodeURIComponent(taskId)}${keyParam}`);
+      res = await fetchStatusWithTimeout(
+        `${studioBrowserApiUrl("/api/kling/status")}?taskId=${encodeURIComponent(taskId)}${keyParam}`,
+      );
       json = await readKlingStatusResponse(res);
     } catch (err) {
       const msg = err instanceof Error ? err.message : String(err ?? "");
@@ -243,7 +251,9 @@ export async function pollVeoVideo(taskId: string, personalApiKey?: string): Pro
     let res: Response;
     let json: VeoStatusJson;
     try {
-      res = await fetchStatusWithTimeout(`/api/kie/veo/status?taskId=${encodeURIComponent(taskId)}${keyParam}`);
+      res = await fetchStatusWithTimeout(
+        `${studioBrowserApiUrl("/api/kie/veo/status")}?taskId=${encodeURIComponent(taskId)}${keyParam}`,
+      );
       json = await readVeoStatusResponse(res);
     } catch (err) {
       const msg = err instanceof Error ? err.message : String(err ?? "");

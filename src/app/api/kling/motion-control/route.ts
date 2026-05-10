@@ -39,6 +39,11 @@ type Body = {
   personalApiKey?: string;
   /** Detected motion-reference video duration in seconds (used for pre-flight credit gate). */
   videoDurationSeconds?: number;
+  /**
+   * Clipping Studio only: temporarily skips paid-plan gate and platform credit preflight.
+   * Still requires an authenticated Supabase user; does not apply when using a personal API key.
+   */
+  clippingMotionControl?: boolean;
 };
 
 /** Fallback duration when the client omits `videoDurationSeconds` (mirrors UI placeholder). */
@@ -79,13 +84,15 @@ export async function POST(req: Request) {
     return NextResponse.json({ error: "Missing `imageUrl` or `videoUrl`." }, { status: 400 });
   }
 
+  const clippingBypass = body.clippingMotionControl === true;
+
   const personalKey = hasPersonalApiKey(body.personalApiKey) ? body.personalApiKey.trim() : undefined;
   let dbPlanResolved: string | null = null;
   if (!personalKey) {
     const dbPlan = await getUserPlan(user.id);
     dbPlanResolved = dbPlan;
     const accountPlan = dbPlan !== "free" ? dbPlan : parseAccountPlan(body.accountPlan);
-    if (!canUseMotionControl(accountPlan)) {
+    if (!clippingBypass && !canUseMotionControl(accountPlan)) {
       return NextResponse.json(
         {
           error: motionControlUpgradeMessage(accountPlan) ?? "Subscription upgrade required for Motion Control.",
@@ -99,7 +106,8 @@ export async function POST(req: Request) {
   const usesPersonalApi = Boolean(personalKey);
   const admin = createSupabaseServiceClient();
   const email = await resolveAuthUserEmail(user, admin);
-  const charges = shouldChargePlatformCredits({ usesPersonalApi, email });
+  const charges =
+    !clippingBypass && shouldChargePlatformCredits({ usesPersonalApi, email });
   if (charges && admin) {
     const durationSec =
       Number(body.videoDurationSeconds) > 0

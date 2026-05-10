@@ -17,3 +17,22 @@ export function studioAppPath(path: string): string {
   const p = path.startsWith("/") ? path : `/${path}`;
   return `${studioAppOrigin()}${p}`;
 }
+
+/**
+ * When marketing pages live on a different host than the authenticated app
+ * (`NEXT_PUBLIC_STUDIO_APP_ORIGIN`), browser `fetch("/api/…")` would hit the wrong
+ * origin and miss Supabase session cookies — causing 401 from route handlers.
+ * Use this for client-side `/api/*` calls so they target the app origin when configured.
+ */
+export function studioBrowserApiUrl(path: string): string {
+  if (typeof window === "undefined") return path;
+  const explicitApp = process.env.NEXT_PUBLIC_STUDIO_APP_ORIGIN?.trim();
+  if (!explicitApp || !path.startsWith("/")) return path;
+  const base = explicitApp.replace(/\/+$/, "");
+  try {
+    if (window.location.origin === base) return path;
+    return `${base}${path}`;
+  } catch {
+    return path;
+  }
+}

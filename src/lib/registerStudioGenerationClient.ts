@@ -1,3 +1,5 @@
+import { studioBrowserApiUrl } from "@/lib/studioAppOrigin";
+
 function sleep(ms: number): Promise<void> {
   return new Promise((r) => setTimeout(r, ms));
 }
@@ -11,9 +13,10 @@ export async function registerStudioGenerationClient(body: Record<string, unknow
   for (let attempt = 0; attempt < delaysMs.length; attempt++) {
     if (delaysMs[attempt]! > 0) await sleep(delaysMs[attempt]!);
     try {
-      const res = await fetch("/api/studio/generations/register", {
+      const res = await fetch(studioBrowserApiUrl("/api/studio/generations/register"), {
         method: "POST",
         headers: { "Content-Type": "application/json" },
+        credentials: "include",
         body: JSON.stringify(body),
       });
       if (!res.ok) continue;

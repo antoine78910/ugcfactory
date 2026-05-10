@@ -16,8 +16,8 @@ import {
   Wand2,
 } from "lucide-react";
 
-import { calculateMotionControlCreditsFromDuration } from "@/lib/pricing";
 import { registerStudioGenerationClient } from "@/lib/registerStudioGenerationClient";
+import { studioBrowserApiUrl } from "@/lib/studioAppOrigin";
 import {
   completeStudioTask,
   pollKlingVideo,
@@ -171,6 +171,42 @@ function drawCover(
     cropY = (sh - cropH) / 2;
   }
   ctx.drawImage(src, cropX, cropY, cropW, cropH, dx, dy, dw, dh);
+}
+
+/**
+ * Fits the full video frame inside the destination rect without cropping
+ * (CSS `object-fit: contain`). Letterboxes / pillarboxes with whatever is already
+ * drawn beneath — callers should clear/fill the rect first when needed.
+ */
+function drawContain(
+  ctx: CanvasRenderingContext2D,
+  src: HTMLVideoElement,
+  dx: number,
+  dy: number,
+  dw: number,
+  dh: number,
+): void {
+  const sw = src.videoWidth;
+  const sh = src.videoHeight;
+  if (!sw || !sh) return;
+  const targetRatio = dw / dh;
+  const sourceRatio = sw / sh;
+  let drawW = dw;
+  let drawH = dh;
+  let drawX = dx;
+  let drawY = dy;
+  if (sourceRatio > targetRatio) {
+    drawW = dw;
+    drawH = dw / sourceRatio;
+    drawX = dx;
+    drawY = dy + (dh - drawH) / 2;
+  } else {
+    drawH = dh;
+    drawW = dh * sourceRatio;
+    drawX = dx + (dw - drawW) / 2;
+    drawY = dy;
+  }
+  ctx.drawImage(src, 0, 0, sw, sh, drawX, drawY, drawW, drawH);
 }
 
 function roundedRectPath(
@@ -630,7 +666,11 @@ export default function ClippingStudio() {
     const load = async () => {
       setTemplateLibraryLoading(true);
       try {
-        const res = await fetch("/api/clipping/templates", { method: "GET", cache: "no-store" });
+        const res = await fetch(studioBrowserApiUrl("/api/clipping/templates"), {
+          method: "GET",
+          cache: "no-store",
+          credentials: "include",
+        });
         const json = (await res.json().catch(() => null)) as { templates?: unknown } | null;
         if (cancelled) return;
         const rows = Array.isArray(json?.templates) ? json.templates : [];
@@ -692,7 +732,7 @@ export default function ClippingStudio() {
           const bottomH = CANVAS_HEIGHT - topH;
 
           if (template && template.readyState >= 2) {
-            drawCover(ctx, template, 0, 0, CANVAS_WIDTH, topH);
+            drawContain(ctx, template, 0, 0, CANVAS_WIDTH, topH);
           } else {
             ctx.fillStyle = "#0b0912";
             ctx.fillRect(0, 0, CANVAS_WIDTH, topH);
@@ -711,7 +751,7 @@ export default function ClippingStudio() {
               CANVAS_WIDTH,
               bottomH,
               WEBCAM_CARD_ASPECT,
-              0.9,
+              1,
             );
             const cardW = webcamCard.w;
             const cardH = webcamCard.h;
@@ -733,10 +773,6 @@ export default function ClippingStudio() {
             ctx.stroke();
             ctx.restore();
           }
-
-          // Separator between top template and webcam panel.
-          ctx.fillStyle = "rgba(255,255,255,0.1)";
-          ctx.fillRect(0, topH - 1, CANVAS_WIDTH, 2);
         } else {
           if (webcam && webcam.readyState >= 2) {
             const webcamCard = fitFullWidthRect(
@@ -745,7 +781,7 @@ export default function ClippingStudio() {
               CANVAS_WIDTH,
               CANVAS_HEIGHT / 2,
               WEBCAM_CARD_ASPECT,
-              0.92,
+              1,
             );
             drawCoverRounded(
               ctx,
@@ -766,7 +802,7 @@ export default function ClippingStudio() {
           }
 
           if (template && template.readyState >= 2) {
-            drawCover(
+            drawContain(
               ctx,
               template,
               0,
@@ -778,10 +814,6 @@ export default function ClippingStudio() {
             ctx.fillStyle = "#0b0912";
             ctx.fillRect(0, CANVAS_HEIGHT / 2, CANVAS_WIDTH, CANVAS_HEIGHT / 2);
           }
-
-          // Subtle separator between webcam and template.
-          ctx.fillStyle = "rgba(255,255,255,0.08)";
-          ctx.fillRect(0, CANVAS_HEIGHT / 2 - 1, CANVAS_WIDTH, 2);
         }
       } else if (webcam && webcam.readyState >= 2) {
         const webcamCard = fitFullWidthRect(
@@ -1230,11 +1262,6 @@ export default function ClippingStudio() {
     return () => URL.revokeObjectURL(url);
   }, [customCharacterFile]);
 
-  /** Credit cost mirrors the server preflight in /api/kling/motion-control. */
-  const motionCreditCost = useMemo(
-    () => calculateMotionControlCreditsFromDuration(hookDuration, motionQuality),
-    [hookDuration, motionQuality],
-  );
   /** Always 1 with the current 30s hook cap; future-proofed for longer hooks. */
   const motionJobsNeeded = Math.max(
     1,
@@ -1302,8 +1329,9 @@ export default function ClippingStudio() {
         { type: hookBlob.type || `video/${hookExt}` },
       );
       videoForm.append("file", videoFile);
-      const videoUploadRes = await fetch("/api/uploads", {
+      const videoUploadRes = await fetch(studioBrowserApiUrl("/api/uploads"), {
         method: "POST",
+        credentials: "include",
         body: videoForm,
       });
       const videoJson = (await videoUploadRes.json().catch(() => ({}))) as {
@@ -1311,7 +1339,11 @@ export default function ClippingStudio() {
         error?: string;
       };
       if (!videoUploadRes.ok || !videoJson.url) {
-        throw new Error(videoJson.error || "Hook upload failed.");
+        throw new Error(
+          videoUploadRes.status === 401
+            ? "Sign in required. Open the studio app on this device, sign in, then retry motion control."
+            : videoJson.error || "Hook upload failed.",
+        );
       }
       const motionVideoUrl = videoJson.url;
 
@@ -1324,8 +1356,9 @@ export default function ClippingStudio() {
               type: characterSource.type || "image/png",
             });
       imgForm.append("file", imgFile);
-      const imgUploadRes = await fetch("/api/uploads", {
+      const imgUploadRes = await fetch(studioBrowserApiUrl("/api/uploads"), {
         method: "POST",
+        credentials: "include",
         body: imgForm,
       });
       const imgJson = (await imgUploadRes.json().catch(() => ({}))) as {
@@ -1333,15 +1366,20 @@ export default function ClippingStudio() {
         error?: string;
       };
       if (!imgUploadRes.ok || !imgJson.url) {
-        throw new Error(imgJson.error || "Character image upload failed.");
+        throw new Error(
+          imgUploadRes.status === 401
+            ? "Sign in required. Open the studio app on this device, sign in, then retry motion control."
+            : imgJson.error || "Character image upload failed.",
+        );
       }
       const motionImageUrl = imgJson.url;
 
       // 3. Dispatch motion-control task.
       setMotionStatus("submitting");
-      const dispatchRes = await fetch("/api/kling/motion-control", {
+      const dispatchRes = await fetch(studioBrowserApiUrl("/api/kling/motion-control"), {
         method: "POST",
         headers: { "Content-Type": "application/json" },
+        credentials: "include",
         body: JSON.stringify({
           imageUrl: motionImageUrl,
           videoUrl: motionVideoUrl,
@@ -1349,6 +1387,7 @@ export default function ClippingStudio() {
           motionFamily: "kling-3.0",
           backgroundSource: "input_video",
           videoDurationSeconds: hookDuration,
+          clippingMotionControl: true,
         }),
       });
       const dispatchJson = (await dispatchRes.json().catch(() => ({}))) as {
@@ -1359,7 +1398,11 @@ export default function ClippingStudio() {
         code?: string;
       };
       if (!dispatchRes.ok || !dispatchJson.taskId) {
-        throw new Error(dispatchJson.error || "Motion control could not start.");
+        throw new Error(
+          dispatchRes.status === 401
+            ? "Sign in required. Open the studio app on this device, sign in, then retry motion control."
+            : dispatchJson.error || "Motion control could not start.",
+        );
       }
       const taskId = dispatchJson.taskId;
       const model = dispatchJson.model || "kling-3.0/motion-control";
@@ -1367,10 +1410,6 @@ export default function ClippingStudio() {
       taskIdLocal = taskId;
 
       // Track in sessionStorage so a page reload mid-job can resume.
-      const creditsCharged = calculateMotionControlCreditsFromDuration(
-        hookDuration,
-        motionQuality,
-      );
       upsertMotionPendingJob({
         taskId,
         label: "Motion control (Clipping)",
@@ -1378,7 +1417,7 @@ export default function ClippingStudio() {
         kind: MOTION_CONTROL_GENERATION_KIND,
         provider,
         inputUrls: [motionImageUrl, motionVideoUrl],
-        creditsCharged,
+        creditsCharged: 0,
         startedAt: Date.now(),
       });
       const rowId = await registerStudioGenerationClient({
@@ -1387,7 +1426,7 @@ export default function ClippingStudio() {
         taskId,
         provider,
         model,
-        creditsCharged,
+        creditsCharged: 0,
         inputUrls: [motionImageUrl, motionVideoUrl],
       });
       if (rowId) patchMotionPendingJob(taskId, { rowId });
@@ -1878,8 +1917,8 @@ export default function ClippingStudio() {
                           Hook · {hookDuration}s · {motionJobsNeeded} generation
                           {motionJobsNeeded > 1 ? "s" : ""}
                         </span>
-                        <span className="rounded-md bg-violet-500/15 px-2 py-0.5 text-[11px] font-semibold tabular-nums text-violet-100">
-                          {motionCreditCost} credits
+                        <span className="rounded-md bg-emerald-500/15 px-2 py-0.5 text-[11px] font-semibold text-emerald-100">
+                          No credits (Clipping)
                         </span>
                       </div>
 
@@ -1924,8 +1963,8 @@ export default function ClippingStudio() {
                           className="mt-3 inline-flex w-full items-center justify-center gap-2 rounded-xl bg-violet-600 px-4 py-2.5 text-sm font-semibold hover:bg-violet-500 disabled:cursor-not-allowed disabled:opacity-50"
                         >
                           <Sparkles className="size-4" aria-hidden /> Generate motion control
-                          <span className="rounded-md bg-white/15 px-2 py-0.5 text-[12px] tabular-nums">
-                            {motionCreditCost}
+                          <span className="rounded-md bg-emerald-500/20 px-2 py-0.5 text-[12px] font-semibold text-emerald-100">
+                            Free
                           </span>
                         </button>
                       )}
