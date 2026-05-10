@@ -377,8 +377,9 @@ export default function ClippingStudio() {
   const webcamVideoRef = useRef<HTMLVideoElement | null>(null);
   const templateVideoRef = useRef<HTMLVideoElement | null>(null);
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
-  const previewCanvasRef = useRef<HTMLCanvasElement | null>(null);
   const templateFileInputRef = useRef<HTMLInputElement | null>(null);
+  /** Keeps canvas composite rate aligned with captureStream fps (less CPU, preview stays in sync). */
+  const lastCompositeTimeRef = useRef<number>(0);
 
   const userMediaStreamRef = useRef<MediaStream | null>(null);
   const audioContextRef = useRef<AudioContext | null>(null);
@@ -661,11 +662,18 @@ export default function ClippingStudio() {
   const startRenderLoop = useCallback(() => {
     if (animationFrameRef.current !== null) return;
     const canvas = canvasRef.current;
-    const previewCanvas = previewCanvasRef.current;
-    const ctx = canvas?.getContext("2d");
+    const ctx = canvas?.getContext("2d", { alpha: false, desynchronized: true });
     if (!canvas || !ctx) return;
+    ctx.imageSmoothingEnabled = true;
 
-    const tick = () => {
+    const tick = (rafTime: number) => {
+      const minIntervalMs = 1000 / RECORDING_FPS;
+      if (rafTime - lastCompositeTimeRef.current < minIntervalMs * 0.9) {
+        animationFrameRef.current = requestAnimationFrame(tick);
+        return;
+      }
+      lastCompositeTimeRef.current = rafTime;
+
       const webcam = webcamVideoRef.current;
       const template = templateVideoRef.current;
       const phase = stageRef.current;
@@ -806,26 +814,10 @@ export default function ClippingStudio() {
         drawHookTitle(ctx, hookTitleRef.current, CANVAS_WIDTH, CANVAS_HEIGHT);
       }
 
-      if (previewCanvas) {
-        const pctx = previewCanvas.getContext("2d");
-        if (pctx) {
-          pctx.drawImage(
-            canvas,
-            0,
-            0,
-            CANVAS_WIDTH,
-            CANVAS_HEIGHT,
-            0,
-            0,
-            previewCanvas.width,
-            previewCanvas.height,
-          );
-        }
-      }
-
       animationFrameRef.current = requestAnimationFrame(tick);
     };
 
+    lastCompositeTimeRef.current = 0;
     animationFrameRef.current = requestAnimationFrame(tick);
   }, [mirrorWebcam]);
 
@@ -1534,14 +1526,7 @@ export default function ClippingStudio() {
               className="relative w-full max-w-[420px] overflow-hidden rounded-2xl border border-white/10 bg-black"
               style={{ aspectRatio: "9 / 16" }}
             >
-              {/* Always mounted preview canvas. */}
-              <canvas
-                ref={previewCanvasRef}
-                width={540}
-                height={960}
-                className="block h-full w-full"
-              />
-              {/* Hidden source elements that feed the offscreen canvas. */}
+              {/* Hidden decode surfaces — composite happens on the visible canvas below. */}
               <video
                 ref={webcamVideoRef}
                 playsInline
@@ -1559,12 +1544,12 @@ export default function ClippingStudio() {
                 }}
                 className="pointer-events-none absolute inset-0 h-full w-full opacity-0"
               />
-              {/* Offscreen full-resolution canvas. */}
+              {/* Single output canvas: full recording resolution, scaled by CSS (GPU) — avoids per-frame CPU downscale copy. */}
               <canvas
                 ref={canvasRef}
                 width={CANVAS_WIDTH}
                 height={CANVAS_HEIGHT}
-                className="hidden"
+                className="block h-full w-full object-contain transform-gpu"
               />
 
               {/* Overlays per stage. */}
