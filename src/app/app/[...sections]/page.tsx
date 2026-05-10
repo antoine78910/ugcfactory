@@ -124,6 +124,12 @@ const VOICE_HISTORY_API_KINDS = `${STUDIO_GENERATION_KIND_VOICE_CHANGE},studio_a
 const APP_ONBOARDING_CAL_URL = "https://cal.com/antoinee/15min";
 const APP_ONBOARDING_POPUP_KEY_PREFIX = "ugc-app-onboarding-call-v1:";
 
+function isOnboardingCallPopupDismissed(raw: string | null): boolean {
+  if (!raw) return false;
+  // Legacy: we used to write "1" before showing once; treat as permanently dismissed.
+  return raw === "1" || raw === "no-thanks" || raw === "booked";
+}
+
 /**
  * Voice history must only show voice jobs. Previously, "Change voice" copied a motion (or other)
  * row into `voiceHistoryItems`; merge kept it for up to 24h because the server never returns that id
@@ -1103,6 +1109,19 @@ export default function AppBrandWizard() {
   const grantCreditsRef = useRef(grantCredits);
   grantCreditsRef.current = grantCredits;
   const [showOnboardingCallPopup, setShowOnboardingCallPopup] = useState(false);
+  /** Set when we decide to show the onboarding-call popup so dismiss handlers can persist per user. */
+  const onboardingCallUserIdRef = useRef<string | null>(null);
+
+  const dismissOnboardingCallPopup = useCallback((mode: "no-thanks" | "booked") => {
+    setShowOnboardingCallPopup(false);
+    const uid = onboardingCallUserIdRef.current?.trim() ?? "";
+    if (!uid || typeof window === "undefined") return;
+    try {
+      window.localStorage.setItem(`${APP_ONBOARDING_POPUP_KEY_PREFIX}${uid}`, mode);
+    } catch {
+      /* ignore */
+    }
+  }, []);
 
   const applyRefundHints = useCallback((hints: RefundHint[]) => {
     for (const h of hints) {
@@ -1130,9 +1149,8 @@ export default function AppBrandWizard() {
         if (!userId) return;
         if (data.isContentCreator === true) return;
         const seenKey = `${APP_ONBOARDING_POPUP_KEY_PREFIX}${userId}`;
-        if (window.localStorage.getItem(seenKey) === "1") return;
-        // Mark immediately so this invitation is shown only once per account.
-        window.localStorage.setItem(seenKey, "1");
+        if (isOnboardingCallPopupDismissed(window.localStorage.getItem(seenKey))) return;
+        onboardingCallUserIdRef.current = userId;
         if (!cancelled) setShowOnboardingCallPopup(true);
       } catch {
         /* non-blocking */
@@ -5952,7 +5970,7 @@ export default function AppBrandWizard() {
         <div
           className="fixed inset-0 z-[170] flex items-center justify-center bg-black/60 p-4 backdrop-blur-[2px] animate-in fade-in duration-200"
           role="presentation"
-          onClick={() => setShowOnboardingCallPopup(false)}
+          onClick={() => dismissOnboardingCallPopup("no-thanks")}
         >
           <div
             role="dialog"
@@ -5976,9 +5994,9 @@ export default function AppBrandWizard() {
                 type="button"
                 variant="secondary"
                 className="border border-white/15 bg-white/5 text-white hover:bg-white/10"
-                onClick={() => setShowOnboardingCallPopup(false)}
+                onClick={() => dismissOnboardingCallPopup("no-thanks")}
               >
-                Maybe later
+                No thanks
               </Button>
               <Button
                 asChild
@@ -5988,7 +6006,7 @@ export default function AppBrandWizard() {
                   href={APP_ONBOARDING_CAL_URL}
                   target="_blank"
                   rel="noreferrer"
-                  onClick={() => setShowOnboardingCallPopup(false)}
+                  onClick={() => dismissOnboardingCallPopup("booked")}
                 >
                   Book 15-min onboarding
                 </a>
