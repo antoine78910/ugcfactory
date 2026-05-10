@@ -1540,6 +1540,11 @@ export default function LinkToAdUniverse({
   const [serverPipelineStepIndex, setServerPipelineStepIndex] = useState<number | null>(null);
 
   const [universeRunId, setUniverseRunId] = useState<string | null>(null);
+  /** Always mirrors `universeRunId` so reset/cancel handlers read the latest id without stale closures. */
+  const universeRunIdRef = useRef<string | null>(null);
+  useEffect(() => {
+    universeRunIdRef.current = universeRunId;
+  }, [universeRunId]);
   const [runningLinkToAdProjects, setRunningLinkToAdProjects] = useState<LinkToAdRunningProject[]>([]);
   const activeRunTokenRef = useRef<string | null>(null);
   const runningLinkToAdProjectsForDisplay = useMemo(() => {
@@ -1960,7 +1965,8 @@ export default function LinkToAdUniverse({
 
   const [resetLinkToAdConfirmOpen, setResetLinkToAdConfirmOpen] = useState(false);
 
-  const resetLinkToAdToStart = useCallback(() => {
+  const resetLinkToAdToStart = useCallback((options?: { removePersistedRun?: boolean }) => {
+    const runIdToDelete = options?.removePersistedRun ? universeRunIdRef.current : null;
     linkToAdFlowEpochRef.current += 1;
     cancelCurrentGeneration({ silent: true });
     setIsWorking(false);
@@ -2038,7 +2044,28 @@ export default function LinkToAdUniverse({
     nanoBananaPromptsSignatureRef.current = null;
     onResumeConsumed?.();
     onActiveRunIdChange?.(null);
-    onRunsChanged?.();
+
+    void (async () => {
+      if (runIdToDelete) {
+        try {
+          const res = await fetch("/api/runs/delete-project", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ runIds: [runIdToDelete] }),
+          });
+          const json = (await res.json().catch(() => null)) as { error?: string } | null;
+          if (!res.ok) {
+            toast.error("Could not remove this run from Projects", {
+              description: json?.error ?? "You can remove it manually from the Projects tab.",
+            });
+          }
+        } catch {
+          toast.error("Could not remove this run from Projects", { description: "Network error." });
+        }
+      }
+      onRunsChanged?.();
+    })();
+
     toast.message("Link to Ad reset", { description: "You can start a new ad from scratch." });
   }, [cancelCurrentGeneration, onResumeConsumed, onActiveRunIdChange, onRunsChanged]);
 
@@ -9460,7 +9487,7 @@ export default function LinkToAdUniverse({
           <h3 className="text-[16px] font-semibold text-white">Cancel this Link to Ad?</h3>
           <p className="mt-2 text-[13px] leading-relaxed text-white/65">
             The draft on this screen will be lost (URL, brief, scripts, uploads, in-progress media). Credits already
-            spent will not be refunded. Runs already saved to your Projects are not deleted.
+            spent will not be refunded. The current run will also be removed from Projects if it was saved.
           </p>
           <div className="mt-5 flex items-center justify-end gap-2">
             <button
@@ -9475,7 +9502,7 @@ export default function LinkToAdUniverse({
               className="inline-flex h-9 items-center rounded-full border border-red-400/35 bg-red-500/20 px-3 text-[12px] font-semibold text-red-100 transition hover:bg-red-500/30"
               onClick={() => {
                 setResetLinkToAdConfirmOpen(false);
-                resetLinkToAdToStart();
+                resetLinkToAdToStart({ removePersistedRun: true });
               }}
             >
               Cancel and reset
