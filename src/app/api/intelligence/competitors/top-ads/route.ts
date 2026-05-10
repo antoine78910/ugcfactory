@@ -84,9 +84,31 @@ export async function GET(req: Request) {
       return NextResponse.json(payload);
     }
 
-    // Resolved competitor id from `/v1/lookup?type=advertiser` — constrain to this page only.
+    const searchType = looksLikeDomain(q) ? "domain" : "brand";
+    const adsQuerySortBy = intelligenceUiSortToAdsQuerySort(sortBy);
+
+    // For non-tracked competitors, prioritize query-based ads on the searched brand/domain text.
+    // This avoids broad advertiser matches when lookupId resolves to a nearby but wrong entity.
     if (lookupId) {
       const advSort = intelligenceUiSortToAdvertiserAdsSort(sortBy);
+      const queriedAds: TTAd[] = await ttQueryAds({
+        searchType,
+        q,
+        sortBy: adsQuerySortBy,
+        limit: 10,
+      });
+      if (Array.isArray(queriedAds) && queriedAds.length > 0) {
+        const payload = {
+          source: "ads_query" as const,
+          isTracked,
+          sortBy,
+          adsQuerySortBy,
+          ads: queriedAds,
+        };
+        await setCached(key, payload, TTL);
+        return NextResponse.json(payload);
+      }
+      // Fallback to advertiser listing if text query has no ads.
       const ads = await ttListAdvertiserAds(lookupId, { limit: 10, sortBy: advSort, order: "desc" });
       const payload = {
         source: "advertiser_ads" as const,
@@ -101,8 +123,6 @@ export async function GET(req: Request) {
       return NextResponse.json(payload);
     }
 
-    const searchType = looksLikeDomain(q) ? "domain" : "brand";
-    const adsQuerySortBy = intelligenceUiSortToAdsQuerySort(sortBy);
     const ads: TTAd[] = await ttQueryAds({
       searchType,
       q,

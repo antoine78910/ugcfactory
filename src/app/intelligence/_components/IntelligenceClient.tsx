@@ -12,7 +12,6 @@ import { CompetitorsPanel, type CompetitorPick } from "./CompetitorsPanel";
 import { CompetitorDetail } from "./CompetitorDetail";
 import { RecreationsPanel } from "./RecreationsPanel";
 import { WelcomeOverlay } from "./WelcomeOverlay";
-import { IntelligenceOnboarding } from "./IntelligenceOnboarding";
 import { IntelligenceOverviewDashboard } from "./IntelligenceOverviewDashboard";
 
 type IntelligencePanel = null | "brands" | "competitors" | "recreations";
@@ -31,7 +30,6 @@ export function IntelligenceClient({
   const [selected, setSelected] = useState<SelectedTracker | null>(null);
   const [searchResult, setSearchResult] = useState<TTLookupResult | null>(null);
   const [competitorPick, setCompetitorPick] = useState<CompetitorPick | null>(null);
-  const [onboardingDone, setOnboardingDone] = useState(false);
   const [savingDashboardBrand, setSavingDashboardBrand] = useState(false);
   const [dashboardBrandMessage, setDashboardBrandMessage] = useState<string | null>(null);
   const [panel, setPanel] = useState<IntelligencePanel>(initialPanel);
@@ -70,7 +68,7 @@ export function IntelligenceClient({
     }
   }, []);
 
-  const hasBrand = useMemo(() => ownTrackerIdsState.length > 0 || onboardingDone, [ownTrackerIdsState.length, onboardingDone]);
+  const hasBrand = useMemo(() => ownTrackerIdsState.length > 0, [ownTrackerIdsState.length]);
 
   useEffect(() => {
     if (!initialCompetitorId || !hasBrand) return;
@@ -231,16 +229,14 @@ export function IntelligenceClient({
           ) : null}
         </div>
 
-        {!hasBrand ? (
-          <IntelligenceOnboarding
-            onDone={() => {
-              setOnboardingDone(true);
-            }}
-          />
-        ) : selected ? (
+        {selected ? (
           <TrackerDetail tracker={selected} ownTrackerIds={ownTrackerIdsState} />
         ) : competitorPick ? (
-          <CompetitorDetail competitor={competitorPick.lookup} sortBy={competitorSortBy} />
+          <CompetitorDetail
+            competitor={competitorPick.lookup}
+            sortBy={competitorSortBy}
+            isTracked={competitorPick.isTracked}
+          />
         ) : isStandalonePanelRoute && panel === "competitors" ? (
           <div className="mx-auto w-full max-w-6xl p-6">
             <div className="rounded-2xl border border-white/10 bg-white/[0.04] p-4 backdrop-blur-sm">
@@ -258,7 +254,11 @@ export function IntelligenceClient({
             </div>
           </div>
         ) : (
-          <IntelligenceOverviewDashboard sortBy={competitorSortBy} />
+          <IntelligenceOverviewDashboard
+            sortBy={competitorSortBy}
+            hasBrand={hasBrand}
+            onAddMyBrand={() => setPanel("brands")}
+          />
         )}
 
         {!isStandalonePanelRoute ? (

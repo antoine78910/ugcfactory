@@ -67,9 +67,11 @@ function intelErrorMessage(e: IntelError): string {
 export function CompetitorDetail({
   competitor,
   sortBy,
+  isTracked = false,
 }: {
   competitor: TTLookupResult;
   sortBy: SortBy;
+  isTracked?: boolean;
 }) {
   const activeIdRef = useRef(competitor.id);
   useEffect(() => {
@@ -79,7 +81,7 @@ export function CompetitorDetail({
   const displayQ = useMemo(() => competitor.domain?.trim() || competitor.name?.trim() || competitor.id, [competitor]);
 
   const [ads, setAds] = useState<TTAd[]>([]);
-  const [adsMediaFilter, setAdsMediaFilter] = useState<MediaFilter>("videos");
+  const [adsMediaFilter, setAdsMediaFilter] = useState<MediaFilter>("all");
   const [adsLoading, setAdsLoading] = useState(false);
   const [adsError, setAdsError] = useState<string | null>(null);
   const [staleAt, setStaleAt] = useState<string | null>(null);
@@ -90,11 +92,13 @@ export function CompetitorDetail({
       setAdsError(null);
       setStaleAt(null);
       try {
-        const res = await fetch(
-          `/api/intelligence/competitors/top-ads?lookupId=${encodeURIComponent(
-            competitor.id,
-          )}&q=${encodeURIComponent(displayQ)}&sortBy=${encodeURIComponent(sortBy)}${force ? "&force=true" : ""}`,
-        );
+        const params = new URLSearchParams({
+          q: displayQ,
+          sortBy,
+        });
+        if (isTracked) params.set("lookupId", competitor.id);
+        if (force) params.set("force", "true");
+        const res = await fetch(`/api/intelligence/competitors/top-ads?${params.toString()}`);
         const parsed = await parseIntelResponse<{
           ads: TTAd[];
           source: "tracker_top_ads" | "advertiser_ads" | "ads_query";
@@ -114,7 +118,7 @@ export function CompetitorDetail({
         setAdsLoading(false);
       }
     },
-    [competitor.id, displayQ, sortBy],
+    [competitor.id, displayQ, isTracked, sortBy],
   );
 
   useEffect(() => {
@@ -123,6 +127,14 @@ export function CompetitorDetail({
 
   const [openAd, setOpenAd] = useState<TTAd | null>(null);
   const filteredAds = useMemo(() => filterAdsByMedia(ads, adsMediaFilter), [ads, adsMediaFilter]);
+
+  useEffect(() => {
+    // If this competitor has no videos, don't keep the user stuck on an empty Top Ads grid.
+    if (adsMediaFilter !== "videos") return;
+    if (ads.length === 0) return;
+    const videoAds = filterAdsByMedia(ads, "videos");
+    if (videoAds.length === 0) setAdsMediaFilter("all");
+  }, [ads, adsMediaFilter]);
 
   const bestScripts = useMemo(() => {
     const rows = ads

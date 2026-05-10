@@ -17,3 +17,13 @@ export function isMissingCreditBalanceAfterColumnError(message: string): boolean
   const m = message.toLowerCase();
   return m.includes("credit_balance_after") && (m.includes("column") || m.includes("schema cache"));
 }
+
+export function isMissingStartedAtColumnError(message: string): boolean {
+  const m = message.toLowerCase();
+  return m.includes("started_at") && (m.includes("column") || m.includes("schema cache"));
+}
+
+export function isMissingCompletedAtColumnError(message: string): boolean {
+  const m = message.toLowerCase();
+  return m.includes("completed_at") && (m.includes("column") || m.includes("schema cache"));
+}

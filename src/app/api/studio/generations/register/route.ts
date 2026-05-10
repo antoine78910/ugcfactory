@@ -8,20 +8,25 @@ import {
   isMissingAspectRatioColumnError,
   isMissingCreditBalanceAfterColumnError,
   isMissingModelColumnError,
+  isMissingStartedAtColumnError,
 } from "@/lib/studioGenerationsSchemaCompat";
 import { createSupabaseServiceClient } from "@/lib/supabase/admin";
 import { getUserCreditBalance } from "@/lib/creditGrants";
 import { shouldChargePlatformCredits } from "@/lib/credits/metering";
 import { resolveAuthUserEmail } from "@/lib/sessionUserEmail";
 
-async function snapshotCreditBalanceAfterInsert(
+/**
+ * Snapshots the current credit balance onto newly inserted rows.
+ * NOTE: This runs right after row insert, before the client calls /api/me/credits/spend.
+ * The accurate post-spend snapshot is updated in /api/studio/generations/complete.
+ */
+async function snapshotCreditBalance(
   admin: ReturnType<typeof createSupabaseServiceClient>,
   userId: string,
   rowIds: string[],
 ): Promise<void> {
   const uniq = [...new Set(rowIds.map((x) => x.trim()).filter(Boolean))];
-  if (uniq.length === 0) return;
-  if (!admin) return;
+  if (uniq.length === 0 || !admin) return;
   try {
     const { balance } = await getUserCreditBalance(admin, userId);
     const snap = Math.round(balance * 1000) / 1000;
@@ -106,6 +111,8 @@ export async function POST(req: Request) {
     : [];
   const aspectRatio = String(body.aspectRatio ?? "").trim();
 
+  const nowIso = new Date().toISOString();
+
   if (isFailed && taskIds.length === 0) {
     const single = {
       user_id: user.id,
@@ -116,6 +123,7 @@ export async function POST(req: Request) {
       provider,
       credits_charged: 0,
       uses_personal_api: usesPersonalApi,
+      started_at: nowIso,
       ...(errorMessage ? { error_message: errorMessage } : {}),
       ...(inputUrls.length > 0 ? { input_urls: inputUrls } : {}),
       ...(aspectRatio ? { aspect_ratio: aspectRatio } : {}),
@@ -142,13 +150,21 @@ export async function POST(req: Request) {
         .insert(insertFailedPayload as typeof single)
         .select("id, external_task_id"));
     }
+    if (error && isMissingStartedAtColumnError(error.message) && "started_at" in insertFailedPayload) {
+      const { started_at: _s, ...rest } = insertFailedPayload;
+      insertFailedPayload = rest;
+      ({ data, error } = await supabase
+        .from("studio_generations")
+        .insert(insertFailedPayload as typeof single)
+        .select("id, external_task_id"));
+    }
     if (error) {
       serverLog("studio_generations_register_failed", { kind, count: 1, message: error.message });
       return NextResponse.json({ error: error.message }, { status: 502 });
     }
     const row = Array.isArray(data) ? data[0] : data;
     if (row?.id) {
-      await snapshotCreditBalanceAfterInsert(admin, user.id, [String(row.id)]);
+      await snapshotCreditBalance(admin, user.id, [String(row.id)]);
     }
     serverLog("studio_generations_register_ok", { kind, rows: 1, provider });
     return NextResponse.json({
@@ -167,6 +183,7 @@ export async function POST(req: Request) {
     provider: string;
     credits_charged: number;
     uses_personal_api: boolean;
+    started_at?: string;
     error_message?: string;
     input_urls?: string[];
     aspect_ratio?: string;
@@ -201,6 +218,7 @@ export async function POST(req: Request) {
       provider,
       credits_charged: isFailed ? 0 : baseCharge + (i === 0 ? remainder : 0),
       uses_personal_api: usesPersonalApi,
+      started_at: nowIso,
       ...(isFailed && errorMessage ? { error_message: errorMessage } : {}),
       ...(inputUrls.length > 0 ? { input_urls: inputUrls } : {}),
       ...(aspectRatio ? { aspect_ratio: aspectRatio } : {}),
@@ -219,6 +237,10 @@ export async function POST(req: Request) {
       batch = batch.map(({ model: _m, ...row }) => row);
       ({ data, error } = await supabase.from("studio_generations").insert(batch).select("id, external_task_id"));
     }
+    if (error && isMissingStartedAtColumnError(error.message)) {
+      batch = batch.map(({ started_at: _s, ...row }) => row);
+      ({ data, error } = await supabase.from("studio_generations").insert(batch).select("id, external_task_id"));
+    }
     if (error) {
       serverLog("studio_generations_register_failed", { kind, count: toInsert.length, message: error.message });
       return NextResponse.json({ error: error.message }, { status: 502 });
@@ -229,7 +251,7 @@ export async function POST(req: Request) {
     }
     const newRowIds = inserted.map((r) => String(r.id)).filter(Boolean);
     if (newRowIds.length > 0) {
-      await snapshotCreditBalanceAfterInsert(admin, user.id, newRowIds);
+      await snapshotCreditBalance(admin, user.id, newRowIds);
     }
   }
 

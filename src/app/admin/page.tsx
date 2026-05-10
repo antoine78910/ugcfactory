@@ -19,6 +19,7 @@ import {
   Trash2,
   Users,
   Video,
+  X,
   Zap,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
@@ -191,6 +192,11 @@ type FeedbackRow = {
   created_at: string;
 };
 
+type PreviewMedia = {
+  url: string;
+  kind: "image" | "video";
+};
+
 function relativeTime(iso: string): string {
   const diff = Date.now() - new Date(iso).getTime();
   const mins = Math.floor(diff / 60000);
@@ -210,7 +216,20 @@ function statusColor(status: string): string {
 }
 
 function kindLabel(kind: string): string {
-  return kind.replace(/_/g, " ").replace(/\bstudio\b/i, "").trim() || kind;
+  const k = kind.toLowerCase().trim();
+  if (k === "ads_studio_video") return "Ads Studio";
+  if (k === "workflow_video") return "workflow video";
+  if (k === "workflow_image") return "workflow image";
+  if (k === "link_to_ad_video" || k === "link_to_ad_image") return "Link to Ad";
+  if (k === "studio_video") return "studio video";
+  if (k === "studio_image") return "studio image";
+  if (k === "studio_upscale") return "upscale";
+  if (k === "studio_translate_video") return "translate";
+  if (k === "studio_audio" || k === "studio_voice_change") return "audio";
+  if (k === "motion_control") return "motion control";
+  if (k === "intelligence_recreation" || k === "intelligence_video") return "intelligence";
+  if (k === "avatar") return "avatar";
+  return kind.replace(/_/g, " ").trim() || kind;
 }
 
 function productLinkLabel(raw: string): string {
@@ -235,11 +254,16 @@ function formatDurationMs(ms: number): string {
 function adminGenerationModelLabel(row: GenerationRow): string {
   const m = row.model?.trim();
   if (m) return m;
+  // For legacy rows without a recorded model, infer a best-guess from kind.
   const k = row.kind?.toLowerCase() ?? "";
-  if (k === "motion_control") return "motion control";
-  if (k.includes("upscale")) return "upscale";
-  if (k.includes("video")) return "video (model not recorded)";
-  if (k.includes("image") || k === "avatar") return "image (model not recorded)";
+  if (k === "ads_studio_video") return "seedance-2 (inferred)";
+  if (k === "intelligence_recreation" || k === "intelligence_video") return "seedance-2 (inferred)";
+  if (k === "studio_upscale") return "topaz AI (inferred)";
+  if (k === "studio_translate_video") return "wavespeed (inferred)";
+  if (k === "studio_audio" || k === "studio_voice_change") return "elevenlabs (inferred)";
+  if (k === "motion_control") return "kling motion (inferred)";
+  if (k.includes("video")) return "kling video (inferred)";
+  if (k.includes("image") || k === "avatar") return "kie image (inferred)";
   return "-";
 }
 
@@ -257,6 +281,15 @@ function durationForRow(row: GenerationRow): string {
   const end = Date.parse(endIso);
   if (!Number.isFinite(end)) return "-";
   return formatDurationMs(end - start);
+}
+
+function previewKindFromUrl(url: string): "image" | "video" | null {
+  const detected = detectInputMediaType(url);
+  if (detected === "video") return "video";
+  if (detected === "image") return "image";
+  if (/\.(mp4|webm|mov)(\?|#|$)/i.test(url)) return "video";
+  if (/\.(png|jpe?g|gif|webp|avif)(\?|#|$)/i.test(url)) return "image";
+  return null;
 }
 
 function inputIcon(t: InputMediaType) {
@@ -400,6 +433,7 @@ export default function AdminPage() {
   // Expanded row (for prompt/details)
   const [expandedGenId, setExpandedGenId] = useState<string | null>(null);
   const [expandedRunId, setExpandedRunId] = useState<string | null>(null);
+  const [previewMedia, setPreviewMedia] = useState<PreviewMedia | null>(null);
 
   // Credit redeem audit
   const [creditTokens, setCreditTokens] = useState<CreditRedeemTokenRow[]>([]);
@@ -2101,20 +2135,30 @@ export default function AdminPage() {
                                     }
                                     if (t === "video") {
                                       return (
-                                        <a key={i} href={url} target="_blank" rel="noreferrer" className="group relative h-20 w-20 overflow-hidden rounded-lg border border-white/10 bg-black">
+                                        <button
+                                          key={i}
+                                          type="button"
+                                          onClick={() => setPreviewMedia({ url, kind: "video" })}
+                                          className="group relative h-20 w-20 overflow-hidden rounded-lg border border-white/10 bg-black"
+                                        >
                                           <video src={url} className="h-full w-full object-cover" muted preload="metadata" />
                                           <span className="absolute inset-0 flex items-center justify-center bg-black/40 opacity-0 transition group-hover:opacity-100">
                                             <ExternalLink className="h-4 w-4 text-white" />
                                           </span>
-                                        </a>
+                                        </button>
                                       );
                                     }
                                     if (t === "image") {
                                       return (
-                                        <a key={i} href={url} target="_blank" rel="noreferrer" className="group relative h-20 w-20 overflow-hidden rounded-lg border border-white/10 bg-black">
+                                        <button
+                                          key={i}
+                                          type="button"
+                                          onClick={() => setPreviewMedia({ url, kind: "image" })}
+                                          className="group relative h-20 w-20 overflow-hidden rounded-lg border border-white/10 bg-black"
+                                        >
                                           {/* eslint-disable-next-line @next/next/no-img-element */}
                                           <img src={url} alt="" className="h-full w-full object-cover" />
-                                        </a>
+                                        </button>
                                       );
                                     }
                                     return (
@@ -2138,16 +2182,29 @@ export default function AdminPage() {
                                 <p className="text-[10px] font-semibold uppercase tracking-wide text-white/40">Result URLs</p>
                                 <div className="mt-1 flex flex-wrap gap-2">
                                   {row.result_urls.map((url, i) => {
-                                    const isVid = /\.(mp4|webm|mov)/i.test(url);
+                                    const kind = previewKindFromUrl(url);
+                                    if (!kind) {
+                                      return (
+                                        <a
+                                          key={i}
+                                          href={url}
+                                          target="_blank"
+                                          rel="noreferrer"
+                                          className="inline-flex items-center gap-1.5 rounded-lg border border-white/10 bg-white/5 px-3 py-1.5 text-xs text-violet-300 underline underline-offset-2 hover:text-violet-200"
+                                        >
+                                          <LinkIcon className="h-3 w-3" />
+                                          {productLinkLabel(url)}
+                                        </a>
+                                      );
+                                    }
                                     return (
-                                      <a
+                                      <button
                                         key={i}
-                                        href={url}
-                                        target="_blank"
-                                        rel="noreferrer"
+                                        type="button"
+                                        onClick={() => setPreviewMedia({ url, kind })}
                                         className="group relative h-20 w-20 overflow-hidden rounded-lg border border-white/10 bg-black"
                                       >
-                                        {isVid ? (
+                                        {kind === "video" ? (
                                           <video src={url} className="h-full w-full object-cover" muted preload="metadata" />
                                         ) : (
                                           /* eslint-disable-next-line @next/next/no-img-element */
@@ -2156,7 +2213,7 @@ export default function AdminPage() {
                                         <span className="absolute inset-0 flex items-center justify-center bg-black/40 opacity-0 transition group-hover:opacity-100">
                                           <ExternalLink className="h-4 w-4 text-white" />
                                         </span>
-                                      </a>
+                                      </button>
                                     );
                                   })}
                                 </div>
@@ -2238,9 +2295,13 @@ export default function AdminPage() {
                       </td>
                       <td className="px-3 py-2.5">
                         {row.video_url ? (
-                          <a href={row.video_url} target="_blank" rel="noreferrer" className="text-violet-300 underline underline-offset-2 hover:text-violet-200 text-[11px]">
+                          <button
+                            type="button"
+                            onClick={() => setPreviewMedia({ url: row.video_url as string, kind: "video" })}
+                            className="text-[11px] text-violet-300 underline underline-offset-2 hover:text-violet-200"
+                          >
                             View video
-                          </a>
+                          </button>
                         ) : <span className="text-white/25">-</span>}
                       </td>
                       <td className="px-3 py-2.5 text-white/40 whitespace-nowrap">{relativeTime(row.updated_at)}</td>
@@ -2271,13 +2332,18 @@ export default function AdminPage() {
                                 <p className="text-[10px] font-semibold uppercase tracking-wide text-white/40">Generated Images</p>
                                 <div className="mt-1 flex flex-wrap gap-2">
                                   {row.generated_image_urls?.map((url, i) => (
-                                    <a key={i} href={url} target="_blank" rel="noreferrer" className="group relative h-16 w-16 overflow-hidden rounded-lg border border-white/10 bg-black">
+                                    <button
+                                      key={i}
+                                      type="button"
+                                      onClick={() => setPreviewMedia({ url, kind: "image" })}
+                                      className="group relative h-16 w-16 overflow-hidden rounded-lg border border-white/10 bg-black"
+                                    >
                                       {/* eslint-disable-next-line @next/next/no-img-element */}
                                       <img src={url} alt="" className="h-full w-full object-cover" />
                                       <span className="absolute inset-0 flex items-center justify-center bg-black/40 opacity-0 transition group-hover:opacity-100">
                                         <ExternalLink className="h-3 w-3 text-white" />
                                       </span>
-                                    </a>
+                                    </button>
                                   ))}
                                 </div>
                               </div>
@@ -2318,6 +2384,43 @@ export default function AdminPage() {
           </div>
         )}
       </div>
+
+      {previewMedia ? (
+        <div
+          className="fixed inset-0 z-[120] flex items-center justify-center bg-black/85 p-4"
+          onClick={() => setPreviewMedia(null)}
+        >
+          <button
+            type="button"
+            onClick={() => setPreviewMedia(null)}
+            className="absolute right-4 top-4 inline-flex h-9 w-9 items-center justify-center rounded-full border border-white/20 bg-black/60 text-white/90 hover:bg-black/80"
+            aria-label="Close preview"
+          >
+            <X className="h-4 w-4" />
+          </button>
+          <div
+            className="max-h-[90vh] max-w-[90vw]"
+            onClick={(e) => e.stopPropagation()}
+          >
+            {previewMedia.kind === "video" ? (
+              <video
+                src={previewMedia.url}
+                controls
+                autoPlay
+                playsInline
+                className="max-h-[90vh] max-w-[90vw] rounded-xl border border-white/10 bg-black"
+              />
+            ) : (
+              // eslint-disable-next-line @next/next/no-img-element
+              <img
+                src={previewMedia.url}
+                alt="Generation preview"
+                className="max-h-[90vh] max-w-[90vw] rounded-xl border border-white/10 bg-black object-contain"
+              />
+            )}
+          </div>
+        </div>
+      ) : null}
     </div>
   );
 }

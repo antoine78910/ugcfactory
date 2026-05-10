@@ -197,7 +197,15 @@ function PodiumRow({ ad, idx }: { ad: TTAd; idx: number }) {
   );
 }
 
-export function IntelligenceOverviewDashboard({ sortBy: _sortBy }: { sortBy: SortBy }) {
+export function IntelligenceOverviewDashboard({
+  sortBy: _sortBy,
+  hasBrand = true,
+  onAddMyBrand,
+}: {
+  sortBy: SortBy;
+  hasBrand?: boolean;
+  onAddMyBrand?: () => void;
+}) {
   const [trackers, setTrackers] = useState<TTTracker[]>([]);
   const [competitors, setCompetitors] = useState<IntelligenceCompetitor[]>([]);
   const [activeTrackerId, setActiveTrackerId] = useState<string | null>(null);
@@ -353,6 +361,26 @@ export function IntelligenceOverviewDashboard({ sortBy: _sortBy }: { sortBy: Sor
 
   return (
     <div className="flex flex-col gap-4 p-5">
+      {!hasBrand ? (
+        <section className="rounded-2xl border border-violet-300/25 bg-violet-500/[0.08] p-4">
+          <div className="flex flex-wrap items-center justify-between gap-3">
+            <div>
+              <p className="text-sm font-semibold text-violet-100">No brand connected yet</p>
+              <p className="mt-1 text-xs text-violet-100/80">
+                Add your brand to unlock your own top ads and personalized insights.
+              </p>
+            </div>
+            <button
+              type="button"
+              onClick={() => onAddMyBrand?.()}
+              className="inline-flex items-center gap-2 rounded-xl bg-violet-400 px-3 py-2 text-xs font-semibold text-black shadow-[0_4px_0_0_rgba(76,29,149,0.95)] transition hover:bg-violet-300 hover:shadow-[0_5px_0_0_rgba(76,29,149,0.95)] active:translate-y-[2px] active:shadow-none"
+            >
+              Add my brand
+            </button>
+          </div>
+        </section>
+      ) : null}
+
 
       {/* ── KPI row ── */}
       <div className="grid gap-2 sm:grid-cols-3 xl:grid-cols-5">
@@ -664,7 +692,16 @@ export function IntelligenceOverviewDashboard({ sortBy: _sortBy }: { sortBy: Sor
         {sections.yourBrand ? (
           <div className="mt-4 flex flex-col gap-4">
             {trackers.length === 0 ? (
-              <p className="text-sm text-white/45">No brand connected yet.</p>
+              <div className="flex flex-wrap items-center gap-3">
+                <p className="text-sm text-white/45">No brand connected yet.</p>
+                <button
+                  type="button"
+                  onClick={() => onAddMyBrand?.()}
+                  className="rounded-lg border border-violet-300/35 bg-violet-500/12 px-2.5 py-1.5 text-[11px] font-semibold text-violet-100 transition hover:bg-violet-500/20"
+                >
+                  Add my brand
+                </button>
+              </div>
             ) : ownAdsLoading ? (
               <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-4">
                 {Array.from({ length: 4 }).map((_, i) => (

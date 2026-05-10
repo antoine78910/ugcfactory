@@ -4,8 +4,6 @@ import { NextResponse } from "next/server";
 import { requireSupabaseUser } from "@/lib/supabase/requireUser";
 import { createSupabaseServiceClient } from "@/lib/supabase/admin";
 import { spendUserCredits, getUserCreditBalance } from "@/lib/creditGrants";
-import { isSubscriptionUnlimitedEmail } from "@/lib/allowedUsers";
-import { resolveAuthUserEmail } from "@/lib/sessionUserEmail";
 import { displayCreditsToLedgerTicks } from "@/lib/creditLedgerTicks";
 
 export async function POST(req: Request) {
@@ -13,17 +11,12 @@ export async function POST(req: Request) {
   if (auth.response) return auth.response;
 
   const admin = createSupabaseServiceClient();
-  const email = await resolveAuthUserEmail(auth.user, admin);
-
-  if (isSubscriptionUnlimitedEmail(email)) {
-    return NextResponse.json({ spent: 0, balance: 999_999 });
-  }
 
   if (!admin) {
     return NextResponse.json({ error: "DB not configured" }, { status: 503 });
   }
 
-  // Every user (free + paid + comp) is debited unless on the unlimited allowlist or using personal API keys (handled at the calling endpoint).
+  // Every user with platform billing enabled is debited (free + paid + comp + admin).
 
   const body = (await req.json()) as { amount?: number };
   const display = Math.max(0, Number(body.amount) || 0);

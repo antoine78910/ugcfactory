@@ -8,9 +8,7 @@ import { createSupabaseServiceClient } from "@/lib/supabase/admin";
 import { parseAccountPlan, type AccountPlanId } from "@/lib/subscriptionModelAccess";
 import { getPlanFromPriceId } from "@/lib/stripe/subscriptionPrices";
 import {
-  isAllowedUser,
   isPersonalApiUser,
-  isSubscriptionUnlimitedEmail,
 } from "@/lib/allowedUsers";
 import { getUserCreditBalance } from "@/lib/creditGrants";
 import { stripeSubscriptionPeriodEndIso } from "@/lib/stripeSubscriptionPeriodEnd";
@@ -79,20 +77,6 @@ export async function GET() {
     } catch {
       /* ignore */
     }
-  }
-
-  // Allowlisted + primary admin accounts get unlimited access, skip Stripe entirely.
-  if (isSubscriptionUnlimitedEmail(email)) {
-    return NextResponse.json({
-      planId: "growth" as AccountPlanId,
-      billing: null,
-      userId: auth.user.id,
-      unlimited: true,
-      /** Founder allowlist only; primary admins get unlimited credits without forcing personal API mode. */
-      autoEnablePersonalApi: isAllowedUser(email),
-      creditBalance: 999_999,
-      studioAccessAllowed: true,
-    } satisfies MeSubscriptionResponse);
   }
 
   const userId = auth.user.id;

@@ -1,20 +1,17 @@
 import { NextResponse } from "next/server";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { getUserCreditBalance } from "@/lib/creditGrants";
-import { isSubscriptionUnlimitedEmail } from "@/lib/allowedUsers";
 
 /**
  * Single source of truth: returns true when the request must spend platform credits.
- * Replaces the previous `planId === "free"` rule. Now: every user pays UNLESS
- *   • they bring their own provider API key (`usesPersonalApi`), or
- *   • they are on the staff/internal "unlimited" allowlist.
+ * Replaces the previous `planId === "free"` rule. Now: every user pays unless
+ * they bring their own provider API key (`usesPersonalApi`).
  */
 export function shouldChargePlatformCredits(args: {
   usesPersonalApi: boolean;
   email: string | null | undefined;
 }): boolean {
   if (args.usesPersonalApi) return false;
-  if (isSubscriptionUnlimitedEmail(args.email ?? "")) return false;
   return true;
 }
 
@@ -30,9 +27,7 @@ export function shouldChargePlatformCredits(args: {
  *
  * The historical "free-only" gate let creators on comp plans generate without ever
  * decrementing their ledger, so the admin dashboard always showed the same balance.
- * Now we always check the ledger; the unlimited allowlist still bypasses charging
- * upstream via {@link shouldChargePlatformCredits}, so unlimited accounts never
- * even reach this function.
+ * Now we always check the ledger for all platform-billed users.
  */
 export async function assertSufficientCreditsResponse(args: {
   admin: SupabaseClient;

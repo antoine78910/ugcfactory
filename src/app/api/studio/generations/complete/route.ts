@@ -6,6 +6,8 @@ import { requireSupabaseUser } from "@/lib/supabase/requireUser";
 import { createSupabaseServiceClient } from "@/lib/supabase/admin";
 import { STUDIO_GENERATION_IN_PROGRESS_STATUSES } from "@/lib/studioGenerationsPoll";
 import { persistStudioMediaUrls, isStudioMediaPublicUrl } from "@/lib/studioGenerationsMedia";
+import { getUserCreditBalance } from "@/lib/creditGrants";
+import { isMissingCompletedAtColumnError, isMissingCreditBalanceAfterColumnError } from "@/lib/studioGenerationsSchemaCompat";
 
 type Body = {
   taskId: string;
@@ -72,16 +74,56 @@ export async function POST(req: Request) {
     }
   }
 
-  const { error } = await supabase
+  // Snapshot balance after completion — at this point the client has already
+  // called /api/me/credits/spend, so this reflects the true post-deduction balance.
+  let creditBalanceAfter: number | undefined;
+  const adminClient = createSupabaseServiceClient();
+  if (adminClient) {
+    try {
+      const { balance } = await getUserCreditBalance(adminClient, user.id);
+      creditBalanceAfter = Math.round(balance * 1000) / 1000;
+    } catch {
+      // non-fatal
+    }
+  }
+
+  const completedAt = new Date().toISOString();
+  let updatePayload: Record<string, unknown> = {
+    status: "ready",
+    result_urls: [finalUrl],
+    error_message: null,
+    completed_at: completedAt,
+    ...(creditBalanceAfter !== undefined ? { credit_balance_after: creditBalanceAfter } : {}),
+  };
+
+  let { error } = await supabase
     .from("studio_generations")
-    .update({
-      status: "ready",
-      result_urls: [finalUrl],
-      error_message: null,
-    })
+    .update(updatePayload)
     .eq("user_id", user.id)
     .eq("external_task_id", taskId)
     .in("status", [...STUDIO_GENERATION_IN_PROGRESS_STATUSES]);
+
+  // Graceful fallback: drop new columns if they don't exist in schema.
+  if (error && isMissingCompletedAtColumnError(error.message) && "completed_at" in updatePayload) {
+    const { completed_at: _c, ...rest } = updatePayload;
+    updatePayload = rest;
+    ({ error } = await supabase
+      .from("studio_generations")
+      .update(updatePayload)
+      .eq("user_id", user.id)
+      .eq("external_task_id", taskId)
+      .in("status", [...STUDIO_GENERATION_IN_PROGRESS_STATUSES]));
+  }
+  if (error && isMissingCreditBalanceAfterColumnError(error.message) && "credit_balance_after" in updatePayload) {
+    const { credit_balance_after: _b, ...rest } = updatePayload;
+    updatePayload = rest;
+    ({ error } = await supabase
+      .from("studio_generations")
+      .update(updatePayload)
+      .eq("user_id", user.id)
+      .eq("external_task_id", taskId)
+      .in("status", [...STUDIO_GENERATION_IN_PROGRESS_STATUSES]));
+  }
 
   if (error) {
     return NextResponse.json({ error: error.message }, { status: 502 });
