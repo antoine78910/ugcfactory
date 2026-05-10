@@ -106,7 +106,6 @@ type ClippingTemplateLibraryItem = {
 type ClippingTemplateId = "classic" | "split_focus_bottom_webcam";
 
 const TEMPLATE_TOP_RATIO = 0.75;
-const TEMPLATE_BOTTOM_RATIO = 0.25;
 const WEBCAM_CARD_ASPECT = 3 / 4; // portrait target
 
 function parseClippingTemplateId(raw: string | null): ClippingTemplateId {
@@ -140,37 +139,6 @@ function fileExtensionFromMime(mime: string | undefined): string {
   if (!mime) return "webm";
   if (mime.includes("mp4")) return "mp4";
   return "webm";
-}
-
-/**
- * Draws `src` covering the destination rectangle, cropping from the centre to
- * preserve the destination aspect ratio. Equivalent to CSS `object-fit: cover`.
- */
-function drawCover(
-  ctx: CanvasRenderingContext2D,
-  src: HTMLVideoElement,
-  dx: number,
-  dy: number,
-  dw: number,
-  dh: number,
-): void {
-  const sw = src.videoWidth;
-  const sh = src.videoHeight;
-  if (!sw || !sh) return;
-  const targetRatio = dw / dh;
-  const sourceRatio = sw / sh;
-  let cropW = sw;
-  let cropH = sh;
-  let cropX = 0;
-  let cropY = 0;
-  if (sourceRatio > targetRatio) {
-    cropW = sh * targetRatio;
-    cropX = (sw - cropW) / 2;
-  } else {
-    cropH = sw / targetRatio;
-    cropY = (sh - cropH) / 2;
-  }
-  ctx.drawImage(src, cropX, cropY, cropW, cropH, dx, dy, dw, dh);
 }
 
 /**
@@ -325,27 +293,6 @@ function drawHookTitle(
     ctx.fillText(lines[i], centerX, y);
   }
   ctx.restore();
-}
-
-function fitCenteredRect(
-  boundsX: number,
-  boundsY: number,
-  boundsW: number,
-  boundsH: number,
-  aspect: number,
-  fill = 0.92,
-): { x: number; y: number; w: number; h: number } {
-  const maxW = Math.max(1, boundsW * fill);
-  const maxH = Math.max(1, boundsH * fill);
-  let w = maxW;
-  let h = w / aspect;
-  if (h > maxH) {
-    h = maxH;
-    w = h * aspect;
-  }
-  const x = boundsX + Math.round((boundsW - w) / 2);
-  const y = boundsY + Math.round((boundsH - h) / 2);
-  return { x, y, w: Math.round(w), h: Math.round(h) };
 }
 
 function fitFullWidthRect(
@@ -650,7 +597,7 @@ export default function ClippingStudio() {
     [probeTemplateDuration, revokeTemplateObjectUrlIfNeeded, templateObjectUrl],
   );
 
-  const useLibraryTemplate = useCallback(
+  const applyLibraryTemplate = useCallback(
     (template: ClippingTemplateLibraryItem) => {
       revokeTemplateObjectUrlIfNeeded(templateObjectUrl);
       setTemplateFile(null);
@@ -851,7 +798,7 @@ export default function ClippingStudio() {
 
     lastCompositeTimeRef.current = 0;
     animationFrameRef.current = requestAnimationFrame(tick);
-  }, [mirrorWebcam]);
+  }, [mirrorWebcam, templateId]);
 
   useEffect(() => {
     // Show live camera preview as soon as setup is reached.
@@ -2052,7 +1999,7 @@ export default function ClippingStudio() {
                       <button
                         key={item.filename}
                         type="button"
-                        onClick={() => useLibraryTemplate(item)}
+                        onClick={() => applyLibraryTemplate(item)}
                         disabled={!canEditControls}
                         className={`min-h-8 rounded-lg border px-2 py-1.5 text-left text-[11px] font-medium leading-snug break-all whitespace-normal transition disabled:cursor-not-allowed disabled:opacity-40 ${
                           selected
