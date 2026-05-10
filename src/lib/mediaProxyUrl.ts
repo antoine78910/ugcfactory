@@ -48,6 +48,9 @@ function isDirectMediaUrl(parsed: URL): boolean {
     if (path.includes(frag)) return true;
   }
 
+  // Shopify product/collection assets served from the store's own domain (not only cdn.shopify.com).
+  if (/^\/cdn\/shop\//i.test(path)) return true;
+
   for (const suffix of DIRECT_HOSTNAME_SUFFIXES) {
     if (suffix.startsWith(".")) {
       if (host.endsWith(suffix)) return true;

@@ -62,9 +62,63 @@ const NON_PRODUCT_RE =
   /(?:logo|icon|favicon|sprite|badge|seal|social|instagram|facebook|tiktok|youtube|pinterest|payment|visa|mastercard|paypal|klarna|trustpilot|review|rating|star)\b/i;
 
 function looksLikeNonProductImage(u: string, alt?: string): boolean {
+  if (/\.ico(?:\?|$)/i.test(u)) return true;
+  if (/\/favicon\b/i.test(u)) return true;
   if (NON_PRODUCT_RE.test(u)) return true;
   if (alt && NON_PRODUCT_RE.test(alt.toLowerCase())) return true;
   return false;
+}
+
+/** Shopify / same-host storefront assets are often advertised as http:// while the page is https://. */
+function upgradeInsecureAssetUrl(absUrl: string, pageUrl: string): string {
+  try {
+    const page = new URL(pageUrl);
+    const img = new URL(absUrl);
+    if (img.protocol !== "http:" || page.protocol !== "https:") return absUrl;
+    const pageHost = page.hostname.replace(/^www\./i, "").toLowerCase();
+    const imgHost = img.hostname.replace(/^www\./i, "").toLowerCase();
+    const shopifyHost =
+      imgHost === "cdn.shopify.com" ||
+      imgHost.endsWith(".shopifycdn.com") ||
+      imgHost.endsWith(".myshopify.com");
+    const sameStoreHost = imgHost === pageHost;
+    const shopifyStorePath = /^\/cdn\/shop\//i.test(img.pathname);
+    if (shopifyHost || sameStoreHost || shopifyStorePath) {
+      img.protocol = "https:";
+      return img.toString();
+    }
+  } catch {
+    /* keep */
+  }
+  return absUrl;
+}
+
+function jsonLdNodeIsProduct(node: unknown): boolean {
+  const t = (node as { ["@type"]?: unknown })?.["@type"];
+  if (t === "Product") return true;
+  if (Array.isArray(t) && t.some((x) => x === "Product")) return true;
+  return false;
+}
+
+function jsonLdProductImageStrings(product: { image?: unknown }): string[] {
+  const img = product?.image;
+  if (typeof img === "string") return [img];
+  if (Array.isArray(img)) {
+    const out: string[] = [];
+    for (const x of img) {
+      if (typeof x === "string") out.push(x);
+      else if (x && typeof x === "object" && typeof (x as { url?: unknown }).url === "string") {
+        out.push(String((x as { url: string }).url));
+      }
+    }
+    return out;
+  }
+  if (img && typeof img === "object") {
+    const o = img as { url?: unknown; contentUrl?: unknown };
+    if (typeof o.url === "string") return [o.url];
+    if (typeof o.contentUrl === "string") return [o.contentUrl];
+  }
+  return [];
 }
 
 function looksLikeJunkImage(u: string, w?: number, h?: number): boolean {
@@ -129,13 +183,12 @@ function tryParseJsonLdProducts($: cheerio.CheerioAPI) {
       const parsed = JSON.parse(raw);
       const nodes = Array.isArray(parsed) ? parsed : [parsed];
       for (const node of nodes) {
-        const t = (node as any)?.["@type"];
-        if (t === "Product") products.push(node);
+        if (jsonLdNodeIsProduct(node)) products.push(node as { name?: string; image?: string | string[]; offers?: unknown });
         // Some sites nest Product inside @graph
-        const graph = (node as any)?.["@graph"];
+        const graph = (node as { ["@graph"]?: unknown })?.["@graph"];
         if (Array.isArray(graph)) {
           for (const g of graph) {
-            if ((g as any)?.["@type"] === "Product") products.push(g);
+            if (jsonLdNodeIsProduct(g)) products.push(g as { name?: string; image?: string | string[]; offers?: unknown });
           }
         }
       }
@@ -254,7 +307,6 @@ export async function POST(req: Request) {
   const html = fetched.html;
 
   const $ = cheerio.load(html);
-  $("script, style, noscript").remove();
 
   const title = cleanText($("title").first().text() || "");
   const ogTitle = cleanText($('meta[property="og:title"]').attr("content") || "");
@@ -271,37 +323,50 @@ export async function POST(req: Request) {
 
   function resolve(raw: string): string | null {
     if (!raw || raw.startsWith("data:")) return null;
-    try { return new URL(raw.trim(), url).toString(); } catch { return null; }
+    try {
+      const out = new URL(raw.trim(), url).toString();
+      return upgradeInsecureAssetUrl(out, url);
+    } catch {
+      return null;
+    }
   }
 
-  // JSON-LD Product images (best packshots)
+  // JSON-LD Product images live in <script type="application/ld+json"> — parse BEFORE stripping scripts.
   const ldProducts = selectPrimaryJsonLdProducts(
     tryParseJsonLdProducts($),
     ogTitle || title || "",
   );
   for (const p of ldProducts) {
-    const img = (p as any)?.image;
-    const imgs = typeof img === "string" ? [img] : Array.isArray(img) ? img : [];
-    for (const i of imgs) {
-      if (typeof i !== "string") continue;
+    const name = typeof (p as { name?: unknown }).name === "string" ? (p as { name: string }).name : undefined;
+    for (const i of jsonLdProductImageStrings(p)) {
       const u = resolve(i);
-      if (u) jsonLdBucket.push({ url: u, alt: (p as any)?.name, source: "json-ld" });
+      if (u && !looksLikeNonProductImage(u)) {
+        jsonLdBucket.push({ url: u, alt: name, source: "json-ld" });
+      }
     }
   }
+
+  $("script, style, noscript").remove();
 
   // OG / Twitter meta images
   const ogImage = $('meta[property="og:image"]').attr("content");
   const ogResolved = ogImage ? resolve(ogImage) : null;
-  if (ogResolved) ogBucket.push({ url: ogResolved, source: "og" });
+  if (ogResolved && !looksLikeNonProductImage(ogResolved)) {
+    ogBucket.push({ url: ogResolved, source: "og" });
+  }
 
   const twitterImage = $('meta[name="twitter:image"]').attr("content");
   const twResolved = twitterImage ? resolve(twitterImage) : null;
-  if (twResolved) ogBucket.push({ url: twResolved, source: "twitter" });
+  if (twResolved && !looksLikeNonProductImage(twResolved)) {
+    ogBucket.push({ url: twResolved, source: "twitter" });
+  }
 
   // Preload images
   $('link[rel="preload"][as="image"]').each((_, el) => {
     const u = resolve($(el).attr("href") ?? "");
-    if (u) ogBucket.push({ url: u, source: "preload" });
+    if (u && !looksLikeNonProductImage(u)) {
+      ogBucket.push({ url: u, source: "preload" });
+    }
   });
 
   // picture/source srcset
@@ -331,11 +396,27 @@ export async function POST(req: Request) {
   const PRODUCT_CONTAINER_RE =
     /product|gallery|carousel|slider|main-image|hero-image|featured|swiper|pdp|detail/i;
 
+  function pickImgSrcForExtract($el: cheerio.Cheerio<Element>): string | undefined {
+    const rawSrc = ($el.attr("src") ?? "").trim();
+    const dataSrc =
+      ($el.attr("data-src") ?? "").trim() ||
+      ($el.attr("data-lazy-src") ?? "").trim() ||
+      ($el.attr("data-original") ?? "").trim() ||
+      ($el.attr("data-zoom-src") ?? "").trim();
+    const looksLikePlaceholder =
+      !rawSrc ||
+      rawSrc.startsWith("data:") ||
+      /placeholder|spinner|loading|blank\.(gif|png)|1x1/i.test(rawSrc);
+    if (dataSrc && looksLikePlaceholder) return dataSrc;
+    if (dataSrc && rawSrc.length > 0 && rawSrc.length < 24) return dataSrc;
+    if (rawSrc && !rawSrc.startsWith("data:")) return rawSrc;
+    return dataSrc || undefined;
+  }
+
   $("img").each((_, el) => {
     if (isRelatedProductsContext($, el)) return;
     const $el = $(el);
-    const src =
-      $el.attr("src") || $el.attr("data-src") || $el.attr("data-original") || $el.attr("data-lazy-src");
+    const src = pickImgSrcForExtract($el);
     if (!src) return;
     const u = resolve(src);
     if (!u) return;
