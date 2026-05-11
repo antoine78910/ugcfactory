@@ -77,7 +77,9 @@ async function resizeImageOrNull(
     );
     headers.set("vary", "Cookie");
     headers.set("x-thumbnail-width", String(width));
-    return new Response(out, { status: 200, headers });
+    // `Buffer` extends Uint8Array so it's a valid BodyInit at runtime; the cast appeases the
+    // narrower @types/web BodyInit shape which omits Node's Buffer alias.
+    return new Response(out as unknown as BodyInit, { status: 200, headers });
   } catch {
     // Fall back to streaming the original upstream untouched.
     return null;

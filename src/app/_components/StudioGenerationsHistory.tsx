@@ -465,7 +465,7 @@ export function StudioGenerationsHistory({
           </div>
         ) : (
           <div className="space-y-8">
-          {grouped.map(({ date, rows }) => (
+          {grouped.map(({ date, rows }, groupIndex) => (
             <section key={date}>
               <div className="mb-3 flex items-center gap-3">
                 <span
@@ -556,10 +556,10 @@ export function StudioGenerationsHistory({
                           {item.posterUrl ? (
                             // eslint-disable-next-line @next/next/no-img-element
                             <img
-                              src={item.posterUrl}
+                              src={thumbProxiedMediaSrc(item.posterUrl, 320)}
                               alt=""
-                              loading="lazy"
                               decoding="async"
+                              {...eagerImgProps}
                               className="absolute inset-0 h-full w-full object-cover opacity-25"
                             />
                           ) : null}
@@ -631,6 +631,7 @@ export function StudioGenerationsHistory({
                           className="h-full w-full rounded-none border-0"
                           aspectClassName=""
                           enableLightbox={false}
+                          eager={isAboveFold}
                           onOpenFullscreen={() => {
                             setLightboxItem({
                               sourceId: item.id,
@@ -670,10 +671,10 @@ export function StudioGenerationsHistory({
                           >
                             {/* eslint-disable-next-line @next/next/no-img-element */}
                             <img
-                              src={item.mediaUrl}
+                              src={thumbProxiedMediaSrc(item.mediaUrl, 400)}
                               alt=""
-                              loading="lazy"
                               decoding="async"
+                              {...eagerImgProps}
                               className="h-full w-full object-cover object-center"
                             />
                           </button>
@@ -691,10 +692,10 @@ export function StudioGenerationsHistory({
                       {(item.status === "ready" || item.status === "generating") && !item.mediaUrl?.trim() && item.posterUrl ? (
                         // eslint-disable-next-line @next/next/no-img-element
                         <img
-                          src={item.posterUrl}
+                          src={thumbProxiedMediaSrc(item.posterUrl, 400)}
                           alt=""
-                          loading="lazy"
                           decoding="async"
+                          {...eagerImgProps}
                           className="h-full w-full object-cover"
                         />
                       ) : null}

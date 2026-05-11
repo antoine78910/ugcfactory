@@ -37,9 +37,13 @@ export default function VideoCard({
   const containerRef = useRef<HTMLDivElement>(null);
   const videoRef = useRef<HTMLVideoElement>(null);
   const [lightbox, setLightbox] = useState(false);
-  // Lazy mount the <video> element only when it's near the viewport.
-  // Avoids spinning up dozens of decoder pipelines for off-screen rows in History.
-  const [shouldMount, setShouldMount] = useState(eager);
+  /**
+   * Eager (above-the-fold) cards initialise both flags to true so React renders the <video>
+   * on the very first paint without going through the IntersectionObserver / slot queue.
+   * Non-eager cards start false and progress: nearViewport → shouldMount via two effects below.
+   */
+  const [nearViewport, setNearViewport] = useState<boolean>(eager);
+  const [shouldMount, setShouldMount] = useState<boolean>(eager);
   // Becomes true once the first frame has been decoded — drives the fade from skeleton/poster.
   const [firstFrameReady, setFirstFrameReady] = useState(false);
   // Tracks whether this VideoCard currently holds a global mount slot, so we release
@@ -51,13 +55,14 @@ export default function VideoCard({
   // instead of the full provider asset.
   const playPoster = poster?.trim() ? thumbProxiedMediaSrc(poster, 320) : undefined;
 
-  // Step 1: detect that the card is near the viewport.
-  const [nearViewport, setNearViewport] = useState(eager);
+  // Step 1: detect that the card is near the viewport. Eager cards skip this entirely.
   useEffect(() => {
     if (nearViewport) return;
     if (typeof IntersectionObserver === "undefined") {
-      setNearViewport(true);
-      return;
+      // Very old browser: defer to a microtask so we don't synchronously call setState
+      // inside the effect body (which trips react-hooks/set-state-in-effect).
+      const t = setTimeout(() => setNearViewport(true), 0);
+      return () => clearTimeout(t);
     }
     const el = containerRef.current;
     if (!el) return;
@@ -80,14 +85,11 @@ export default function VideoCard({
     return () => observer.disconnect();
   }, [nearViewport]);
 
-  // Step 2: acquire a global mount slot before actually rendering the <video>.
-  // Eager cards skip the queue entirely (above-the-fold).
+  // Step 2: acquire a global mount slot before actually rendering the <video>. The setState
+  // here runs inside a `.then` (or cleanup), never synchronously in the effect body, so the
+  // sync-set-state rule is satisfied.
   useEffect(() => {
     if (shouldMount || !nearViewport) return;
-    if (eager) {
-      setShouldMount(true);
-      return;
-    }
     let cancelled = false;
     void acquireVideoMountSlot().then(() => {
       if (cancelled) {
@@ -100,7 +102,7 @@ export default function VideoCard({
     return () => {
       cancelled = true;
     };
-  }, [eager, nearViewport, shouldMount]);
+  }, [nearViewport, shouldMount]);
 
   // Release the slot when the component unmounts (covers the case where the user scrolls
   // past before the first frame ever decodes).

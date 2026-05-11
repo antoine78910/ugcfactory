@@ -111,7 +111,9 @@ export async function POST(req: Request) {
           listRows = filterLegacyLinkToAdFromTabRows(listRows, resolvedKindsFast);
         }
         const items = listRows.map(studioGenerationRowToHistoryItem);
-        return NextResponse.json({ data: items, refundHints: [] });
+        // hasInFlight=false lets the background loop switch to its idle cadence
+        // (every ~30 s instead of every 4.5 s), drastically cutting serverless cost.
+        return NextResponse.json({ data: items, refundHints: [], hasInFlight: false });
       }
     }
 
@@ -199,7 +201,14 @@ export async function POST(req: Request) {
       listRows = filterLegacyLinkToAdFromTabRows(listRows, resolvedKinds);
     }
     const items = listRows.map(studioGenerationRowToHistoryItem);
-    return NextResponse.json({ data: items, refundHints });
+    // hasInFlight=true when we just polled rows that are still in-progress.
+    // A row that flipped to ready/failed *during* this request is no longer in `processingRows`
+    // for the next iteration, but the client doesn't need to know that — it'll re-check on
+    // the next tick.
+    const hasInFlight = processingRows.some((r) =>
+      (STUDIO_GENERATION_IN_PROGRESS_STATUSES as readonly string[]).includes(String(r.status ?? "")),
+    );
+    return NextResponse.json({ data: items, refundHints, hasInFlight });
   } catch (err) {
     const message =
       err instanceof Error
