@@ -107,10 +107,17 @@ export default function RootLayout({
           dns-prefetch (handshake done lazily when user clicks signin/signup).
           `dubcdn.com` is a true preconnect because the analytics script fires
           on load. `datafa.st` stays at dns-prefetch (lazyOnload script).
+
+          `cdn.heyo.so` + `scripts.clarity.ms` are loaded on the first user
+          interaction (loadOnFirstInteraction in HeyoInit / ClarityInit). dns-prefetch
+          keeps the cost off the critical path while still warming the resolver so
+          the handshake takes a few hundred ms less when the chat / replay finally fires.
         */}
         <link rel="preconnect" href="https://www.dubcdn.com" crossOrigin="anonymous" />
         <link rel="dns-prefetch" href="https://app.youry.io" />
         <link rel="dns-prefetch" href="https://datafa.st" />
+        <link rel="dns-prefetch" href="https://cdn.heyo.so" />
+        <link rel="dns-prefetch" href="https://scripts.clarity.ms" />
       </head>
       <body
         className={`${geistSans.variable} ${geistMono.variable} antialiased`}

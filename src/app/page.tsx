@@ -213,7 +213,9 @@ export default function LandingPage() {
                   fill
                   loading={step.number === "01" ? "eager" : "lazy"}
                   className="object-cover transition-transform duration-300 group-hover:scale-[1.02]"
-                  sizes="(max-width: 768px) 90vw, 360px"
+                  // Tightened on 2026-05-11 — was serving 640×358 for a 303×172 display box.
+                  // Three columns at md+ → ~32vw on typical desktop, capped at the actual rendered ~360px max.
+                  sizes="(max-width: 768px) 88vw, (max-width: 1280px) 32vw, 360px"
                 />
               </div>
 
