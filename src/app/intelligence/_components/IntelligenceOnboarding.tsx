@@ -57,13 +57,18 @@ async function fetchSavedCompetitors(): Promise<IntelligenceCompetitor[]> {
 async function fetchTopAdsForCompetitor(opts: {
   lookupId: string;
   q: string;
+  name?: string;
+  domain?: string;
   sortBy: string;
 }): Promise<TTAd[]> {
-  const res = await fetch(
-    `/api/intelligence/competitors/top-ads?lookupId=${encodeURIComponent(
-      opts.lookupId,
-    )}&q=${encodeURIComponent(opts.q)}&sortBy=${encodeURIComponent(opts.sortBy)}`,
-  );
+  const params = new URLSearchParams({
+    lookupId: opts.lookupId,
+    q: opts.q,
+    sortBy: opts.sortBy,
+  });
+  if (opts.name?.trim()) params.set("name", opts.name.trim());
+  if (opts.domain?.trim()) params.set("domain", opts.domain.trim());
+  const res = await fetch(`/api/intelligence/competitors/top-ads?${params.toString()}`);
   const json = (await res.json().catch(() => ({}))) as any;
   const ads = Array.isArray(json?.ads) ? (json.ads as TTAd[]) : Array.isArray(json) ? (json as TTAd[]) : [];
   return ads.map((a, i) => ({ ...a, rank: i + 1 }));
@@ -253,8 +258,16 @@ export function IntelligenceOnboarding({
     setAdsError(null);
     try {
       const lookupId = c.lookupId ?? c.id;
-      const q = c.domain?.trim() || c.name?.trim() || lookupId;
-      const out = await fetchTopAdsForCompetitor({ lookupId, q, sortBy: "currentRank" });
+      const name = c.name?.trim() ?? "";
+      const domain = c.domain?.trim() ?? "";
+      const q = name || domain || lookupId;
+      const out = await fetchTopAdsForCompetitor({
+        lookupId,
+        q,
+        name: name || undefined,
+        domain: domain || undefined,
+        sortBy: "currentRank",
+      });
       setAds(out.filter((a) => Boolean(a.videoUrl && a.videoUrl.trim())).slice(0, 10));
     } catch {
       setAdsError("Could not load competitor ads.");

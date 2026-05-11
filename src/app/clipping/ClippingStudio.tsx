@@ -1989,7 +1989,8 @@ export default function ClippingStudio() {
                 <p className="mt-2 text-[11px] text-white/50">Loading templates…</p>
               ) : templateLibrary.length === 0 ? (
                 <p className="mt-2 text-[11px] text-white/50">
-                  No saved templates found in <code>/public/studio/template</code>.
+                  No saved templates found in <code>/public/studio/template-clipping</code> or{" "}
+                  <code>/public/studio/template</code>.
                 </p>
               ) : (
                 <div className="mt-2 flex max-h-36 flex-col gap-1 overflow-auto pr-1">

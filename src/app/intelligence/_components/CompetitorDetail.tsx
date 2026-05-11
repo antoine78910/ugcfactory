@@ -78,7 +78,10 @@ export function CompetitorDetail({
     activeIdRef.current = competitor.id;
   }, [competitor.id]);
 
-  const displayQ = useMemo(() => competitor.domain?.trim() || competitor.name?.trim() || competitor.id, [competitor]);
+  const displayQ = useMemo(
+    () => competitor.name?.trim() || competitor.domain?.trim() || competitor.id,
+    [competitor],
+  );
 
   const [ads, setAds] = useState<TTAd[]>([]);
   const [adsMediaFilter, setAdsMediaFilter] = useState<MediaFilter>("all");
@@ -92,11 +95,16 @@ export function CompetitorDetail({
       setAdsError(null);
       setStaleAt(null);
       try {
+        const name = competitor.name?.trim() ?? "";
+        const domain = competitor.domain?.trim() ?? "";
         const params = new URLSearchParams({
           q: displayQ,
           sortBy,
         });
-        if (isTracked) params.set("lookupId", competitor.id);
+        if (name) params.set("name", name);
+        if (domain) params.set("domain", domain);
+        // Always scope by resolved advertiser / brandtracker id (lookup id is the Meta page id for picks).
+        if (competitor.id?.trim()) params.set("lookupId", competitor.id.trim());
         if (force) params.set("force", "true");
         const res = await fetch(`/api/intelligence/competitors/top-ads?${params.toString()}`);
         const parsed = await parseIntelResponse<{
@@ -118,7 +126,7 @@ export function CompetitorDetail({
         setAdsLoading(false);
       }
     },
-    [competitor.id, displayQ, isTracked, sortBy],
+    [competitor.id, competitor.name, competitor.domain, displayQ, sortBy],
   );
 
   useEffect(() => {
@@ -164,7 +172,8 @@ export function CompetitorDetail({
           <div>
             <h2 className="text-lg font-semibold text-white/90">{competitor.name}</h2>
             <p className="text-xs text-white/45">
-              {competitor.domain ? competitor.domain : "Competitor"} · Sort: {sortBy}
+              {competitor.domain ? competitor.domain : "Competitor"}
+              {isTracked ? " · Tracked brand" : ""} · Sort: {sortBy}
               {staleAt ? ` · Stale cache (${new Date(staleAt).toLocaleString()})` : ""}
             </p>
           </div>

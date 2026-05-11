@@ -271,9 +271,13 @@ export function IntelligenceOverviewDashboard({
   const fetchAdsForMode = useCallback(async (competitor: IntelligenceCompetitor, mode: SortBy) => {
     setAdsLoading((p) => ({ ...p, [mode]: true }));
     try {
-      const q = competitor.domain?.trim() || competitor.name.trim() || "";
+      const name = competitor.name.trim();
+      const domain = competitor.domain?.trim() ?? "";
+      const q = name || domain;
       if (!q) return;
       const params = new URLSearchParams({ q, sortBy: mode });
+      if (name) params.set("name", name);
+      if (domain) params.set("domain", domain);
       if (competitor.lookupId?.trim()) params.set("lookupId", competitor.lookupId.trim());
       const res = await fetch(`/api/intelligence/competitors/top-ads?${params.toString()}`);
       const json = (await res.json().catch(() => ({}))) as { ads?: TTAd[] } | TTAd[];

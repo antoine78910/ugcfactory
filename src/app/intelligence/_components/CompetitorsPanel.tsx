@@ -105,8 +105,23 @@ function CompetitorDomainAvatar({
   );
 }
 
+function formatReach30d(n: number): string {
+  if (!Number.isFinite(n) || n <= 0) return "";
+  if (n >= 1_000_000) return `${(n / 1_000_000).toFixed(1)}M reach (30d)`;
+  if (n >= 1_000) return `${Math.round(n / 1_000)}k reach (30d)`;
+  return `${Math.round(n)} reach (30d)`;
+}
+
 function subtitleLine(hit: TTLookupResult): string {
-  if (hit.domain?.trim()) return hit.domain.trim().toLowerCase();
+  const parts: string[] = [];
+  if (hit.domain?.trim()) parts.push(hit.domain.trim().toLowerCase());
+  if (typeof hit.activeAds === "number" && hit.activeAds > 0) {
+    parts.push(`${hit.activeAds.toLocaleString("en-US")} active ads`);
+  }
+  const reachLabel =
+    typeof hit.reach30d === "number" && hit.reach30d > 0 ? formatReach30d(hit.reach30d) : "";
+  if (reachLabel) parts.push(reachLabel);
+  if (parts.length > 0) return parts.join(" · ");
   const t = (hit.type ?? "").toLowerCase();
   if (t === "brandtracker") return "Your tracker";
   return "Advertising page";

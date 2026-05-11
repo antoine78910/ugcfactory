@@ -3,7 +3,8 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { Download, Maximize2, X } from "lucide-react";
 import { cn } from "@/lib/utils";
-import { proxiedMediaSrc } from "@/lib/mediaProxyUrl";
+import { proxiedMediaSrc, thumbProxiedMediaSrc } from "@/lib/mediaProxyUrl";
+import { acquireVideoMountSlot, releaseVideoMountSlot } from "@/lib/videoMountSlots";
 
 type VideoCardProps = {
   src: string;
@@ -15,6 +16,13 @@ type VideoCardProps = {
   onOpenFullscreen?: () => void;
   /** Defaults to true. Set to false to disable internal fullscreen lightbox. */
   enableLightbox?: boolean;
+  /**
+   * Hint that this card is in the first ~6 above-the-fold tiles. Skips the
+   * IntersectionObserver gate and the concurrent-mount semaphore so the visible
+   * grid fills immediately. Off-screen tiles keep the throttle to avoid swamping
+   * the network with header fetches.
+   */
+  eager?: boolean;
 };
 
 export default function VideoCard({
@@ -24,23 +32,31 @@ export default function VideoCard({
   aspectClassName = "aspect-[9/16]",
   onOpenFullscreen,
   enableLightbox = true,
+  eager = false,
 }: VideoCardProps) {
   const containerRef = useRef<HTMLDivElement>(null);
   const videoRef = useRef<HTMLVideoElement>(null);
   const [lightbox, setLightbox] = useState(false);
   // Lazy mount the <video> element only when it's near the viewport.
   // Avoids spinning up dozens of decoder pipelines for off-screen rows in History.
-  const [shouldMount, setShouldMount] = useState(false);
+  const [shouldMount, setShouldMount] = useState(eager);
   // Becomes true once the first frame has been decoded — drives the fade from skeleton/poster.
   const [firstFrameReady, setFirstFrameReady] = useState(false);
+  // Tracks whether this VideoCard currently holds a global mount slot, so we release
+  // exactly once (on first frame OR on unmount).
+  const slotHeldRef = useRef(false);
 
   const playSrc = proxiedMediaSrc(src);
-  const playPoster = poster?.trim() ? proxiedMediaSrc(poster) : undefined;
+  // Posters are still images — request a 320px WebP so above-the-fold tiles transfer ~30 KB
+  // instead of the full provider asset.
+  const playPoster = poster?.trim() ? thumbProxiedMediaSrc(poster, 320) : undefined;
 
+  // Step 1: detect that the card is near the viewport.
+  const [nearViewport, setNearViewport] = useState(eager);
   useEffect(() => {
-    if (shouldMount) return;
+    if (nearViewport) return;
     if (typeof IntersectionObserver === "undefined") {
-      setShouldMount(true);
+      setNearViewport(true);
       return;
     }
     const el = containerRef.current;
@@ -49,17 +65,53 @@ export default function VideoCard({
       (entries) => {
         for (const entry of entries) {
           if (entry.isIntersecting) {
-            setShouldMount(true);
+            setNearViewport(true);
             observer.disconnect();
             break;
           }
         }
       },
-      { rootMargin: "300px 0px", threshold: 0.01 },
+      // Tightened from 300px to 100px so off-screen tiles don't all rush to fetch the moov
+      // atom at once. Combined with the slot semaphore below, only N=4 videos contend for
+      // network at any moment.
+      { rootMargin: "100px 0px", threshold: 0.01 },
     );
     observer.observe(el);
     return () => observer.disconnect();
-  }, [shouldMount]);
+  }, [nearViewport]);
+
+  // Step 2: acquire a global mount slot before actually rendering the <video>.
+  // Eager cards skip the queue entirely (above-the-fold).
+  useEffect(() => {
+    if (shouldMount || !nearViewport) return;
+    if (eager) {
+      setShouldMount(true);
+      return;
+    }
+    let cancelled = false;
+    void acquireVideoMountSlot().then(() => {
+      if (cancelled) {
+        releaseVideoMountSlot();
+        return;
+      }
+      slotHeldRef.current = true;
+      setShouldMount(true);
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [eager, nearViewport, shouldMount]);
+
+  // Release the slot when the component unmounts (covers the case where the user scrolls
+  // past before the first frame ever decodes).
+  useEffect(() => {
+    return () => {
+      if (slotHeldRef.current) {
+        slotHeldRef.current = false;
+        releaseVideoMountSlot();
+      }
+    };
+  }, []);
 
   const openFullscreen = () => {
     if (typeof onOpenFullscreen === "function") return onOpenFullscreen();
@@ -68,13 +120,23 @@ export default function VideoCard({
 
   // Without a poster, seek slightly past 0 so the first decoded frame shows (avoids all-black idle).
   // `loadedmetadata` fires earlier on many providers than `loadeddata` and is enough to display
-  // the first frame, so we use both to flip `firstFrameReady` ASAP.
+  // the first frame, so we use both to flip `firstFrameReady` ASAP. Releasing the global
+  // mount slot is also wired here so the next queued VideoCard can start fetching.
   useEffect(() => {
     if (!shouldMount) return;
     const v = videoRef.current;
     if (!v || !playSrc.trim()) return;
 
-    const reveal = () => setFirstFrameReady(true);
+    const releaseSlot = () => {
+      if (slotHeldRef.current) {
+        slotHeldRef.current = false;
+        releaseVideoMountSlot();
+      }
+    };
+    const reveal = () => {
+      setFirstFrameReady(true);
+      releaseSlot();
+    };
     const onLoadedData = () => {
       try {
         if (!playPoster) {

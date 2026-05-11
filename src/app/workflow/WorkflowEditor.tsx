@@ -4021,6 +4021,9 @@ function WorkflowFlowWorkspace({
           ImageRefNodeData
       >,
     ) => {
+      // Only block user-editable parameter keys during a run-from-here chain.
+      // Output fields (assistantMode, assistantOutput, websiteLastRunAt, outputPreviewUrl, etc.)
+      // must NOT be blocked — they carry the actual results produced by the running node.
       const blockedAdAssetParamKeys: (keyof AdAssetNodeData)[] = [
         "label",
         "prompt",
@@ -4029,8 +4032,6 @@ function WorkflowFlowWorkspace({
         "resolution",
         "quantity",
         "assistantModel",
-        "assistantMode",
-        "assistantOutput",
         "assistantExportMode",
         "websiteUrl",
         "websiteOutputMode",
@@ -5621,19 +5622,37 @@ export function WorkflowEditor({
           return;
         }
         if (res.status === 409) {
-          const latest = await fetchCloudWorkflowSpace(resolvedSpaceId);
-          if (latest?.updatedAt) {
-            lastCloudUpdatedAtRef.current = latest.updatedAt;
+          // The server returns serverUpdatedAt in the 409 body; use it directly to
+          // avoid an extra round-trip. Fall back to a fresh fetch only when missing.
+          let resolvedUpdatedAt: string | null = res.serverUpdatedAt ?? null;
+          if (!resolvedUpdatedAt) {
+            const latest = await fetchCloudWorkflowSpace(resolvedSpaceId);
+            resolvedUpdatedAt = latest?.updatedAt ?? null;
+            // If the cloud already reflects our local state another save is not needed.
+            if (
+              latest &&
+              workflowCloudPayloadMatchesLocal(latest, {
+                name: spaceName,
+                publishedCommunityTemplateId: publishedTemplateId,
+                state: workflowProject,
+              })
+            ) {
+              if (resolvedUpdatedAt) lastCloudUpdatedAtRef.current = resolvedUpdatedAt;
+              return;
+            }
           }
-          if (
-            latest &&
-            workflowCloudPayloadMatchesLocal(latest, {
+          // Retry once with the freshly-resolved expectedUpdatedAt so that
+          // assistant results (and any other pending changes) are not lost.
+          if (resolvedUpdatedAt) {
+            lastCloudUpdatedAtRef.current = resolvedUpdatedAt;
+            const retry = await saveCloudWorkflowSpace({
+              spaceId: resolvedSpaceId,
               name: spaceName,
-              publishedCommunityTemplateId: publishedTemplateId,
               state: workflowProject,
-            })
-          ) {
-            return;
+              publishedCommunityTemplateId: publishedTemplateId,
+              expectedUpdatedAt: resolvedUpdatedAt,
+            });
+            if (retry.ok && retry.updatedAt) lastCloudUpdatedAtRef.current = retry.updatedAt;
           }
         }
       })();

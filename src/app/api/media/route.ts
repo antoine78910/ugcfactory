@@ -1,5 +1,6 @@
 export const runtime = "nodejs";
 
+import sharp from "sharp";
 import { requireSupabaseUser } from "@/lib/supabase/requireUser";
 import { isPrivateHost, parsePublicHttpUrl } from "@/lib/ssrfHttpUrl";
 
@@ -23,6 +24,66 @@ function isRenderableMediaContentType(ct: string): boolean {
   return t.startsWith("image/") || t.startsWith("video/") || t.startsWith("audio/");
 }
 
+/** Allowed thumbnail widths — discrete so the CDN/browser cache gets reused. */
+const ALLOWED_THUMB_WIDTHS: readonly number[] = [200, 320, 400, 640, 800, 1080];
+
+function parseThumbWidth(raw: string | null): number | null {
+  if (!raw) return null;
+  const n = Number(raw.trim());
+  if (!Number.isFinite(n) || n <= 0) return null;
+  // Snap to the nearest allowed bucket so we don't fan-out cache entries per pixel.
+  for (const w of ALLOWED_THUMB_WIDTHS) {
+    if (n <= w) return w;
+  }
+  return ALLOWED_THUMB_WIDTHS[ALLOWED_THUMB_WIDTHS.length - 1]!;
+}
+
+function parseThumbQuality(raw: string | null): number {
+  const n = Number((raw ?? "").trim());
+  if (!Number.isFinite(n) || n <= 0) return 70;
+  return Math.min(90, Math.max(40, Math.floor(n)));
+}
+
+/**
+ * Resize the upstream image body to `width` pixels and re-encode as WebP. Returns null
+ * if the upstream isn't a still image (video/audio/SVG/GIF) so the caller streams through
+ * as before. Buffers the body — fine for thumbnails (<= a few MB).
+ */
+async function resizeImageOrNull(
+  upstream: Response,
+  width: number,
+  quality: number,
+): Promise<Response | null> {
+  const ct = (upstream.headers.get("content-type") ?? "").toLowerCase();
+  if (!ct.startsWith("image/")) return null;
+  // Don't reshape vector/animated formats — sharp can rasterise SVG but we'd lose animation on GIF.
+  if (ct.includes("svg") || ct.includes("gif")) return null;
+  if (!upstream.body) return null;
+
+  try {
+    const buf = Buffer.from(await upstream.arrayBuffer());
+    const out = await sharp(buf, { failOn: "none" })
+      .rotate()
+      .resize({ width, withoutEnlargement: true })
+      .webp({ quality, effort: 3 })
+      .toBuffer();
+
+    const headers = new Headers();
+    headers.set("content-type", "image/webp");
+    headers.set("content-length", String(out.length));
+    headers.set(
+      "cache-control",
+      "public, max-age=86400, stale-while-revalidate=604800, immutable",
+    );
+    headers.set("vary", "Cookie");
+    headers.set("x-thumbnail-width", String(width));
+    return new Response(out, { status: 200, headers });
+  } catch {
+    // Fall back to streaming the original upstream untouched.
+    return null;
+  }
+}
+
 /**
  * Inline playback / image load through the app origin (auth required).
  * Forwards Range so video elements can seek and show frames immediately.
@@ -38,7 +99,13 @@ export async function GET(req: Request) {
     return Response.json({ error: "Missing or invalid `url`." }, { status: 400 });
   }
 
-  const range = req.headers.get("range");
+  // Optional thumbnail resize for image upstreams. When `w=` is present we ignore Range and
+  // serve a fresh resized WebP — the proxied URL itself acts as the cache key, so different
+  // widths map to different cache entries.
+  const thumbWidth = parseThumbWidth(searchParams.get("w"));
+  const thumbQuality = parseThumbQuality(searchParams.get("q"));
+
+  const range = thumbWidth ? null : req.headers.get("range");
   const ifNoneMatch = req.headers.get("if-none-match");
   const ifModifiedSince = req.headers.get("if-modified-since");
   const filename = safeFilenameFromUrl(target);
@@ -100,6 +167,39 @@ export async function GET(req: Request) {
         },
         { status: 502 },
       );
+    }
+
+    if (thumbWidth) {
+      // For image content-types: returns a resized WebP Response. For non-image bodies
+      // (video / audio): returns null without consuming the body, so we fall through to
+      // the stream path below.
+      const resized = await resizeImageOrNull(upstream, thumbWidth, thumbQuality);
+      if (resized) return resized;
+      // If resizeImageOrNull returned null AFTER consuming the body (sharp threw on a
+      // malformed image), we cannot stream it any more — refetch a fresh body.
+      if (upstreamCt.startsWith("image/")) {
+        try {
+          upstream = await fetch(target, {
+            redirect: "follow",
+            headers: {
+              "User-Agent":
+                "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/133.0.0.0 Safari/537.36",
+              Accept: "image/avif,image/webp,image/apng,image/*,*/*;q=0.8",
+              Referer: `${target.origin}/`,
+              Origin: target.origin,
+            },
+          });
+          if (!upstream.ok || !upstream.body) {
+            return Response.json(
+              { error: `Upstream failed on refetch: HTTP ${upstream.status}` },
+              { status: 502 },
+            );
+          }
+        } catch (err) {
+          const msg = err instanceof Error ? err.message : "Refetch failed.";
+          return Response.json({ error: msg }, { status: 502 });
+        }
+      }
     }
 
     const out = new Headers();

@@ -2,10 +2,14 @@ export const runtime = "nodejs";
 
 import { NextResponse } from "next/server";
 import { requireSupabaseUser } from "@/lib/supabase/requireUser";
-import { TrendTrackError } from "@/lib/trendtrack";
-import { ttLookup } from "@/lib/trendtrack";
+import { TrendTrackError, ttLookup, ttQueryAdvertisers } from "@/lib/trendtrack";
 import type { TTLookupResult } from "@/lib/trendtrack";
-import { normalizeTTLookupRow } from "@/lib/trendtrackAdvertiserSearch";
+import {
+  mapAdvertiserQueryRowsToLookups,
+  normalizeCachedLookupRows,
+  trendTrackQueryLooksLikeDomain,
+  trendTrackStripHostQuery,
+} from "@/lib/trendtrackBrandDiscovery";
 import { getCached, setCached } from "@/lib/trendtrackCache";
 import { respondTrendTrackError } from "@/app/api/intelligence/_errors";
 
@@ -25,6 +29,27 @@ function normalizeLookupQuery(raw: string): string {
   }
 }
 
+/**
+ * Step 1 of brand discovery: `POST /v1/advertisers/query` (active ads sort, top matches, stable page ids).
+ * Falls back to zero-credit `/v1/lookup` when the advertiser index returns nothing.
+ */
+async function searchAdvertisersForBar(q: string): Promise<TTLookupResult[]> {
+  const searchType = trendTrackQueryLooksLikeDomain(q) ? "domain" : "brand";
+  const searchTerm = searchType === "domain" ? trendTrackStripHostQuery(q) : q.trim();
+  if (!searchTerm) return [];
+
+  const rows = await ttQueryAdvertisers({
+    search: [searchTerm],
+    searchType,
+    sortBy: "activeAds",
+    order: "desc",
+    limit: 3,
+    offset: 0,
+  });
+  const mapped = mapAdvertiserQueryRowsToLookups(rows);
+  return mapped;
+}
+
 export async function GET(req: Request) {
   const { response } = await requireSupabaseUser();
   if (response) return response;
@@ -35,16 +60,24 @@ export async function GET(req: Request) {
   if (!q) return NextResponse.json({ error: "Missing q" }, { status: 400 });
 
   const lookupType = new URL(req.url).searchParams.get("type")?.trim() ?? "";
-  const key = `lookup:v4:${lookupType || "_"}:${q.toLowerCase()}`;
-  const normalizeCached = (payload: unknown): TTLookupResult[] => {
-    if (!Array.isArray(payload)) return [];
-    return payload.map((row) => normalizeTTLookupRow(row)).filter((x): x is TTLookupResult => x !== null);
-  };
+  const key = `lookup:v6:${lookupType || "_"}:${q.toLowerCase()}`;
 
   const cached = await getCached(key);
-  if (cached) return NextResponse.json(normalizeCached(cached));
+  if (cached) return NextResponse.json(normalizeCachedLookupRows(cached));
 
   try {
+    if (lookupType === "advertiser") {
+      const fromAdvertiserQuery = await searchAdvertisersForBar(q);
+      if (fromAdvertiserQuery.length > 0) {
+        await setCached(key, fromAdvertiserQuery, TTL);
+        return NextResponse.json(fromAdvertiserQuery);
+      }
+      const lookupOpts = { type: "advertiser" as const };
+      const data = await ttLookup(q, lookupOpts);
+      await setCached(key, data, TTL);
+      return NextResponse.json(data);
+    }
+
     const lookupOpts = lookupType ? { type: lookupType } : undefined;
     const data = await ttLookup(q, lookupOpts);
     await setCached(key, data, TTL);
@@ -55,9 +88,20 @@ export async function GET(req: Request) {
       const fallback = normalizeLookupQuery(rawQ);
       if (fallback && fallback !== q) {
         try {
+          const keyFb = `lookup:v6:${lookupType || "_"}:${fallback.toLowerCase()}`;
+          if (lookupType === "advertiser") {
+            const fromAdvertiserQuery = await searchAdvertisersForBar(fallback);
+            if (fromAdvertiserQuery.length > 0) {
+              await setCached(keyFb, fromAdvertiserQuery, TTL);
+              return NextResponse.json(fromAdvertiserQuery);
+            }
+            const data = await ttLookup(fallback, { type: "advertiser" });
+            await setCached(keyFb, data, TTL);
+            return NextResponse.json(data);
+          }
           const lookupOpts = lookupType ? { type: lookupType } : undefined;
           const data = await ttLookup(fallback, lookupOpts);
-          await setCached(`lookup:v4:${lookupType || "_"}:${fallback.toLowerCase()}`, data, TTL);
+          await setCached(keyFb, data, TTL);
           return NextResponse.json(data);
         } catch {
           // fallthrough to structured error below

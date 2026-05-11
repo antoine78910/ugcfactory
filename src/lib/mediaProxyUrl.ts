@@ -88,3 +88,22 @@ export function proxiedMediaSrc(url: string | null | undefined): string {
     return u;
   }
 }
+
+/**
+ * Same as {@link proxiedMediaSrc} but appends `w=<width>` so `/api/media` can return a
+ * resized WebP thumbnail (image upstreams only — video/audio fall back to the original
+ * stream). Use for grid tiles and posters where the full-resolution asset is wasteful.
+ * Direct-host URLs (Supabase Storage etc.) currently skip the proxy and are returned as-is;
+ * `w` has no effect on those because Supabase Storage doesn't honor a `?w=` query param.
+ * Future improvement: rewrite Supabase URLs to the `/storage/v1/render/image/public/` form.
+ */
+export function thumbProxiedMediaSrc(
+  url: string | null | undefined,
+  width: number,
+): string {
+  const base = proxiedMediaSrc(url);
+  if (!base) return base;
+  if (!base.startsWith("/api/media")) return base;
+  const sep = base.includes("?") ? "&" : "?";
+  return `${base}${sep}w=${Math.max(1, Math.floor(width))}`;
+}

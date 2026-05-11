@@ -108,7 +108,7 @@ export async function saveCloudWorkflowSpace(input: {
   previewDataUrl?: string | null;
   publishedCommunityTemplateId?: string | null;
   expectedUpdatedAt?: string | null;
-}): Promise<{ ok: boolean; role?: string; updatedAt?: string; status?: number; error?: string }> {
+}): Promise<{ ok: boolean; role?: string; updatedAt?: string; status?: number; error?: string; serverUpdatedAt?: string }> {
   try {
     const res = await fetch(
       `/api/workflow/spaces/${encodeURIComponent(input.spaceId)}`,
@@ -126,8 +126,8 @@ export async function saveCloudWorkflowSpace(input: {
       },
     );
     if (!res.ok) {
-      const j = (await res.json().catch(() => null)) as { error?: string } | null;
-      return { ok: false, status: res.status, error: j?.error };
+      const j = (await res.json().catch(() => null)) as { error?: string; serverUpdatedAt?: string } | null;
+      return { ok: false, status: res.status, error: j?.error, serverUpdatedAt: j?.serverUpdatedAt };
     }
     const j = (await res.json().catch(() => ({}))) as { role?: string; updatedAt?: string };
     return { ok: true, role: j.role, updatedAt: j.updatedAt };

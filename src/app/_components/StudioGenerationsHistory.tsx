@@ -12,7 +12,7 @@ import { toast } from "sonner";
 import { StudioUpscaleDiscreteSlider } from "@/app/_components/StudioUpscaleDiscreteSlider";
 import VideoCard from "@/app/_components/VideoCard";
 import { isStudioGenerationRowId } from "@/lib/studioGenerationRowId";
-import { proxiedMediaSrc } from "@/lib/mediaProxyUrl";
+import { proxiedMediaSrc, thumbProxiedMediaSrc } from "@/lib/mediaProxyUrl";
 import { isStudioSeedreamImagePickerId, studioImageModelSupportsResolutionPicker } from "@/lib/studioImageModels";
 import { formatDisplayCredits } from "@/lib/creditLedgerTicks";
 import { studioImageCreditsChargedTotal } from "@/lib/pricing";
@@ -481,7 +481,7 @@ export function StudioGenerationsHistory({
                     : "flex flex-col gap-4",
                 )}
               >
-                {rows.map((item) => {
+                {rows.map((item, rowIndex) => {
                   const canShowResultMedia =
                     Boolean(item.mediaUrl?.trim()) &&
                     item.status !== "failed" &&
@@ -489,6 +489,20 @@ export function StudioGenerationsHistory({
                   const failedAutoFade =
                     Boolean(failedDismissCfg && item.status === "failed" && onDismissFailed);
                   const isFadingOutFailed = Boolean(failedAutoFade && fadingFailedIds[item.id]);
+                  /**
+                   * First N tiles of the first date group are likely above the fold — skip lazy
+                   * loading + queueing and let the browser prioritise their thumbnail fetches.
+                   */
+                  const isAboveFold = groupIndex === 0 && rowIndex < 6;
+                  const eagerImgProps = isAboveFold
+                    ? ({
+                        loading: "eager" as const,
+                        fetchPriority: "high" as const,
+                      })
+                    : ({
+                        loading: "lazy" as const,
+                        fetchPriority: "auto" as const,
+                      });
                   return (
                   <article
                     key={item.id}

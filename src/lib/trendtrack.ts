@@ -393,6 +393,10 @@ export type TTLookupResult = {
   domain?: string;
   logo?: string;
   logoUrl?: string;
+  /** From `POST /v1/advertisers/query` — active Meta ads count for the page. */
+  activeAds?: number;
+  /** From `POST /v1/advertisers/query` — advertiser reach last 30d when provided. */
+  reach30d?: number;
 };
 
 export async function ttListTrackers(): Promise<TTTracker[]> {
@@ -449,10 +453,44 @@ export async function ttLookup(q: string, options?: { type?: string }): Promise<
   return rows.map((r) => normalizeTTLookupRow(r)).filter((x): x is TTLookupResult => x !== null);
 }
 
-export async function ttQueryAds(body: Record<string, unknown>): Promise<TTAd[]> {
-  const res = await ttFetch<{ data?: unknown[] }>("/v1/ads/query", {
+/** `POST /v1/advertisers/query` — brand/domain discovery with sortable page metrics (active ads, reach, …). */
+export async function ttQueryAdvertisers(body: Record<string, unknown>): Promise<unknown[]> {
+  const res = await ttFetch<{ data?: unknown[] }>("/v1/advertisers/query", {
     method: "POST",
     body: JSON.stringify(body),
+  });
+  return res.data ?? [];
+}
+
+/**
+ * TrendTrack `POST /v1/ads/query` expects `search` as a string array (not `q`).
+ * Legacy callers sent `q`; coerce here so requests are actually filtered.
+ * @see https://docs.trendtrack.io/docs/reference/api/query-ads
+ */
+export function normalizeTrendTrackAdsQueryBody(body: Record<string, unknown>): Record<string, unknown> {
+  const out: Record<string, unknown> = { ...body };
+  const qVal = out.q;
+  const existing = out.search;
+  const hasSearchArray = Array.isArray(existing) && existing.length > 0;
+  if (typeof qVal === "string" && qVal.trim() && !hasSearchArray) {
+    out.search = [qVal.trim()];
+  }
+  delete out.q;
+  const s = out.search;
+  if (typeof s === "string" && s.trim()) {
+    out.search = [s.trim()];
+  }
+  if (out.order === undefined && typeof out.sortBy === "string" && out.sortBy.trim()) {
+    out.order = "desc";
+  }
+  return out;
+}
+
+export async function ttQueryAds(body: Record<string, unknown>): Promise<TTAd[]> {
+  const normalized = normalizeTrendTrackAdsQueryBody(body);
+  const res = await ttFetch<{ data?: unknown[] }>("/v1/ads/query", {
+    method: "POST",
+    body: JSON.stringify(normalized),
   });
   return (res.data ?? []).map((row) =>
     row !== null && typeof row === "object" && "ad" in (row as object)
