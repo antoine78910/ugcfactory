@@ -1,10 +1,10 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import * as Dialog from "@radix-ui/react-dialog";
 import { ArrowLeft, Check, Layers, Loader2, Users, Wand2, X } from "lucide-react";
 import { useRouter } from "next/navigation";
-import type { TTLookupResult } from "@/lib/intelligenceProvider";
+import type { TTAd, TTLookupResult } from "@/lib/intelligenceProvider";
 import { TrackerSearch } from "./TrackerSearch";
 import { TrackerList, type SelectedTracker } from "./TrackerList";
 import { TrackerDetail } from "./TrackerDetail";
@@ -13,6 +13,7 @@ import { CompetitorDetail } from "./CompetitorDetail";
 import { RecreationsPanel } from "./RecreationsPanel";
 import { WelcomeOverlay } from "./WelcomeOverlay";
 import { IntelligenceOverviewDashboard } from "./IntelligenceOverviewDashboard";
+import { BrandTopAdsPreview, type BrandTopAdsState } from "./BrandTopAdsPreview";
 
 type IntelligencePanel = null | "brands" | "competitors" | "recreations";
 
@@ -33,6 +34,13 @@ export function IntelligenceClient({
   const [savingDashboardBrand, setSavingDashboardBrand] = useState(false);
   const [dashboardBrandMessage, setDashboardBrandMessage] = useState<string | null>(null);
   const [panel, setPanel] = useState<IntelligencePanel>(initialPanel);
+  /**
+   * Top creatives auto-loaded for the searched brand (TrendTrack `/v1/ads/query`,
+   * `trend_signal=reach_growth_7d`, `active_only=true`). Rendered inside the "Your brands"
+   * dialog so the user can see top ads as soon as they pick a brand from the search dropdown.
+   */
+  const [searchResultAds, setSearchResultAds] = useState<BrandTopAdsState>({ kind: "idle" });
+  const searchAdsAbortRef = useRef<AbortController | null>(null);
   const [competitorSortBy, setCompetitorSortBy] = useState<
     | "currentRank"
     | "reach"
@@ -47,17 +55,85 @@ export function IntelligenceClient({
   const isStandalonePanelRoute = initialPanel !== null;
   const canReturnToDashboard = Boolean(selected || competitorPick);
 
-  const handleSearchResult = useCallback((result: TTLookupResult | null) => {
-    setSearchResult(result);
-    setCompetitorPick(null);
-    if (result) {
-      setSelected({
-        id: result.id,
-        name: result.name,
-        logo: result.logo ?? result.logoUrl,
-        sourceType: result.type === "brandtracker" ? "tracker" : "search",
-      });
+  /**
+   * Fires the second TrendTrack call (`POST /v1/ads/query`) for the brand the user just picked
+   * from the header search, surfaced via `/api/intelligence/competitors/top-ads`. The server
+   * caches per `(lookupId, sortBy)` for 7 days, so a repeat search of the same brand is free.
+   */
+  const loadSearchResultTopAds = useCallback((brand: TTLookupResult) => {
+    if (!brand.id || !brand.name) {
+      setSearchResultAds({ kind: "idle" });
+      return;
     }
+    searchAdsAbortRef.current?.abort();
+    const controller = new AbortController();
+    searchAdsAbortRef.current = controller;
+    setSearchResultAds({ kind: "loading", brandId: brand.id });
+
+    const params = new URLSearchParams({
+      q: brand.name,
+      name: brand.name,
+      lookupId: brand.id,
+      sortBy: "currentRank",
+    });
+    if (brand.domain) params.set("domain", brand.domain);
+
+    void fetch(`/api/intelligence/competitors/top-ads?${params.toString()}`, {
+      signal: controller.signal,
+      cache: "no-store",
+    })
+      .then(async (res) => {
+        if (controller.signal.aborted) return;
+        const json = (await res.json().catch(() => ({}))) as {
+          ads?: TTAd[];
+          source?: string;
+          error?: string;
+        };
+        if (!res.ok) {
+          setSearchResultAds({
+            kind: "error",
+            brandId: brand.id,
+            message: json.error ?? `Failed to load top creatives (HTTP ${res.status}).`,
+          });
+          return;
+        }
+        const ads = Array.isArray(json.ads) ? json.ads : [];
+        setSearchResultAds({ kind: "ready", brandId: brand.id, ads });
+      })
+      .catch((err: unknown) => {
+        if (controller.signal.aborted) return;
+        const msg = err instanceof Error ? err.message : "Network error.";
+        setSearchResultAds({ kind: "error", brandId: brand.id, message: msg });
+      });
+  }, []);
+
+  const handleSearchResult = useCallback(
+    (result: TTLookupResult | null) => {
+      setSearchResult(result);
+      setCompetitorPick(null);
+      if (result) {
+        setSelected({
+          id: result.id,
+          name: result.name,
+          logo: result.logo ?? result.logoUrl,
+          sourceType: result.type === "brandtracker" ? "tracker" : "search",
+        });
+        loadSearchResultTopAds(result);
+      } else {
+        searchAdsAbortRef.current?.abort();
+        searchAdsAbortRef.current = null;
+        setSearchResultAds({ kind: "idle" });
+      }
+    },
+    [loadSearchResultTopAds],
+  );
+
+  // Abort any in-flight top-ads fetch on unmount so the response never lands on a stale state.
+  useEffect(() => {
+    return () => {
+      searchAdsAbortRef.current?.abort();
+      searchAdsAbortRef.current = null;
+    };
   }, []);
 
   const handleCompetitorPick = useCallback((p: CompetitorPick | null) => {
@@ -65,6 +141,9 @@ export function IntelligenceClient({
     if (p) {
       setSelected(null);
       setSearchResult(null);
+      searchAdsAbortRef.current?.abort();
+      searchAdsAbortRef.current = null;
+      setSearchResultAds({ kind: "idle" });
     }
   }, []);
 
@@ -299,8 +378,15 @@ export function IntelligenceClient({
               </div>
               <div className="max-h-[min(82vh,760px)] overflow-y-auto p-4">
                 {panel === "brands" ? (
-                  <div className="flex flex-col gap-3">
+                  <div className="flex flex-col gap-4">
                     <TrackerList selectedId={selected?.id} onSelect={setSelected} searchResult={searchResult} />
+                    {searchResult ? (
+                      <BrandTopAdsPreview
+                        brand={searchResult}
+                        state={searchResultAds}
+                        onRetry={() => loadSearchResultTopAds(searchResult)}
+                      />
+                    ) : null}
                   </div>
                 ) : panel === "competitors" ? (
                   <CompetitorsPanel
