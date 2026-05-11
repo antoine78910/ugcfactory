@@ -4,8 +4,9 @@ import type { StudioTemplateVideoItem } from "@/lib/studioTemplateVideosTypes";
 
 /**
  * Product ads vs app-style templates.
- * - Product: `public/studio/template` (Clipping-only assets use `template-clipping/` or a basename containing "clipping")
+ * - Product: `public/studio/template`
  * - App: `public/studio/template-app` plus optional `public/studio/app-template-preview` (new app previews)
+ * - Clipping-only templates are isolated under `public/studio/template-clipping`
  */
 export type StudioTemplateVideoListKind = "product" | "app";
 
@@ -61,23 +62,10 @@ function isExcludedFromAppTemplateListing(filename: string): boolean {
   return APP_TEMPLATE_LISTING_EXCLUDED_BASE_NAMES.has(base);
 }
 
-/**
- * True when this file is meant for Clipping Studio only (naming convention for legacy files in `template/`).
- * Ads Studio excludes these so product/app grids stay ad-focused.
- */
-export function isClippingOnlyTemplateFilename(filename: string): boolean {
-  const base = filename.replace(/\.[^.]+$/, "").trim().toLowerCase();
-  return base.includes("clipping");
-}
-
-/**
- * Clipping library: `template-clipping/` plus everything in shared `template/` (split-screen refs may still live there).
- * Same filename in both folders keeps the `template-clipping/` URL.
- */
+/** Clipping library only: fully isolated from Ads Studio template folders. */
 export async function listClippingTemplateVideosFromDisk(): Promise<StudioTemplateVideoItem[]> {
-  const shared = await listTemplateVideosInPublicStudioSubdir(PRODUCT_TEMPLATE_SUBDIR);
   const dedicated = await listTemplateVideosInPublicStudioSubdir(CLIP_TEMPLATE_SUBDIR);
-  return mergeTemplateItemsByFilename([shared, dedicated]);
+  return dedicated;
 }
 
 /** Lists template preview videos for Ads Studio (server-only). */
@@ -85,13 +73,11 @@ export async function listStudioTemplateVideosFromDisk(
   kind: StudioTemplateVideoListKind = "product",
 ): Promise<StudioTemplateVideoItem[]> {
   if (kind === "product") {
-    const items = await listTemplateVideosInPublicStudioSubdir(PRODUCT_TEMPLATE_SUBDIR);
-    return items.filter((item) => !isClippingOnlyTemplateFilename(item.filename));
+    return listTemplateVideosInPublicStudioSubdir(PRODUCT_TEMPLATE_SUBDIR);
   }
   const appMain = await listTemplateVideosInPublicStudioSubdir(APP_TEMPLATE_SUBDIR);
   const appPreview = await listTemplateVideosInPublicStudioSubdir(APP_TEMPLATE_PREVIEW_SUBDIR);
   return mergeTemplateItemsByFilename([appMain, appPreview]).filter(
-    (item) =>
-      !isExcludedFromAppTemplateListing(item.filename) && !isClippingOnlyTemplateFilename(item.filename),
+    (item) => !isExcludedFromAppTemplateListing(item.filename),
   );
 }

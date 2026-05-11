@@ -1989,11 +1989,10 @@ export default function ClippingStudio() {
                 <p className="mt-2 text-[11px] text-white/50">Loading templates…</p>
               ) : templateLibrary.length === 0 ? (
                 <p className="mt-2 text-[11px] text-white/50">
-                  No saved templates found in <code>/public/studio/template-clipping</code> or{" "}
-                  <code>/public/studio/template</code>.
+                  No saved templates found in <code>/public/studio/template-clipping</code>.
                 </p>
               ) : (
-                <div className="mt-2 flex max-h-36 flex-col gap-1 overflow-auto pr-1">
+                <div className="mt-2 grid max-h-72 grid-cols-2 gap-2 overflow-auto pr-1">
                   {templateLibrary.map((item) => {
                     const selected = selectedLibraryTemplateUrl === item.url;
                     return (
@@ -2002,14 +2001,36 @@ export default function ClippingStudio() {
                         type="button"
                         onClick={() => applyLibraryTemplate(item)}
                         disabled={!canEditControls}
-                        className={`min-h-8 rounded-lg border px-2 py-1.5 text-left text-[11px] font-medium leading-snug break-all whitespace-normal transition disabled:cursor-not-allowed disabled:opacity-40 ${
+                        className={`group overflow-hidden rounded-lg border text-left transition disabled:cursor-not-allowed disabled:opacity-40 ${
                           selected
                             ? "border-violet-400/60 bg-violet-500/15 text-white"
                             : "border-white/10 bg-white/[0.03] text-white/90 hover:border-violet-400/35 hover:bg-white/[0.08]"
                         }`}
                         title={item.filename}
                       >
-                        {item.label?.trim() || item.filename}
+                        <div className="relative aspect-square w-full overflow-hidden bg-black/40">
+                          <video
+                            src={item.url}
+                            muted
+                            loop
+                            playsInline
+                            preload="metadata"
+                            className="h-full w-full object-cover"
+                            onMouseEnter={(e) => {
+                              const v = e.currentTarget;
+                              void v.play().catch(() => {});
+                            }}
+                            onMouseLeave={(e) => {
+                              const v = e.currentTarget;
+                              v.pause();
+                              v.currentTime = 0;
+                            }}
+                          />
+                          <div className="pointer-events-none absolute inset-0 ring-1 ring-inset ring-white/10" />
+                        </div>
+                        <div className="px-2 py-1.5 text-[11px] font-medium leading-snug break-all whitespace-normal">
+                          {item.label?.trim() || item.filename}
+                        </div>
                       </button>
                     );
                   })}
