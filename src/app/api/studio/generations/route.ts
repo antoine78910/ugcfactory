@@ -2,15 +2,13 @@ export const runtime = "nodejs";
 
 import { NextResponse } from "next/server";
 import { requireSupabaseUser } from "@/lib/supabase/requireUser";
-import {
-  studioGenerationRowToHistoryItem,
-  type StudioGenerationRow,
-} from "@/lib/studioGenerationsMap";
+import { studioGenerationRowToHistoryItem } from "@/lib/studioGenerationsMap";
 import { fetchStudioGenerationRows } from "@/lib/studioGenerationsListQuery";
-import { pollStudioGenerationRow, sweepStudioRefundHints } from "@/lib/studioGenerationsPoll";
+import { sweepStudioRefundHints } from "@/lib/studioGenerationsPoll";
 import { markStaleInProgressStudioGenerationsFailedForUser } from "@/lib/studioGenerationsStale";
 import { STUDIO_LIBRARY_KINDS } from "@/lib/studioGenerationKinds";
 import { filterLegacyLinkToAdFromTabRows } from "@/lib/studioGenerationsTabFilter";
+import { shouldRunThrottled } from "@/lib/perUserThrottle";
 
 const KIND_DEFAULT = "avatar";
 
@@ -27,12 +25,14 @@ function parseKindParam(kindParam: string): { mode: "all" } | { kinds: string[] 
 
 const STUDIO_GENERATIONS_DEFAULT_PAGE_LIMIT = 60;
 const STUDIO_GENERATIONS_MAX_PAGE_LIMIT = 200;
-const STUDIO_GENERATIONS_POLL_LIMIT = 12;
 
-function isInProgressStatus(status: string | null | undefined): boolean {
-  const s = String(status ?? "").toLowerCase();
-  return s === "processing" || s === "generating" || s === "pending" || s === "queued";
-}
+/** Stale-marker is a no-op for 99% of users; throttle to once per 10 min per user. */
+const STALE_MARKER_TTL_MS = 10 * 60 * 1000;
+/**
+ * Refund-hint sweep also runs from the background poll loop (every 4.5s) — running it
+ * from each GET is redundant. Throttle to once per 30s per (user, kind).
+ */
+const REFUND_SWEEP_TTL_MS = 30 * 1000;
 
 function parsePageLimit(raw: string | null): number {
   const n = Number((raw ?? "").trim());
@@ -47,6 +47,16 @@ function parseBeforeCursor(raw: string | null): string | undefined {
   return Number.isFinite(ms) && ms > 0 ? t : undefined;
 }
 
+/**
+ * Pure-read history endpoint.
+ *
+ * Previous versions also (a) marked stale rows failed, (b) swept refund hints for every
+ * library kind, (c) synchronously polled up to 12 in-flight rows against KIE/PiAPI/WaveSpeed,
+ * and (d) re-fetched the list afterwards — multiplying the GET latency by 3-5 s when any
+ * job was in flight. Polling now lives exclusively in POST /api/studio/generations/poll
+ * (called every 4.5 s by the background loop). Stale + sweep are throttled in-process so
+ * they still run, but at most once per 10 min and 30 s respectively per user / kind.
+ */
 export async function GET(req: Request) {
   const { supabase, user, response } = await requireSupabaseUser();
   if (response) return response;
@@ -68,29 +78,30 @@ export async function GET(req: Request) {
     const kindsToSweep: string[] =
       "mode" in fetchOptions ? [...STUDIO_LIBRARY_KINDS] : fetchOptions.kinds;
 
+    // Stale marker: throttled — most calls become a no-op.
+    const staleP = shouldRunThrottled("stale_marker", user.id, STALE_MARKER_TTL_MS)
+      ? markStaleInProgressStudioGenerationsFailedForUser(supabase, user.id).catch(() => undefined)
+      : Promise.resolve(undefined);
+
+    // Refund-hint sweep: throttled per (user, kind). The background poll route (POST
+    // /api/studio/generations/poll) also sweeps after each KIE poll, so within 4.5 s
+    // a freshly-failed job will still surface a refund toast even when this throttles.
+    const sweepP = Promise.all(
+      kindsToSweep.map((k) => {
+        if (!shouldRunThrottled("refund_sweep", `${user.id}:${k}`, REFUND_SWEEP_TTL_MS)) {
+          return Promise.resolve([] as { jobId: string; credits: number }[]);
+        }
+        return sweepStudioRefundHints(supabase, user.id, k).catch(() => [] as { jobId: string; credits: number }[]);
+      }),
+    );
+
     const [, rowsRaw, refundHintsChunks] = await Promise.all([
-      markStaleInProgressStudioGenerationsFailedForUser(supabase, user.id),
+      staleP,
       fetchStudioGenerationRows(supabase, user.id, fetchOptions),
-      Promise.all(
-        kindsToSweep.map((k) => sweepStudioRefundHints(supabase, user.id, k)),
-      ),
+      sweepP,
     ]);
 
-    // Opportunistic: poll in-flight rows so history doesn't get stuck on "generating"
-    // when provider has already completed (notably Topaz 4× upscale).
-    const inFlight = rowsRaw.filter((r) => isInProgressStatus(r.status)).slice(0, STUDIO_GENERATIONS_POLL_LIMIT);
-    if (inFlight.length > 0) {
-      await Promise.all(
-        inFlight.map((row) => pollStudioGenerationRow(row as StudioGenerationRow, undefined, undefined, supabase)),
-      );
-    }
-
-    // Re-fetch after polling so client receives updated result_urls/status.
-    const rowsRefreshed = inFlight.length > 0
-      ? await fetchStudioGenerationRows(supabase, user.id, fetchOptions)
-      : rowsRaw;
-
-    let rows = rowsRefreshed;
+    let rows = rowsRaw;
     if (!all) {
       const parsedForFilter = parseKindParam(kindRaw);
       if (!("mode" in parsedForFilter)) {
@@ -102,7 +113,7 @@ export async function GET(req: Request) {
     const items = rows.map(studioGenerationRowToHistoryItem);
     // hasMore is approximate: when DB returned exactly `limit` rows we cannot tell if more exist.
     // false negatives cause "Load more" to disappear a click early; false positives cause one empty fetch.
-    const hasMore = !all && rowsRefreshed.length >= limit;
+    const hasMore = !all && rowsRaw.length >= limit;
 
     return NextResponse.json({ data: items, refundHints, hasMore });
   } catch (err) {

@@ -44,18 +44,26 @@ export const STUDIO_WORKFLOW_KINDS = [
 
 /**
  * Max rows for Create tab list queries (`kind=avatar`, `studio_image,studio_upscale`, video kinds, etc.).
- * Single global ORDER+LIMIT was too small for heavy users.
+ * Single global ORDER+LIMIT was too small for heavy users. The kind-filtered GET handler
+ * additionally clamps to a smaller per-request limit (default 60, max 200) — this is the
+ * ceiling that protects the DB from "no limit" callers.
  */
 export const STUDIO_GENERATIONS_LIST_LIMIT = 2000;
 
 /**
  * When listing `all=1` (Projects library), fetch this many rows **per kind**, then merge by date.
  * Avoids one hot kind (e.g. Link to Ad) crowding out avatars / studio images in a single LIMIT.
+ *
+ * Lowered from 500 → 100 (2026-05): rendering 3000 rows in a single DOM blast is itself a UX
+ * antipattern, and 100 × 16 kinds = 1600 rows pre-merge cap is plenty for the Projects rail.
  */
-export const STUDIO_GENERATIONS_ALL_PER_KIND_LIMIT = 500;
+export const STUDIO_GENERATIONS_ALL_PER_KIND_LIMIT = 100;
 
-/** Cap after merging per-kind results for `all=1`. */
-export const STUDIO_GENERATIONS_ALL_MERGED_MAX = 3000;
+/**
+ * Cap after merging per-kind results for `all=1`. Lowered from 3000 → 600 alongside
+ * `STUDIO_GENERATIONS_ALL_PER_KIND_LIMIT` to keep the merged payload bounded.
+ */
+export const STUDIO_GENERATIONS_ALL_MERGED_MAX = 600;
 
 /** Kinds returned by GET `/api/studio/generations?all=1` (Projects library + background poll). */
 export const STUDIO_LIBRARY_KINDS = [

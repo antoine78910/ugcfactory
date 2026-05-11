@@ -289,6 +289,12 @@ export async function pollStudioGenerationRow(
   if (error) throw error;
 }
 
+/**
+ * Marks failed-with-charge rows as `credits_refund_hint_sent=true` and returns the
+ * jobs that flipped, so the client can issue a refund-hint toast. Single
+ * `UPDATE…RETURNING` round-trip — PostgREST returns only the rows it actually
+ * mutated, so concurrent sweeps can't double-count.
+ */
 export async function sweepStudioRefundHints(
   supabase: SupabaseClient,
   userId: string,
@@ -296,31 +302,17 @@ export async function sweepStudioRefundHints(
 ): Promise<{ jobId: string; credits: number }[]> {
   const { data, error } = await supabase
     .from("studio_generations")
-    .select("id, credits_charged")
+    .update({ credits_refund_hint_sent: true })
     .eq("user_id", userId)
     .eq("kind", kind)
     .eq("status", "failed")
     .eq("credits_refund_hint_sent", false)
-    .gt("credits_charged", 0);
+    .gt("credits_charged", 0)
+    .select("id, credits_charged");
 
   if (error) throw error;
-  const rows = data ?? [];
-  if (rows.length === 0) return [];
-
-  const hints: { jobId: string; credits: number }[] = [];
-  for (const row of rows) {
-    const { data: updated, error: upErr } = await supabase
-      .from("studio_generations")
-      .update({ credits_refund_hint_sent: true })
-      .eq("id", row.id)
-      .eq("user_id", userId)
-      .eq("credits_refund_hint_sent", false)
-      .select("id")
-      .maybeSingle();
-
-    if (upErr) throw upErr;
-    if (updated) hints.push({ jobId: row.id, credits: ledgerTicksToDisplayCredits(row.credits_charged) });
-  }
-
-  return hints;
+  return (data ?? []).map((row) => ({
+    jobId: row.id,
+    credits: ledgerTicksToDisplayCredits(row.credits_charged),
+  }));
 }
