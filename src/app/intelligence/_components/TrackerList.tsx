@@ -200,6 +200,7 @@ export function TrackerList({
             name={searchResult.name}
             logo={searchResult.logo ?? searchResult.logoUrl}
             domain={searchResult.domain ?? undefined}
+            activeAds={searchResult.activeAds}
             isSelected={selectedId === searchResult.id}
             onClick={() =>
               onSelect({

@@ -420,7 +420,11 @@ export function IntelligenceOnboarding({
                     Selected
                   </p>
                   <p className="mt-1 text-sm text-white/85">{brand ? brand.name : "—"}</p>
-                  <p className="mt-0.5 text-xs text-white/45">{brand?.domain?.trim() || ""}</p>
+                  <p className="mt-0.5 text-xs text-white/45">
+                    {[brand?.domain?.trim() || "", typeof brand?.activeAds === "number" ? `${brand.activeAds} active ads` : ""]
+                      .filter(Boolean)
+                      .join(" · ")}
+                  </p>
                 </div>
               </div>
 

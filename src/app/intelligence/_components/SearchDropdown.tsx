@@ -54,6 +54,10 @@ export function SearchDropdown({
         results.map((r, i) => {
           const logo = r.logo ?? r.logoUrl;
           const isOwn = r.type === "brandtracker";
+          const activeAdsLabel =
+            typeof r.activeAds === "number" && Number.isFinite(r.activeAds)
+              ? `${r.activeAds} active ads`
+              : null;
           return (
             <button
               key={`${r.type}:${r.id}`}
@@ -71,7 +75,7 @@ export function SearchDropdown({
               <div className="flex min-w-0 flex-1 flex-col">
                 <span className="truncate text-sm font-medium">{r.name}</span>
                 <span className="truncate text-[11px] text-neutral-500">
-                  {r.domain ?? r.type}
+                  {[r.domain ?? r.type, activeAdsLabel].filter(Boolean).join(" · ")}
                 </span>
               </div>
               <span

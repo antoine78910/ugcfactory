@@ -8,6 +8,14 @@ function str(...vals: unknown[]): string | undefined {
   return undefined;
 }
 
+function num(...vals: unknown[]): number | undefined {
+  for (const v of vals) {
+    const n = typeof v === "number" ? v : typeof v === "string" ? Number(v) : NaN;
+    if (Number.isFinite(n)) return n;
+  }
+  return undefined;
+}
+
 /** Deep-merge nested lookup blobs TrendTrack wraps under advertiser/page/data — BFS so we cannot spin forever re-spreading the same object. */
 function mergeLookupShards(o: Record<string, unknown>): Record<string, unknown> {
   const SHARD_KEYS = new Set(["advertiser", "Advertiser", "page", "Page", "brand", "Brand", "sponsor", "Sponsor", "data"]);
@@ -289,6 +297,30 @@ export function normalizeTTLookupRow(raw: unknown): TTLookupResult | null {
       o.logo_url,
     ) ?? undefined;
   const logoUrl = logo;
+  const advertising = mergedFlat.advertising && typeof mergedFlat.advertising === "object"
+    ? (mergedFlat.advertising as Record<string, unknown>)
+    : {};
+  const activeAds = num(
+    mergedFlat.activeAds,
+    mergedFlat.active_ads,
+    advertising.activeAds,
+    advertising.active_ads,
+  );
+  const reach30d = num(
+    mergedFlat.reach30d,
+    mergedFlat.reach_30d,
+    advertising.reach30d,
+    advertising.reach_30d,
+  );
 
-  return { id, name, type: typeRaw, ...(domain ? { domain } : {}), ...(logo ? { logo } : {}), ...(logoUrl ? { logoUrl } : {}) };
+  return {
+    id,
+    name,
+    type: typeRaw,
+    ...(domain ? { domain } : {}),
+    ...(logo ? { logo } : {}),
+    ...(logoUrl ? { logoUrl } : {}),
+    ...(activeAds !== undefined ? { activeAds } : {}),
+    ...(reach30d !== undefined ? { reach30d } : {}),
+  };
 }
