@@ -4,14 +4,13 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import * as Dialog from "@radix-ui/react-dialog";
 import { ArrowLeft, Check, Layers, Loader2, Users, Wand2, X } from "lucide-react";
 import { useRouter } from "next/navigation";
-import type { TTAd, TTLookupResult } from "@/lib/intelligenceProvider";
+import type { TTAd, TTLookupResult, TTTracker } from "@/lib/intelligenceProvider";
 import { TrackerSearch } from "./TrackerSearch";
 import { TrackerList, type SelectedTracker } from "./TrackerList";
 import { TrackerDetail } from "./TrackerDetail";
 import { CompetitorsPanel, type CompetitorPick } from "./CompetitorsPanel";
 import { CompetitorDetail } from "./CompetitorDetail";
 import { RecreationsPanel } from "./RecreationsPanel";
-import { WelcomeOverlay } from "./WelcomeOverlay";
 import { IntelligenceOverviewDashboard } from "./IntelligenceOverviewDashboard";
 import { BrandTopAdsPreview, type BrandTopAdsState } from "./BrandTopAdsPreview";
 
@@ -215,9 +214,12 @@ export function IntelligenceClient({
     }
   }, [savingDashboardBrand, searchResult]);
 
+  const handleSavedTrackersChange = useCallback((nextTrackers: TTTracker[]) => {
+    setOwnTrackerIdsState(nextTrackers.map((tracker) => tracker.id));
+  }, []);
+
   return (
     <div className="flex w-full overflow-hidden max-md:h-[calc(100dvh-3.5rem)] md:h-dvh">
-      <WelcomeOverlay />
       <main className="min-h-0 min-w-0 flex-1 overflow-y-auto overscroll-y-contain bg-[#06070d]">
         <div className="sticky top-0 z-[5] border-b border-white/10 bg-[#06070d]/85 backdrop-blur-md">
           <div className="flex flex-wrap items-center justify-between gap-3 px-4 py-3">
@@ -379,7 +381,18 @@ export function IntelligenceClient({
               <div className="max-h-[min(82vh,760px)] overflow-y-auto p-4">
                 {panel === "brands" ? (
                   <div className="flex flex-col gap-4">
-                    <TrackerList selectedId={selected?.id} onSelect={setSelected} searchResult={searchResult} />
+                    <div className="rounded-2xl border border-white/10 bg-white/[0.03] p-3">
+                      <p className="mb-2 text-[11px] font-semibold uppercase tracking-[0.12em] text-white/45">
+                        Search and add a brand
+                      </p>
+                      <TrackerSearch onResult={handleSearchResult} />
+                    </div>
+                    <TrackerList
+                      selectedId={selected?.id}
+                      onSelect={setSelected}
+                      searchResult={searchResult}
+                      onTrackersSavedChange={handleSavedTrackersChange}
+                    />
                     {searchResult ? (
                       <BrandTopAdsPreview
                         brand={searchResult}

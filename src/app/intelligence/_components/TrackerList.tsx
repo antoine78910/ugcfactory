@@ -138,10 +138,12 @@ export function TrackerList({
   selectedId,
   onSelect,
   searchResult,
+  onTrackersSavedChange,
 }: {
   selectedId?: string;
   onSelect: (t: SelectedTracker) => void;
   searchResult?: TTLookupResult | null;
+  onTrackersSavedChange?: (trackers: TTTracker[]) => void;
 }) {
   const [trackers, setTrackers] = useState<TTTracker[]>([]);
   const [loading, setLoading] = useState(true);
@@ -156,8 +158,11 @@ export function TrackerList({
       .then((r) => r.json())
       .then((data) => {
         if (cancelled) return;
-        if (Array.isArray(data)) setTrackers(data as TTTracker[]);
-        else setError(data.error ?? "Failed to load trackers");
+        if (Array.isArray(data)) {
+          const nextTrackers = data as TTTracker[];
+          setTrackers(nextTrackers);
+          onTrackersSavedChange?.(nextTrackers);
+        } else setError(data.error ?? "Failed to load trackers");
       })
       .catch(() => {
         if (!cancelled) setError("Network error");
@@ -168,7 +173,7 @@ export function TrackerList({
     return () => {
       cancelled = true;
     };
-  }, []);
+  }, [onTrackersSavedChange]);
 
   useEffect(() => {
     let cancelled = false;
@@ -216,8 +221,8 @@ export function TrackerList({
               }}
               isSaved={trackers.some((t) => t.id === searchResult.id)}
               onChange={(next) =>
-                setTrackers((prev) =>
-                  next
+                setTrackers((prev) => {
+                  const nextTrackers = next
                     ? [
                         {
                           id: searchResult.id,
@@ -227,8 +232,10 @@ export function TrackerList({
                         },
                         ...prev.filter((t) => t.id !== searchResult.id),
                       ]
-                    : prev.filter((t) => t.id !== searchResult.id)
-                )
+                    : prev.filter((t) => t.id !== searchResult.id);
+                  onTrackersSavedChange?.(nextTrackers);
+                  return nextTrackers;
+                })
               }
             />
           ) : (
@@ -308,7 +315,13 @@ export function TrackerList({
           />
           <TrackerRemoveButton
             trackerId={t.id}
-            onRemoved={() => setTrackers((prev) => prev.filter((x) => x.id !== t.id))}
+            onRemoved={() =>
+              setTrackers((prev) => {
+                const nextTrackers = prev.filter((x) => x.id !== t.id);
+                onTrackersSavedChange?.(nextTrackers);
+                return nextTrackers;
+              })
+            }
           />
         </div>
       ))}
