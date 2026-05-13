@@ -27,6 +27,10 @@ function toLabel(filename: string): string {
   return base;
 }
 
+function toBaseNameKey(filename: string): string {
+  return filename.replace(/\.[^.]+$/, "").trim().toLowerCase();
+}
+
 async function listTemplateVideosInPublicStudioSubdir(subdir: string): Promise<StudioTemplateVideoItem[]> {
   try {
     const dir = path.join(process.cwd(), "public", "studio", subdir);
@@ -58,8 +62,13 @@ function mergeTemplateItemsByFilename(layers: StudioTemplateVideoItem[][]): Stud
 }
 
 function isExcludedFromAppTemplateListing(filename: string): boolean {
-  const base = filename.replace(/\.[^.]+$/, "").trim().toLowerCase();
+  const base = toBaseNameKey(filename);
   return APP_TEMPLATE_LISTING_EXCLUDED_BASE_NAMES.has(base);
+}
+
+function isClippingNamedTemplate(filename: string): boolean {
+  const base = toBaseNameKey(filename);
+  return base.includes("clipping");
 }
 
 /** Clipping library only: fully isolated from Ads Studio template folders. */
@@ -73,7 +82,15 @@ export async function listStudioTemplateVideosFromDisk(
   kind: StudioTemplateVideoListKind = "product",
 ): Promise<StudioTemplateVideoItem[]> {
   if (kind === "product") {
-    return listTemplateVideosInPublicStudioSubdir(PRODUCT_TEMPLATE_SUBDIR);
+    const [productItems, clippingItems] = await Promise.all([
+      listTemplateVideosInPublicStudioSubdir(PRODUCT_TEMPLATE_SUBDIR),
+      listTemplateVideosInPublicStudioSubdir(CLIP_TEMPLATE_SUBDIR),
+    ]);
+    const clippingBaseNames = new Set(clippingItems.map((item) => toBaseNameKey(item.filename)));
+    return productItems.filter((item) => {
+      const base = toBaseNameKey(item.filename);
+      return !isClippingNamedTemplate(item.filename) && !clippingBaseNames.has(base);
+    });
   }
   const appMain = await listTemplateVideosInPublicStudioSubdir(APP_TEMPLATE_SUBDIR);
   const appPreview = await listTemplateVideosInPublicStudioSubdir(APP_TEMPLATE_PREVIEW_SUBDIR);
