@@ -4,11 +4,12 @@ export const maxDuration = 60;
 import { NextResponse } from "next/server";
 
 import { claudeMessagesTextWithImages } from "@/lib/claudeResponses";
+import type { ReferenceShot } from "@/lib/intelligenceRecreateShotAnalysis";
 import { requireSupabaseUser } from "@/lib/supabase/requireUser";
 import { SEEDANCE_PRO_PROMPT_MAX_CHARS } from "@/lib/piapiSeedance";
 
 const MAX_PRODUCT_IMAGES = 3;
-const MAX_REFERENCE_IMAGES = 3;
+const MAX_REFERENCE_IMAGES = 8;
 
 const CLIP_TYPE_LABELS: Record<string, string> = {
   talking_head: "Talking head — a creator speaking selfie-style about the product",
@@ -43,6 +44,11 @@ type Body = {
   aspectRatio?: "9:16" | "16:9" | "1:1";
   /** Optional duration hint (seconds). */
   durationSec?: number;
+  shotAnalysis?: {
+    shots?: ReferenceShot[];
+    keyframes?: ReferenceShot[];
+    analyzedFrameCount?: number;
+  };
 };
 
 function sanitizeUrls(input: unknown, max: number): string[] {
@@ -77,7 +83,7 @@ Use these extracted details to write a highly consistent product description thr
 Goal: write ONE Seedance 2.0 prompt that:
 - Recreates the opening shot composition pixel-for-pixel from the first frame reference
 - Faithfully mirrors the original ad's structure, pacing, and beat-by-beat
-- Substitutes the user's product for the competitor's
+- Replaces every visible competitor brand identifier with the user's brand while preserving the original framing, timing, action, and pacing
 
 Hard rules (Seedance 2.0):
 - Length: 100 to 260 words. Plain prose, no bullet lists.
@@ -92,20 +98,22 @@ Required structure (in this order, single paragraph or 2 short paragraphs):
 2) Character description if any (age, hair, skin, outfit, accessories) — skip for faceless.
 3) Camera setup (angle, distance, handheld vs static, selfie vs tripod) — mirroring the reference.
 4) Scene/product description with @imageN references and full product visual details extracted above.
-5) Beat-by-beat with timestamps and dialogue (e.g. "0–2s: ...").
-6) Tone description.
-7) Camera movement / grain / film style.
-8) "No on-screen text, no captions, no subtitles." then the emotional closing line.
+5) Beat-by-beat with narrow timestamps and dialogue (e.g. "0.0–0.7s: ...", "0.7–1.4s: ...").
+6) Explicit brand-swap instructions for packaging, label, product body, visible logo, and app screen branding when applicable.
+7) Tone description.
+8) Camera movement / grain / film style.
+9) "No on-screen text, no captions, no subtitles." then the emotional closing line.
 
 Output ONLY the final prompt text. No markdown, no preamble, no headings.`;
 }
 
-function buildUserPrompt(
+export function buildUserPrompt(
   body: Required<Body>,
   videoFirstFrameUrl: string | null,
   refUrls: string[],
   productUrls: string[],
 ): string {
+  const analyzedShots = body.shotAnalysis.shots ?? [];
   const clipType = (body.clipType ?? "custom").toString().trim().toLowerCase();
   const clipLabel = CLIP_TYPE_LABELS[clipType] ?? CLIP_TYPE_LABELS.custom;
   const aspect = body.aspectRatio ?? "9:16";
@@ -121,9 +129,15 @@ function buildUserPrompt(
   if (adPlatform) lines.push(`Platform of original ad: ${adPlatform}.`);
   if (adHeadline) lines.push(`Original ad headline: "${adHeadline}".`);
   if (adBody) lines.push(`Original ad copy: "${adBody}".`);
+  if (analyzedShots.length > 0) {
+    lines.push(`Shot analysis: ${analyzedShots.length} shots detected from ${body.shotAnalysis.analyzedFrameCount} analyzed frames.`);
+  }
 
   lines.push("");
   lines.push(`User product description (supplement with visual details from the product images): ${body.productDescription.trim() || "(not provided — extract entirely from product images)"}.`);
+  lines.push(
+    "Brand swap rule: replace the competitor's logo, packaging, product markings, labels, wordmarks, and any branded app/UI surfaces with the user's brand while keeping the same composition, timing, hand placement, and action.",
+  );
   lines.push("");
 
   // Image ordering explanation
@@ -149,6 +163,24 @@ function buildUserPrompt(
   }
 
   lines.push("");
+  if (analyzedShots.length > 0) {
+    lines.push("Reference shot timeline:");
+    for (const shot of analyzedShots) {
+      const tags = [
+        shot.brandingVisible ? "logo visible" : null,
+        shot.packagingVisible ? "packaging visible" : null,
+        shot.textVisible ? "text visible" : null,
+      ]
+        .filter(Boolean)
+        .join(", ");
+      lines.push(
+        `- ${shot.startSec.toFixed(1)}–${shot.endSec.toFixed(1)}s: ${shot.actionSummary}${
+          tags ? ` (${tags})` : ""
+        }.`,
+      );
+    }
+    lines.push("");
+  }
   lines.push("Now write the Seedance 2.0 prompt following the structure rules. Output ONLY the prompt text.");
 
   return lines.join("\n");
@@ -180,6 +212,18 @@ export async function POST(req: Request) {
   const referenceImageUrls = sanitizeUrls(body.referenceImageUrls, MAX_REFERENCE_IMAGES);
   const productImageUrls = sanitizeUrls(body.productImageUrls, MAX_PRODUCT_IMAGES);
   const productDescription = (body.productDescription ?? "").trim();
+  const shotAnalysis = {
+    shots: Array.isArray(body.shotAnalysis?.shots) ? body.shotAnalysis?.shots.filter(Boolean) : [],
+    keyframes: Array.isArray(body.shotAnalysis?.keyframes) ? body.shotAnalysis?.keyframes.filter(Boolean) : [],
+    analyzedFrameCount:
+      typeof body.shotAnalysis?.analyzedFrameCount === "number" && Number.isFinite(body.shotAnalysis.analyzedFrameCount)
+        ? body.shotAnalysis.analyzedFrameCount
+        : 0,
+  };
+  const shotKeyframeUrls = sanitizeUrls(
+    shotAnalysis.keyframes.map((shot) => shot.keyFrameUrl).filter((url): url is string => typeof url === "string"),
+    MAX_REFERENCE_IMAGES,
+  );
 
   if (productImageUrls.length === 0 && !productDescription) {
     return NextResponse.json(
@@ -197,13 +241,14 @@ export async function POST(req: Request) {
     clipType: body.clipType ?? "custom",
     aspectRatio: body.aspectRatio ?? "9:16",
     durationSec: typeof body.durationSec === "number" && body.durationSec > 0 ? body.durationSec : 10,
+    shotAnalysis,
   };
 
   // Image order: [video first frame?, ...static ref thumbnails, ...product photos]
   const orderedImages = [
     ...(videoFirstFrameUrl ? [videoFirstFrameUrl] : []),
     // Avoid sending the first frame twice if it was also included in referenceImageUrls.
-    ...referenceImageUrls.filter((u) => u !== videoFirstFrameUrl),
+    ...[...shotKeyframeUrls, ...referenceImageUrls].filter((u, index, arr) => u !== videoFirstFrameUrl && arr.indexOf(u) === index),
     ...productImageUrls,
   ];
 
@@ -226,6 +271,7 @@ export async function POST(req: Request) {
       productImageUrls,
       referenceImageUrls,
       videoFirstFrameUrl,
+      shotAnalysis,
       clipType: safeBody.clipType,
       aspectRatio: safeBody.aspectRatio,
       durationSec: safeBody.durationSec,

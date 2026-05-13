@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import Link from "next/link";
 import { Dialog } from "radix-ui";
 import {
   ArrowLeft,
@@ -17,7 +18,6 @@ import {
 import { toast } from "sonner";
 import type { TTAd } from "@/lib/intelligenceProvider";
 import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import {
   Select,
@@ -31,6 +31,11 @@ import { uploadFileToCdn, uploadBlobUrlToCdn } from "@/lib/uploadBlobUrlToCdn";
 import { STUDIO_IMAGE_FILE_ACCEPT } from "@/lib/studioUploadValidation";
 import { guardedFetch } from "@/lib/guardedFetch";
 import { completeStudioTask, pollKlingVideo } from "@/lib/studioKlingClientPoll";
+import {
+  buildDenseSampleTimeline,
+  type DenseFramePoint,
+  type ReferenceShot,
+} from "@/lib/intelligenceRecreateShotAnalysis";
 import {
   getPersonalApiKey,
   getPersonalPiapiApiKey,
@@ -85,8 +90,87 @@ type GenerationOutcome =
   | { kind: "success"; videoUrl: string; taskId: string }
   | { kind: "error"; message: string };
 
+type ShotAnalysisState =
+  | { kind: "idle" }
+  | { kind: "extracting" }
+  | { kind: "analyzing" }
+  | { kind: "ready"; shots: ReferenceShot[]; keyframes: ReferenceShot[]; analyzedFrameCount: number }
+  | { kind: "failed"; message: string };
+
 function newProductSlotId(): string {
   return `p-${Date.now()}-${Math.floor(Math.random() * 100000)}`;
+}
+
+async function waitForVideoReady(video: HTMLVideoElement): Promise<void> {
+  await new Promise<void>((resolve, reject) => {
+    const timeout = window.setTimeout(() => reject(new Error("Video load timeout.")), 20000);
+    const done = () => {
+      window.clearTimeout(timeout);
+      resolve();
+    };
+    video.onloadeddata = done;
+    video.onerror = () => {
+      window.clearTimeout(timeout);
+      reject(new Error("Video load error."));
+    };
+  });
+}
+
+async function seekVideo(video: HTMLVideoElement, timeSec: number): Promise<void> {
+  await new Promise<void>((resolve) => {
+    const timeout = window.setTimeout(resolve, 2500);
+    video.onseeked = () => {
+      window.clearTimeout(timeout);
+      resolve();
+    };
+    video.currentTime = timeSec;
+  });
+}
+
+function frameDataUrlFromVideo(video: HTMLVideoElement, maxSide: number, quality: number): string {
+  const width = video.videoWidth || 480;
+  const height = video.videoHeight || 854;
+  const scale = Math.min(1, maxSide / Math.max(width, height, 1));
+  const canvas = document.createElement("canvas");
+  canvas.width = Math.max(1, Math.round(width * scale));
+  canvas.height = Math.max(1, Math.round(height * scale));
+  const ctx = canvas.getContext("2d");
+  if (!ctx) throw new Error("No 2D context");
+  ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+  return canvas.toDataURL("image/jpeg", quality);
+}
+
+async function extractDenseFramesFromVideo(
+  video: HTMLVideoElement,
+  timestamps: number[],
+): Promise<Array<{ timestampSec: number; dataUrl: string }>> {
+  const out: Array<{ timestampSec: number; dataUrl: string }> = [];
+  for (const timestampSec of timestamps) {
+    await seekVideo(video, timestampSec);
+    out.push({
+      timestampSec,
+      dataUrl: frameDataUrlFromVideo(video, 320, 0.55),
+    });
+  }
+  return out;
+}
+
+async function mapWithConcurrency<TInput, TOutput>(
+  items: TInput[],
+  limit: number,
+  mapper: (item: TInput, index: number) => Promise<TOutput>,
+): Promise<TOutput[]> {
+  const out = new Array<TOutput>(items.length);
+  let cursor = 0;
+  const workers = Array.from({ length: Math.max(1, Math.min(limit, items.length)) }, async () => {
+    while (cursor < items.length) {
+      const index = cursor;
+      cursor += 1;
+      out[index] = await mapper(items[index], index);
+    }
+  });
+  await Promise.all(workers);
+  return out;
 }
 
 export function AdRecreateDialog({
@@ -119,6 +203,7 @@ export function AdRecreateDialog({
   const [firstFrameDataUrl, setFirstFrameDataUrl] = useState<string | null>(null);
   const [firstFrameCdnUrl, setFirstFrameCdnUrl] = useState<string | null>(null);
   const [frameExtracting, setFrameExtracting] = useState(false);
+  const [shotAnalysis, setShotAnalysis] = useState<ShotAnalysisState>({ kind: "idle" });
 
   const fileInputRef = useRef<HTMLInputElement>(null);
   const cancelRef = useRef(false);
@@ -140,6 +225,7 @@ export function AdRecreateDialog({
     setGeneration({ kind: "idle" });
     setFirstFrameDataUrl(null);
     setFirstFrameCdnUrl(null);
+    setShotAnalysis({ kind: "idle" });
 
     // Auto-extract the competitor video's first frame for the start-image and style analysis.
     const videoUrl = ad?.videoUrl?.trim();
@@ -159,41 +245,87 @@ export function AdRecreateDialog({
         video.muted = true;
         video.playsInline = true;
         video.src = objectUrl;
-        await new Promise<void>((resolve, reject) => {
-          const t = setTimeout(() => reject(new Error("timeout")), 20000);
-          const done = () => { clearTimeout(t); resolve(); };
-          video.onloadeddata = done;
-          video.onerror = () => { clearTimeout(t); reject(new Error("load error")); };
-        });
+        await waitForVideoReady(video);
         if (cancelRef.current) { URL.revokeObjectURL(objectUrl); return; }
-        video.currentTime = 0;
-        await new Promise<void>((resolve) => {
-          const t = setTimeout(resolve, 2500);
-          video.onseeked = () => { clearTimeout(t); resolve(); };
-        });
+        await seekVideo(video, 0);
         if (cancelRef.current) { URL.revokeObjectURL(objectUrl); return; }
-        const w = video.videoWidth || 480;
-        const h = video.videoHeight || 854;
-        const scale = Math.min(1, 720 / Math.max(w, h, 1));
-        const canvas = document.createElement("canvas");
-        canvas.width = Math.round(w * scale);
-        canvas.height = Math.round(h * scale);
-        const ctx = canvas.getContext("2d");
-        if (!ctx) throw new Error("No 2D context");
-        ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
-        const dataUrl = canvas.toDataURL("image/jpeg", 0.85);
-        video.pause();
-        video.removeAttribute("src");
-        video.load();
-        URL.revokeObjectURL(objectUrl);
+        const dataUrl = frameDataUrlFromVideo(video, 720, 0.85);
         if (cancelRef.current) return;
         setFirstFrameDataUrl(dataUrl);
+        let startFrameUrl: string | null = null;
         // Upload to CDN so the server can use it as a start-frame and reference.
         try {
-          const cdnUrl = await uploadBlobUrlToCdn(dataUrl, "competitor-first-frame.jpg", "image/jpeg", { kind: "image" });
-          if (!cancelRef.current) setFirstFrameCdnUrl(cdnUrl);
+          startFrameUrl = await uploadBlobUrlToCdn(dataUrl, "competitor-first-frame.jpg", "image/jpeg", {
+            kind: "image",
+          });
+          if (!cancelRef.current) setFirstFrameCdnUrl(startFrameUrl);
         } catch {
           // CDN upload failed — script generation will proceed without the start frame.
+        }
+        if (!cancelRef.current) setFrameExtracting(false);
+
+        try {
+          setShotAnalysis({ kind: "extracting" });
+          const timeline = buildDenseSampleTimeline(video.duration || 10);
+          const denseFrames = await extractDenseFramesFromVideo(video, timeline);
+          if (cancelRef.current) return;
+          const uploadedFrames = await mapWithConcurrency(denseFrames, 4, async (frame, index) => {
+            if (frame.timestampSec === 0 && startFrameUrl) {
+              return { timestampSec: frame.timestampSec, imageUrl: startFrameUrl };
+            }
+            const imageUrl = await uploadBlobUrlToCdn(
+              frame.dataUrl,
+              `competitor-analysis-frame-${index + 1}.jpg`,
+              "image/jpeg",
+              { kind: "image" },
+            );
+            return { timestampSec: frame.timestampSec, imageUrl };
+          });
+          if (cancelRef.current) return;
+          setShotAnalysis({ kind: "analyzing" });
+          const analysisRes = await fetch("/api/intelligence/recreate/analyze-shots", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              frames: uploadedFrames satisfies DenseFramePoint[],
+              durationSec: video.duration || 10,
+              ad: {
+                headline: ad?.headline ?? ad?.title,
+                body: ad?.body ?? ad?.text,
+                platform: ad?.platform,
+              },
+            }),
+          });
+          const analysisJson = (await analysisRes.json().catch(() => ({}))) as {
+            shots?: ReferenceShot[];
+            keyframes?: ReferenceShot[];
+            analyzedFrameCount?: number;
+            error?: string;
+          };
+          if (!analysisRes.ok || !Array.isArray(analysisJson.shots) || !Array.isArray(analysisJson.keyframes)) {
+            throw new Error(analysisJson.error || `Shot analysis failed (HTTP ${analysisRes.status}).`);
+          }
+          if (!cancelRef.current) {
+            setShotAnalysis({
+              kind: "ready",
+              shots: analysisJson.shots,
+              keyframes: analysisJson.keyframes,
+              analyzedFrameCount:
+                typeof analysisJson.analyzedFrameCount === "number"
+                  ? analysisJson.analyzedFrameCount
+                  : uploadedFrames.length,
+            });
+          }
+        } catch (error) {
+          if (!cancelRef.current) {
+            const message = error instanceof Error ? error.message : "High-fidelity analysis unavailable.";
+            setShotAnalysis({ kind: "failed", message });
+          }
+        } finally {
+          video.pause();
+          video.removeAttribute("src");
+          video.load();
+          URL.revokeObjectURL(objectUrl);
         }
       } catch {
         // Silently ignore extraction failures; the dialog still works.
@@ -201,7 +333,7 @@ export function AdRecreateDialog({
         if (!cancelRef.current) setFrameExtracting(false);
       }
     })();
-  }, [open, ad?.id, ad?.videoUrl]);
+  }, [open, ad?.id, ad?.videoUrl, ad?.headline, ad?.title, ad?.body, ad?.text, ad?.platform]);
 
   const referenceImageUrls = useMemo(() => {
     if (!ad) return [] as string[];
@@ -209,7 +341,14 @@ export function AdRecreateDialog({
     // Prefer the extracted first frame (most accurate style reference); fall back to static thumbnails.
     if (firstFrameCdnUrl) {
       out.push(firstFrameCdnUrl);
-    } else {
+    }
+    if (shotAnalysis.kind === "ready") {
+      for (const shot of shotAnalysis.keyframes) {
+        const url = shot.keyFrameUrl?.trim();
+        if (url && /^https?:\/\//i.test(url) && !out.includes(url)) out.push(url);
+      }
+    }
+    if (out.length === 0) {
       const candidates = [ad.previewUrl, ad.thumbnailUrl, ad.imageUrl];
       for (const raw of candidates) {
         if (typeof raw !== "string") continue;
@@ -218,7 +357,7 @@ export function AdRecreateDialog({
       }
     }
     return out;
-  }, [ad, firstFrameCdnUrl]);
+  }, [ad, firstFrameCdnUrl, shotAnalysis]);
 
   const productCdnUrls = useMemo(
     () => productSlots.map((s) => s.cdnUrl).filter((u): u is string => Boolean(u && u.trim())),
@@ -226,9 +365,11 @@ export function AdRecreateDialog({
   );
 
   const anyUploading = productSlots.some((s) => s.uploading);
+  const analysisBusy = shotAnalysis.kind === "extracting" || shotAnalysis.kind === "analyzing";
   const canDraft =
     !anyUploading &&
     !frameExtracting &&
+    !analysisBusy &&
     (productCdnUrls.length > 0 || productDescription.trim().length > 0);
 
   const handlePickFiles = useCallback(() => fileInputRef.current?.click(), []);
@@ -307,6 +448,14 @@ export function AdRecreateDialog({
           clipType,
           aspectRatio,
           durationSec: 10,
+          shotAnalysis:
+            shotAnalysis.kind === "ready"
+              ? {
+                  shots: shotAnalysis.shots,
+                  keyframes: shotAnalysis.keyframes,
+                  analyzedFrameCount: shotAnalysis.analyzedFrameCount,
+                }
+              : undefined,
         }),
       });
       const json = (await res.json().catch(() => ({}))) as { prompt?: string; error?: string };
@@ -321,7 +470,7 @@ export function AdRecreateDialog({
     } finally {
       setDraftBusy(false);
     }
-  }, [ad, canDraft, referenceImageUrls, productCdnUrls, productDescription, clipType, aspectRatio]);
+  }, [ad, canDraft, firstFrameCdnUrl, referenceImageUrls, productCdnUrls, productDescription, clipType, aspectRatio, shotAnalysis]);
 
   const regenerateDraft = useCallback(() => {
     setStep("intake");
@@ -449,7 +598,7 @@ export function AdRecreateDialog({
       setGeneration({ kind: "error", message });
       toast.error(`Generation failed: ${message}`);
     }
-  }, [prompt, productCdnUrls, planId, aspectRatio, ad?.id, ad?.platform, ad?.headline, ad?.title, brandName, clipType, productDescription]);
+  }, [prompt, productCdnUrls, planId, aspectRatio, firstFrameCdnUrl, ad?.id, ad?.platform, ad?.headline, ad?.title, brandName, clipType, productDescription]);
 
   const headerSubtitle = useMemo(() => {
     if (!ad) return "";
@@ -507,6 +656,7 @@ export function AdRecreateDialog({
                 ad={ad}
                 firstFrameDataUrl={firstFrameDataUrl}
                 frameExtracting={frameExtracting}
+                shotAnalysis={shotAnalysis}
                 referenceImageUrls={referenceImageUrls}
                 productSlots={productSlots}
                 onPickFiles={handlePickFiles}
@@ -528,6 +678,7 @@ export function AdRecreateDialog({
                 onRegenerate={regenerateDraft}
                 ad={ad}
                 firstFrameDataUrl={firstFrameDataUrl}
+                shotAnalysis={shotAnalysis}
                 referenceImageUrls={referenceImageUrls}
                 productImageUrls={productCdnUrls}
               />
@@ -541,7 +692,18 @@ export function AdRecreateDialog({
           {/* Footer */}
           <div className="flex flex-wrap items-center justify-between gap-3 border-t border-white/10 bg-black/40 px-5 py-3">
             <div className="text-[11px] text-white/40">
-              {step === "intake" && (frameExtracting ? "Extracting video start frame…" : firstFrameCdnUrl ? "Step 1 of 3 — Start frame ready ✓ — Add your product" : "Step 1 of 3 — Add your product")}
+              {step === "intake" &&
+                (frameExtracting
+                  ? "Extracting video start frame…"
+                  : shotAnalysis.kind === "extracting"
+                    ? "Extracting dense analysis frames…"
+                    : shotAnalysis.kind === "analyzing"
+                      ? "Analyzing shots…"
+                      : shotAnalysis.kind === "ready"
+                        ? `Step 1 of 3 — High-fidelity analysis ready ✓ · ${shotAnalysis.shots.length} shots`
+                        : firstFrameCdnUrl
+                          ? "Step 1 of 3 — Start frame ready ✓ — Add your product"
+                          : "Step 1 of 3 — Add your product")}
               {step === "review" && "Step 2 of 3 — Review the script"}
               {step === "running" && "Step 3 of 3 — Generating with Seedance 2.0"}
             </div>
@@ -561,15 +723,23 @@ export function AdRecreateDialog({
                 <Button
                   size="sm"
                   onClick={draftScript}
-                  disabled={!canDraft || draftBusy || frameExtracting}
+                  disabled={!canDraft || draftBusy || frameExtracting || analysisBusy}
                   className="bg-violet-400 text-black hover:bg-violet-300"
                 >
-                  {draftBusy || frameExtracting ? (
+                  {draftBusy || frameExtracting || analysisBusy ? (
                     <Loader2 className="mr-1.5 h-3.5 w-3.5 animate-spin" />
                   ) : (
                     <Sparkles className="mr-1.5 h-3.5 w-3.5" />
                   )}
-                  {frameExtracting ? "Extracting frame…" : draftBusy ? "Drafting…" : "Draft the script"}
+                  {frameExtracting
+                    ? "Extracting start frame…"
+                    : shotAnalysis.kind === "extracting"
+                      ? "Extracting frames…"
+                      : shotAnalysis.kind === "analyzing"
+                        ? "Analyzing shots…"
+                        : draftBusy
+                          ? "Drafting recreate script…"
+                          : "Draft the script"}
                 </Button>
               )}
               {step === "review" && (
@@ -663,6 +833,7 @@ function IntakeStep({
   ad,
   firstFrameDataUrl,
   frameExtracting,
+  shotAnalysis,
   referenceImageUrls,
   productSlots,
   onPickFiles,
@@ -678,6 +849,7 @@ function IntakeStep({
   ad: TTAd;
   firstFrameDataUrl: string | null;
   frameExtracting: boolean;
+  shotAnalysis: ShotAnalysisState;
   referenceImageUrls: string[];
   productSlots: ProductSlot[];
   onPickFiles: () => void;
@@ -699,6 +871,11 @@ function IntakeStep({
           {firstFrameDataUrl && (
             <span className="ml-2 rounded-full bg-violet-500/20 px-2 py-0.5 text-[10px] text-violet-200">
               start frame
+            </span>
+          )}
+          {shotAnalysis.kind === "ready" && (
+            <span className="ml-2 rounded-full bg-emerald-500/15 px-2 py-0.5 text-[10px] text-emerald-200">
+              {shotAnalysis.shots.length} shots detected
             </span>
           )}
         </p>
@@ -848,6 +1025,12 @@ function IntakeStep({
             Uploading product photos…
           </p>
         )}
+        {shotAnalysis.kind === "failed" && (
+          <p className="text-[11px] text-amber-200/90">
+            High-fidelity shot analysis unavailable. The recreate will fall back to the start frame
+            and static references.
+          </p>
+        )}
       </section>
     </div>
   );
@@ -859,6 +1042,7 @@ function ReviewStep({
   onRegenerate,
   ad,
   firstFrameDataUrl,
+  shotAnalysis,
   referenceImageUrls,
   productImageUrls,
 }: {
@@ -867,6 +1051,7 @@ function ReviewStep({
   onRegenerate: () => void;
   ad: TTAd;
   firstFrameDataUrl: string | null;
+  shotAnalysis: ShotAnalysisState;
   referenceImageUrls: string[];
   productImageUrls: string[];
 }) {
@@ -944,6 +1129,12 @@ function ReviewStep({
           product photos in upload order. Generation runs on Seedance 2.0 — ~10s clip,{" "}
           {productImageUrls.length} product image{productImageUrls.length === 1 ? "" : "s"}.
         </p>
+        {shotAnalysis.kind === "ready" && (
+          <p className="text-[11px] text-emerald-200/90">
+            High-fidelity analysis: {shotAnalysis.shots.length} shots detected from{" "}
+            {shotAnalysis.analyzedFrameCount} frames.
+          </p>
+        )}
       </section>
     </div>
   );
@@ -1012,12 +1203,12 @@ function RunningStep({
           <ExternalLink className="h-3 w-3" />
           Open the file
         </a>
-        <a
+        <Link
           href="/app/studio"
           className="inline-flex items-center gap-1 rounded-md border border-white/10 bg-white/5 px-2 py-1 text-white/70 transition hover:text-white"
         >
           Find it in Studio
-        </a>
+        </Link>
       </div>
     </div>
   );
