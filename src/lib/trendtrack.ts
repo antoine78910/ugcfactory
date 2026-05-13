@@ -399,6 +399,16 @@ export type TTLookupResult = {
   reach30d?: number;
 };
 
+export type TTSimilarShop = {
+  id: string;
+  domain: string;
+  name: string;
+  similarityScore?: number;
+  activeAds?: number;
+  monthlyVisits?: number;
+  growth30d?: number;
+};
+
 export async function ttListTrackers(): Promise<TTTracker[]> {
   const res = await ttFetch<{ data?: TTTracker[] }>("/v1/brandtrackers");
   return res.data ?? [];
@@ -441,6 +451,48 @@ export async function ttListAdvertiserAds(
     `/v1/advertisers/${encodeURIComponent(advertiserId)}/ads?${qs}`,
   );
   return (res.data ?? []).map((row) => normalizeTTAd(row));
+}
+
+function normalizeSimilarShopRow(raw: unknown): TTSimilarShop | null {
+  const row = asRecord(raw);
+  const shop = asRecord(row.shop);
+  const traffic = asRecord(shop.traffic);
+  const advertising = asRecord(shop.advertising);
+
+  const id = String(shop.id ?? "").trim();
+  const domain = String(shop.domain ?? "").trim().replace(/^https?:\/\//i, "").replace(/^www\./i, "");
+  const name = String(shop.name ?? domain ?? "").trim();
+  if (!id || !domain || !name) return null;
+
+  return {
+    id,
+    domain,
+    name,
+    similarityScore: numOrUndefined(row.similarityScore),
+    activeAds: numOrUndefined(advertising.activeAds),
+    monthlyVisits: numOrUndefined(traffic.monthlyVisits),
+    growth30d: numOrUndefined(traffic.growth30d),
+  };
+}
+
+export async function ttGetSimilarShops(
+  identifier: string,
+  opts?: {
+    limit?: number;
+    offset?: number;
+    sortBy?: "relevance" | "monthlyVisits" | "activeAds" | "growth30d" | "productsCount" | "createdAt";
+    order?: "asc" | "desc";
+  },
+): Promise<TTSimilarShop[]> {
+  const qs = new URLSearchParams();
+  qs.set("limit", String(opts?.limit ?? 8));
+  qs.set("offset", String(opts?.offset ?? 0));
+  qs.set("sortBy", opts?.sortBy ?? "relevance");
+  qs.set("order", opts?.order ?? "desc");
+  const res = await ttFetch<{ data?: unknown[] }>(
+    `/v1/shops/${encodeURIComponent(identifier)}/similar?${qs.toString()}`,
+  );
+  return (res.data ?? []).map((row) => normalizeSimilarShopRow(row)).filter((row): row is TTSimilarShop => Boolean(row));
 }
 
 export async function ttLookup(q: string, options?: { type?: string }): Promise<TTLookupResult[]> {

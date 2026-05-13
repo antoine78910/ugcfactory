@@ -74,21 +74,18 @@ async function fetchTopAdsForCompetitor(opts: {
   return ads.map((a, i) => ({ ...a, rank: i + 1 }));
 }
 
+async function fetchTopAdsForTracker(trackerId: string): Promise<TTAd[]> {
+  const res = await fetch(`/api/intelligence/trackers/${encodeURIComponent(trackerId)}/top-ads`);
+  const json = (await res.json().catch(() => [])) as unknown;
+  const rows = Array.isArray(json) ? (json as TTAd[]) : [];
+  return rows.map((a, i) => ({ ...a, rank: i + 1 }));
+}
+
 function formatUsd(n: number): string {
   if (!Number.isFinite(n) || n <= 0) return "—";
   if (n >= 1000) return `$${Math.round(n).toLocaleString("en-US")}`;
   if (n >= 10) return `$${n.toFixed(0)}`;
   return `$${n.toFixed(1)}`;
-}
-
-function similarNicheQueryFromBrandName(name: string): string {
-  const tokens = name
-    .toLowerCase()
-    .replace(/[^a-z0-9\s]/g, " ")
-    .split(/\s+/)
-    .map((t) => t.trim())
-    .filter((t) => t.length >= 4);
-  return tokens[0] ?? "";
 }
 
 function dedupeLookupRows(rows: TTLookupResult[], brandId: string | null): TTLookupResult[] {
@@ -114,6 +111,7 @@ export function IntelligenceOnboarding({
 
   // Step 1 — brand
   const [brand, setBrand] = useState<TTLookupResult | null>(null);
+  const [savedBrand, setSavedBrand] = useState<TTLookupResult | null>(null);
   const [savingBrand, setSavingBrand] = useState(false);
   const [brandError, setBrandError] = useState<string | null>(null);
 
@@ -147,36 +145,31 @@ export function IntelligenceOnboarding({
       const primary = (brand.domain?.trim() || brand.name?.trim() || "").trim();
       if (!primary) {
         setAutoCompetitorSuggestions([]);
-        setAutoCompetitorMessage("we didn't find competitors for you");
+        setAutoCompetitorMessage("We could not find similar shops for this brand yet.");
         return;
       }
 
-      const runLookup = async (q: string): Promise<TTLookupResult[]> => {
-        if (!q.trim()) return [];
-        const res = await fetch(
-          `/api/intelligence/lookup?q=${encodeURIComponent(q)}&type=${encodeURIComponent("advertiser")}`,
-          { cache: "no-store" },
-        );
-        const json = (await res.json().catch(() => [])) as unknown;
-        return Array.isArray(json) ? (json as TTLookupResult[]) : [];
-      };
+      const params = new URLSearchParams({
+        q: primary,
+        excludeId: brand.id,
+      });
+      if (brand.domain?.trim()) params.set("domain", brand.domain.trim());
 
-      const primaryRows = await runLookup(primary);
-      const fallbackToken = similarNicheQueryFromBrandName(brand.name ?? "");
-      const fallbackRows = primaryRows.length > 0 || !fallbackToken || fallbackToken === primary
-        ? []
-        : await runLookup(fallbackToken);
-      const merged = dedupeLookupRows([...primaryRows, ...fallbackRows], brand.id).slice(0, 8);
+      const res = await fetch(`/api/intelligence/similar-shops?${params.toString()}`, {
+        cache: "no-store",
+      });
+      const json = (await res.json().catch(() => [])) as unknown;
+      const merged = dedupeLookupRows(Array.isArray(json) ? (json as TTLookupResult[]) : [], brand.id).slice(0, 8);
 
       setAutoCompetitorSuggestions(merged);
       if (merged.length === 0) {
-        setAutoCompetitorMessage("we didn't find competitors for you");
+        setAutoCompetitorMessage("We could not find similar shops for this brand yet.");
       } else {
         setAutoCompetitorMessage(null);
       }
     } catch {
       setAutoCompetitorSuggestions([]);
-      setAutoCompetitorMessage("we didn't find competitors for you");
+      setAutoCompetitorMessage("We could not find similar shops for this brand yet.");
     } finally {
       setAutoCompetitorLoading(false);
     }
@@ -231,6 +224,7 @@ export function IntelligenceOnboarding({
       });
       const json = (await res.json().catch(() => ({}))) as { error?: string };
       if (!res.ok) throw new Error(json.error ?? "Could not save your brand.");
+      setSavedBrand(brand);
       setStep(2);
     } catch (e) {
       setBrandError(e instanceof Error ? e.message : "Could not save your brand.");
@@ -250,6 +244,9 @@ export function IntelligenceOnboarding({
   const [adsError, setAdsError] = useState<string | null>(null);
   const [ads, setAds] = useState<TTAd[]>([]);
   const [selectedAd, setSelectedAd] = useState<TTAd | null>(null);
+  const [brandAdsLoading, setBrandAdsLoading] = useState(false);
+  const [brandAdsError, setBrandAdsError] = useState<string | null>(null);
+  const [brandAds, setBrandAds] = useState<TTAd[]>([]);
 
   const loadTopAds = useCallback(async () => {
     const c = activeCompetitor;
@@ -277,9 +274,29 @@ export function IntelligenceOnboarding({
     }
   }, [activeCompetitor]);
 
+  const loadBrandTopAds = useCallback(async () => {
+    if (!savedBrand?.id) {
+      setBrandAds([]);
+      setBrandAdsError(null);
+      return;
+    }
+    setBrandAdsLoading(true);
+    setBrandAdsError(null);
+    try {
+      const out = await fetchTopAdsForTracker(savedBrand.id);
+      setBrandAds(out.filter((a) => Boolean(a.videoUrl && a.videoUrl.trim())).slice(0, 10));
+    } catch {
+      setBrandAdsError("Could not load your brand ads.");
+      setBrandAds([]);
+    } finally {
+      setBrandAdsLoading(false);
+    }
+  }, [savedBrand]);
+
   useEffect(() => {
     if (step !== 3 && step !== 4) return;
     void refreshSavedCompetitors().then(() => void loadTopAds());
+    void loadBrandTopAds();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [step]);
 
@@ -287,6 +304,11 @@ export function IntelligenceOnboarding({
     if (step !== 3 && step !== 4) return;
     void loadTopAds();
   }, [activeCompetitor?.id, loadTopAds, step]);
+
+  useEffect(() => {
+    if (step !== 3 && step !== 4) return;
+    void loadBrandTopAds();
+  }, [loadBrandTopAds, savedBrand?.id, step]);
 
   const stats = useMemo(() => {
     const count = ads.length;
@@ -321,6 +343,8 @@ export function IntelligenceOnboarding({
       return true;
     });
   }, [ads]);
+
+  const hasAnyRecreatableAds = ads.length > 0 || brandAds.length > 0;
 
   // Step 4 — simple hook variations (lightweight, no extra API/credits)
   const hook = useMemo(() => {
@@ -384,7 +408,7 @@ export function IntelligenceOnboarding({
               <div>
                 <p className="text-sm font-medium text-white/85">Your brand</p>
                 <p className="mt-1 text-xs text-white/45">
-                  Enter your brand domain or name to connect your data source. If you don’t have it yet, you can skip and start with competitors.
+                  Paste your brand website or name to connect your tracker and load your best-performing ads later in the flow.
                 </p>
               </div>
 
@@ -405,11 +429,14 @@ export function IntelligenceOnboarding({
               <div className="flex flex-wrap items-center justify-between gap-2">
                 <button
                   type="button"
-                  onClick={() => setStep(2)}
+                  onClick={() => {
+                    setSavedBrand(null);
+                    setStep(2);
+                  }}
                   className="rounded-xl border border-white/10 bg-white/[0.03] px-4 py-2 text-sm font-semibold text-white/70 transition hover:bg-white/[0.06]"
                   title="Skip brand connection"
                 >
-                  Don’t have my Meta Ads Account right now
+                  Skip my brand for now
                 </button>
                 <button
                   type="button"
@@ -429,9 +456,9 @@ export function IntelligenceOnboarding({
             <div className="flex flex-col gap-4">
               <div className="flex items-start justify-between gap-3">
                 <div>
-                  <p className="text-sm font-medium text-white/85">Competitors</p>
+                  <p className="text-sm font-medium text-white/85">Who are your competitors?</p>
                   <p className="mt-1 text-xs text-white/45">
-                    Save up to 3 competitors to keep credits under control. This step is optional.
+                    Save up to 3 competitors. Suggestions below are powered by TrendTrack Similar Shops and you can still add your own manually.
                   </p>
                 </div>
                 <span className="rounded-lg border border-white/10 bg-black/20 px-2.5 py-1.5 text-xs font-semibold text-white/70">
@@ -477,7 +504,7 @@ export function IntelligenceOnboarding({
                       })}
                     </div>
                   ) : autoCompetitorLoading ? (
-                    <p className="mt-2 text-xs text-violet-100/70">Finding similar shops and niche competitors…</p>
+                    <p className="mt-2 text-xs text-violet-100/70">Finding similar shops for your brand…</p>
                   ) : autoCompetitorMessage ? (
                     <p className="mt-2 text-xs text-violet-100/70">{autoCompetitorMessage}</p>
                   ) : null}
@@ -502,7 +529,7 @@ export function IntelligenceOnboarding({
                   type="button"
                   onClick={async () => {
                     const nextSaved = await refreshSavedCompetitors();
-                    if (nextSaved.length === 0) {
+                    if (nextSaved.length === 0 && !savedBrand) {
                       onDone();
                       return;
                     }
@@ -522,7 +549,7 @@ export function IntelligenceOnboarding({
               <div>
                 <p className="text-sm font-medium text-white/85">Top ads</p>
                 <p className="mt-1 text-xs text-white/45">
-                  Review the best creatives and hit <span className="font-semibold text-white/70">Recreate</span> on any ad.
+                  Review the best-performing video creatives from your saved competitors and your own brand, then hit <span className="font-semibold text-white/70">Recreate</span> on any ad.
                 </p>
               </div>
 
@@ -653,6 +680,47 @@ export function IntelligenceOnboarding({
                 </div>
               ) : null}
 
+              {savedBrand ? (
+                <div className="rounded-xl border border-white/10 bg-black/20 p-4">
+                  <div className="flex flex-wrap items-center justify-between gap-3">
+                    <div className="min-w-0">
+                      <p className="truncate text-sm font-semibold text-white/85">{savedBrand.name}</p>
+                      <p className="mt-0.5 text-xs text-white/45">
+                        {savedBrand.domain?.trim() || "Your brand"} · videos only
+                      </p>
+                    </div>
+                    <span className="rounded-lg border border-emerald-300/25 bg-emerald-500/10 px-2.5 py-1 text-[11px] font-semibold text-emerald-100">
+                      Your brand tracker
+                    </span>
+                  </div>
+
+                  {brandAdsLoading ? (
+                    <div className="mt-4 flex items-center gap-2 text-xs text-white/55">
+                      <Loader2 className="h-4 w-4 animate-spin" />
+                      Loading your top ads…
+                    </div>
+                  ) : brandAdsError ? (
+                    <p className="mt-4 text-xs text-red-400">{brandAdsError}</p>
+                  ) : brandAds.length === 0 ? (
+                    <p className="mt-4 text-xs text-white/45">No video ads found for your brand yet.</p>
+                  ) : (
+                    <div className="mt-4 grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-4">
+                      {brandAds.map((ad) => (
+                        <div key={ad.id}>
+                          <AdCard
+                            ad={ad}
+                            brandName={savedBrand.name}
+                            playVideoOnHover
+                            showRecreateShortcut
+                            onView={() => setSelectedAd(ad)}
+                          />
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              ) : null}
+
               <div className="flex flex-wrap items-center justify-between gap-2">
                 <button
                   type="button"
@@ -664,11 +732,11 @@ export function IntelligenceOnboarding({
                 <button
                   type="button"
                   onClick={() => setStep(4)}
-                  disabled={!selectedAd && savedCompetitors.length > 0}
+                  disabled={!selectedAd && hasAnyRecreatableAds}
                   className="inline-flex items-center gap-2 rounded-xl bg-violet-400 px-4 py-2 text-sm font-semibold text-black shadow-[0_4px_0_0_rgba(76,29,149,0.95)] transition hover:bg-violet-300 hover:shadow-[0_5px_0_0_rgba(76,29,149,0.95)] active:translate-y-[2px] active:shadow-none disabled:opacity-40"
-                  title={!selectedAd && savedCompetitors.length > 0 ? "Open any ad to continue." : "Continue"}
+                  title={!selectedAd && hasAnyRecreatableAds ? "Open any ad to continue." : "Continue"}
                 >
-                  {savedCompetitors.length === 0 ? "Finish setup" : "Continue"}
+                  {savedCompetitors.length === 0 && !savedBrand ? "Finish setup" : "Continue"}
                   <ChevronRight className="h-4 w-4" />
                 </button>
               </div>

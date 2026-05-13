@@ -84,7 +84,7 @@ export function CompetitorDetail({
   );
 
   const [ads, setAds] = useState<TTAd[]>([]);
-  const [adsMediaFilter, setAdsMediaFilter] = useState<MediaFilter>("all");
+  const [adsMediaFilter, setAdsMediaFilter] = useState<MediaFilter>("videos");
   const [adsLoading, setAdsLoading] = useState(false);
   const [adsError, setAdsError] = useState<string | null>(null);
   const [staleAt, setStaleAt] = useState<string | null>(null);

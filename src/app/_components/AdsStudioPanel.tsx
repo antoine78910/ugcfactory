@@ -38,6 +38,7 @@ import { STUDIO_IMAGE_FILE_ACCEPT } from "@/lib/studioUploadValidation";
 import { cn } from "@/lib/utils";
 import { calculateVideoCreditsForModel } from "@/lib/pricing";
 import { AdsStudioRefSourceDialog } from "@/app/_components/AdsStudioRefSourceDialog";
+import { AdsStudioRecreatePromptDialog } from "@/app/_components/AdsStudioRecreatePromptDialog";
 import { AdsStudioTemplateCard } from "@/app/_components/AdsStudioTemplateCard";
 import type { AdsStudioMentionEntry } from "@/app/_components/AdsStudioMentionMenu";
 import { loadAvatarUrls } from "@/lib/avatarLibrary";
@@ -1631,6 +1632,7 @@ export default function AdsStudioPanel() {
   const [uploadingAvatar, setUploadingAvatar] = useState(false);
   const [refSourceDialogOpen, setRefSourceDialogOpen] = useState(false);
   const [refSourceDialogMode, setRefSourceDialogMode] = useState<"product" | "avatar">("product");
+  const [recreatePromptOpen, setRecreatePromptOpen] = useState(false);
   const [avatarLibraryUrls, setAvatarLibraryUrls] = useState<string[]>([]);
   const [avatarLibLoading, setAvatarLibLoading] = useState(false);
   const composerPanelRef = useRef<HTMLDivElement>(null);
@@ -2355,6 +2357,11 @@ export default function AdsStudioPanel() {
     window.setTimeout(() => align("auto"), 900);
   }
 
+  const handleApplyRecreatePrompt = useCallback((nextPrompt: string) => {
+    setPrompt(nextPrompt.replace(/\r\n/g, "\n"));
+    scrollComposerIntoView();
+  }, []);
+
   async function recreateFromTemplate(
     label: string,
     tpl: TemplateVideoItem | undefined,
@@ -2712,6 +2719,14 @@ export default function AdsStudioPanel() {
                     ))}
                   </SelectContent>
                 </Select>
+                <button
+                  type="button"
+                  onClick={() => setRecreatePromptOpen(true)}
+                  className="inline-flex h-7 items-center gap-1.5 rounded-md border border-white/12 bg-white/[0.04] px-2 text-[11px] font-medium text-white/80 transition hover:bg-white/[0.08]"
+                >
+                  <Sparkles className="size-3.5" aria-hidden />
+                  Recreate prompt
+                </button>
               </div>
             </div>
 
@@ -3065,6 +3080,15 @@ export default function AdsStudioPanel() {
               if (refSourceDialogMode === "product") appInputRef.current?.click();
               else avatarInputRef.current?.click();
             }}
+          />
+          <AdsStudioRecreatePromptDialog
+            open={recreatePromptOpen}
+            onOpenChange={setRecreatePromptOpen}
+            assetType={assetType}
+            attachedReferenceUrl={appRefUrl.trim() || undefined}
+            currentAspectRatio={outputAspect}
+            currentDurationSec={videoDurationSec}
+            onApplyPrompt={handleApplyRecreatePrompt}
           />
         </div>
 
