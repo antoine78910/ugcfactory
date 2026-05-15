@@ -41,7 +41,9 @@ export default async function BrandProjectsListPage() {
         <div className="flex flex-wrap items-center justify-between gap-3">
           <div>
             <h1 className="text-2xl font-semibold tracking-tight">My projects</h1>
-            <p className="mt-1 text-sm text-white/55">Brand research and competitor context from onboarding.</p>
+            <p className="mt-1 text-sm text-white/55">
+              Winning angles, competitor hooks, and angle charts from your onboarding snapshot.
+            </p>
           </div>
           <Button asChild className="bg-violet-400 text-black hover:bg-violet-300">
             <Link href="/projects-onboarding">New brand project</Link>
