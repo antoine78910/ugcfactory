@@ -51,7 +51,7 @@ function DonutChart({ rows, totalAds }: { rows: AngleMixRow[]; totalAds: number 
   }, [slices]);
 
   return (
-    <motion className="flex flex-col items-center gap-4">
+    <div className="flex flex-col items-center gap-4">
       <div
         className="relative size-36 rounded-full"
         style={{ background: gradient }}
@@ -72,7 +72,7 @@ function DonutChart({ rows, totalAds }: { rows: AngleMixRow[]; totalAds: number 
           </li>
         ))}
       </ul>
-    </motion>
+    </div>
   );
 }
 
@@ -87,7 +87,7 @@ function MixTableRow({ row, rank }: { row: AngleMixRow; rank: number }) {
         </div>
       </td>
       <td className="hidden w-[28%] py-3 sm:table-cell">
-        <motion className="flex items-center gap-2">
+        <div className="flex items-center gap-2">
           <div className="h-1 flex-1 overflow-hidden rounded-full bg-white/[0.08]">
             <div
               className="h-full rounded-full"
@@ -97,7 +97,7 @@ function MixTableRow({ row, rank }: { row: AngleMixRow; rank: number }) {
           <span className="w-9 shrink-0 text-right text-xs tabular-nums text-white/45">
             {row.reachShare > 0 ? `${row.reachShare}%` : "—"}
           </span>
-        </motion>
+        </div>
       </td>
       <td className="py-3 pr-3 text-right text-xs tabular-nums text-white/50 sm:text-left">
         {row.adCount > 0 ? row.adCount : "—"}
@@ -192,7 +192,7 @@ export function CompetitorAngleMixView({
           {loading ? <Loader2 className="size-3.5 animate-spin" /> : <RefreshCw className="size-3.5" />}
           Refresh data
         </button>
-      </motion>
+      </div>
 
       <div className="overflow-hidden rounded-2xl border border-white/[0.08] bg-[#121212] shadow-[0_24px_80px_rgba(0,0,0,0.4)]">
         <div className="flex flex-wrap items-center justify-between gap-3 border-b border-white/[0.06] px-5 py-4 sm:px-6">
@@ -324,15 +324,3 @@ export function CompetitorAngleMixView({
   );
 }
 
-/** @deprecated typo guard — use div */
-function motion({
-  className,
-  children,
-  ...props
-}: React.HTMLAttributes<HTMLDivElement>) {
-  return (
-    <div className={className} {...props}>
-      {children}
-    </div>
-  );
-}
