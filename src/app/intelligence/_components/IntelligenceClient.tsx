@@ -362,7 +362,7 @@ export function IntelligenceClient({
                     {panel === "brands"
                       ? "Pick a tracker, search a brand, or pin advertisers."
                       : panel === "competitors"
-                        ? "Save up to 3 competitors and browse their top ads."
+                        ? "Similar shops load from TrendTrack for your saved brand; search to add more advertisers."
                         : panel === "recreations"
                           ? "Your saved ad recreations."
                           : ""}

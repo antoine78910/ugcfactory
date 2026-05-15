@@ -55,6 +55,25 @@ const FETCH_IMAGE_HEADERS = {
   Accept: "image/avif,image/webp,image/apng,image/*,*/*;q=0.8",
 } as const;
 
+export function parseBase64DataImageUrl(
+  rawUrl: string,
+): { mediaType: string; buffer: Buffer } | null {
+  const trimmed = String(rawUrl ?? "").trim();
+  const match = /^data:(image\/[a-z0-9.+-]+);base64,([a-z0-9+/=\s]+)$/i.exec(trimmed);
+  if (!match) return null;
+
+  const mediaType = match[1]!.toLowerCase();
+  if (!mediaType.startsWith("image/")) return null;
+
+  try {
+    const buffer = Buffer.from(match[2]!.replace(/\s+/g, ""), "base64");
+    if (buffer.length === 0) return null;
+    return { mediaType, buffer };
+  } catch {
+    return null;
+  }
+}
+
 /** Fetch remote image and emit Claude-safe JPEG (Anthropic rejects AVIF, many SVGs, wrong Content-Types, etc.). */
 async function toImageBlock(rawUrl: string): Promise<ImageBlock | null> {
   let u = (rawUrl ?? "").trim();
@@ -70,16 +89,25 @@ async function toImageBlock(rawUrl: string): Promise<ImageBlock | null> {
     }
   }
 
-  if (!/^https?:\/\//i.test(u)) return null;
+  let buf: Buffer | null = null;
+  if (u.startsWith("data:")) {
+    const parsed = parseBase64DataImageUrl(u);
+    if (!parsed) return null;
+    buf = parsed.buffer;
+  }
+
+  if (!buf && !/^https?:\/\//i.test(u)) return null;
 
   try {
-    const res = await fetch(u, {
-      signal: AbortSignal.timeout(20_000),
-      redirect: "follow",
-      headers: FETCH_IMAGE_HEADERS,
-    });
-    if (!res.ok) return null;
-    const buf = Buffer.from(await res.arrayBuffer());
+    if (!buf) {
+      const res = await fetch(u, {
+        signal: AbortSignal.timeout(20_000),
+        redirect: "follow",
+        headers: FETCH_IMAGE_HEADERS,
+      });
+      if (!res.ok) return null;
+      buf = Buffer.from(await res.arrayBuffer());
+    }
     if (buf.length === 0 || buf.length > 25 * 1024 * 1024) return null;
 
     const meta = await sharp(buf).metadata();

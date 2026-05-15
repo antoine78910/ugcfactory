@@ -73,6 +73,33 @@ export type OpenaiResponsesTool =
   | { type: "web_search" | "web_search_2025_08_26"; search_context_size?: "low" | "medium" | "high" }
   | { type: "web_search_preview" | "web_search_preview_2025_03_11" };
 
+export type OpenaiImageDetail = "auto" | "low" | "high";
+
+export function parseOpenAiRetryAfterMs(message: string): number | null {
+  const match = message.match(/try again in\s+([0-9]+(?:\.[0-9]+)?)s/i);
+  if (!match) return null;
+  const seconds = Number.parseFloat(match[1] ?? "");
+  if (!Number.isFinite(seconds) || seconds < 0) return null;
+  return Math.round(seconds * 1000);
+}
+
+export function buildOpenaiResponsesImageContent(opts: {
+  userText: string;
+  imageUrls: string[];
+  imageDetail?: OpenaiImageDetail;
+}) {
+  const content: Array<
+    | { type: "input_text"; text: string }
+    | { type: "input_image"; image_url: string; detail: OpenaiImageDetail }
+  > = [{ type: "input_text", text: opts.userText }];
+
+  for (const u of opts.imageUrls.slice(0, 12)) {
+    content.push({ type: "input_image", image_url: u, detail: opts.imageDetail ?? "auto" });
+  }
+
+  return content;
+}
+
 export async function openaiResponsesText(opts: {
   developer: string;
   user: string;
@@ -105,21 +132,23 @@ export async function openaiResponsesTextWithImages(opts: {
   userText: string;
   imageUrls: string[];
   model?: string;
+  imageDetail?: OpenaiImageDetail;
 }) {
   const client = new OpenAI({ apiKey: getOpenAiApiKey() });
   const model = opts.model ?? getOpenAiModel();
 
-  const content: any[] = [{ type: "input_text", text: opts.userText }];
-  for (const u of opts.imageUrls.slice(0, 12)) {
-    content.push({ type: "input_image", image_url: u, detail: "auto" });
-  }
+  const content = buildOpenaiResponsesImageContent({
+    userText: opts.userText,
+    imageUrls: opts.imageUrls,
+    imageDetail: opts.imageDetail,
+  });
 
   const resp = await client.responses.create({
     model,
     input: [
       { role: "developer", content: opts.developer },
       { role: "user", content },
-    ] as any,
+    ] as OpenAI.Responses.ResponseCreateParams["input"],
   });
 
   const text = extractTextFromOpenAIResponse(resp);

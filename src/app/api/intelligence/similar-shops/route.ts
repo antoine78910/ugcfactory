@@ -51,6 +51,7 @@ async function resolveSimilarRowsToAdvertisers(rows: TTSimilarShop[], excludeId:
         name: picked.name || row.name,
         domain: picked.domain ?? row.domain,
         activeAds: picked.activeAds ?? row.activeAds,
+        totalAds: picked.totalAds ?? row.totalAds,
       } satisfies TTLookupResult;
     }),
   );

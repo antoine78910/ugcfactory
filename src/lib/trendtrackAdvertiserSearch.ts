@@ -306,6 +306,16 @@ export function normalizeTTLookupRow(raw: unknown): TTLookupResult | null {
     advertising.activeAds,
     advertising.active_ads,
   );
+  const totalAds = num(
+    mergedFlat.totalAds,
+    mergedFlat.total_ads,
+    advertising.totalAds,
+    advertising.total_ads,
+    advertising.adsTotal,
+    advertising.ads_total,
+    advertising.lifetimeAds,
+    advertising.lifetime_ads,
+  );
   const reach30d = num(
     mergedFlat.reach30d,
     mergedFlat.reach_30d,
@@ -321,6 +331,7 @@ export function normalizeTTLookupRow(raw: unknown): TTLookupResult | null {
     ...(logo ? { logo } : {}),
     ...(logoUrl ? { logoUrl } : {}),
     ...(activeAds !== undefined ? { activeAds } : {}),
+    ...(totalAds !== undefined ? { totalAds } : {}),
     ...(reach30d !== undefined ? { reach30d } : {}),
   };
 }

@@ -395,6 +395,8 @@ export type TTLookupResult = {
   logoUrl?: string;
   /** From `POST /v1/advertisers/query` — active Meta ads count for the page. */
   activeAds?: number;
+  /** Lifetime / all-time ad count when TrendTrack exposes it (similar shops, advertiser payloads). */
+  totalAds?: number;
   /** From `POST /v1/advertisers/query` — advertiser reach last 30d when provided. */
   reach30d?: number;
 };
@@ -405,6 +407,7 @@ export type TTSimilarShop = {
   name: string;
   similarityScore?: number;
   activeAds?: number;
+  totalAds?: number;
   monthlyVisits?: number;
   growth30d?: number;
 };
@@ -469,7 +472,15 @@ function normalizeSimilarShopRow(raw: unknown): TTSimilarShop | null {
     domain,
     name,
     similarityScore: numOrUndefined(row.similarityScore),
-    activeAds: numOrUndefined(advertising.activeAds),
+    activeAds: numOrUndefined(advertising.activeAds ?? advertising.active_ads),
+    totalAds: numOrUndefined(
+      advertising.totalAds ??
+        advertising.total_ads ??
+        advertising.adsTotal ??
+        advertising.ads_total ??
+        advertising.lifetimeAds ??
+        advertising.lifetime_ads,
+    ),
     monthlyVisits: numOrUndefined(traffic.monthlyVisits),
     growth30d: numOrUndefined(traffic.growth30d),
   };

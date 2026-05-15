@@ -46,6 +46,14 @@ export function mapAdvertiserQueryRowToLookup(raw: unknown): TTLookupResult | nu
   const logo = logoUrl;
   const adv = asRecord(o.advertising);
   const activeAds = num(adv.activeAds ?? adv.active_ads);
+  const totalAds = num(
+    adv.totalAds ??
+      adv.total_ads ??
+      adv.adsTotal ??
+      adv.ads_total ??
+      adv.lifetimeAds ??
+      adv.lifetime_ads,
+  );
   const reach30d = num(adv.reach30d ?? adv.reach_30d);
 
   return {
@@ -54,6 +62,7 @@ export function mapAdvertiserQueryRowToLookup(raw: unknown): TTLookupResult | nu
     type: "advertiser",
     ...(logoUrl ? { logo, logoUrl } : {}),
     ...(activeAds !== undefined ? { activeAds } : {}),
+    ...(totalAds !== undefined ? { totalAds } : {}),
     ...(reach30d !== undefined ? { reach30d } : {}),
   };
 }
