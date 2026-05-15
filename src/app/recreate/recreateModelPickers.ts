@@ -30,5 +30,6 @@ export function pickValidRecreateVideoModelId(
 export function formatRecreateVideoModelLabel(id: string): string {
   if (id === "openai/sora-2-pro") return "sora-2-pro";
   if (id === "openai/sora-2") return "sora-2";
+  if (id === "bytedance/seedance-1.5-pro") return "seedance-1.5-pro";
   return id.replace(/^kling-/, "").replace(/\/video$/, "");
 }

@@ -11,6 +11,7 @@ export const STUDIO_VIDEO_PICKER_IDS = [
   "kling-2.6/video",
   "openai/sora-2",
   "openai/sora-2-pro",
+  "bytedance/seedance-1.5-pro",
   "bytedance/seedance-2",
   "bytedance/seedance-2-fast",
   "veo3_lite",
@@ -96,6 +97,8 @@ export function studioVideoDurationSecOptions(pickerId: string): string[] {
     case "openai/sora-2":
     case "openai/sora-2-pro":
       return ["10", "15"];
+    case "bytedance/seedance-1.5-pro":
+      return ["4", "8", "12"];
     case "bytedance/seedance-2":
     case "bytedance/seedance-2-fast":
       return Array.from({ length: 12 }, (_, i) => String(i + 4));
@@ -125,6 +128,9 @@ export function studioVideoDurationRangeLabel(pickerId: string): string {
  * Returns `null` → caller keeps legacy 9:16 / 16:9 / 1:1 for other models.
  */
 export function studioVideoCreateAspectRatioOptions(pickerId: string): readonly string[] | null {
+  if (pickerId === "bytedance/seedance-1.5-pro") {
+    return ["21:9", "16:9", "4:3", "1:1", "3:4", "9:16"];
+  }
   if (pickerId === "bytedance/seedance-2" || pickerId === "bytedance/seedance-2-fast") {
     return ["21:9", "16:9", "4:3", "1:1", "3:4", "9:16", "auto"];
   }
@@ -143,7 +149,11 @@ export function studioVideoSupportsQualityPicker(pickerId: string): boolean {
 
 /** Seedance 2.0 / 2.0 Fast: output resolution (480p / 720p / 1080p; Fast has no true 1080p — UI caps at 720p). */
 export function studioVideoSupportsSeedanceResolutionPicker(pickerId: string): boolean {
-  return pickerId === "bytedance/seedance-2" || pickerId === "bytedance/seedance-2-fast";
+  return (
+    pickerId === "bytedance/seedance-1.5-pro" ||
+    pickerId === "bytedance/seedance-2" ||
+    pickerId === "bytedance/seedance-2-fast"
+  );
 }
 
 export function studioVideoSupportsNativeAudio(pickerId: string): boolean {
@@ -188,8 +198,17 @@ export function studioVideoIsSeedancePickerId(pickerId: string): boolean {
   return pickerId.startsWith("bytedance/seedance");
 }
 
+export function studioVideoIsSeedance15ProPickerId(pickerId: string): boolean {
+  return pickerId === "bytedance/seedance-1.5-pro";
+}
+
 export function studioVideoIsSeedance2ProPickerId(pickerId: string): boolean {
   return pickerId === "bytedance/seedance-2" || pickerId === "bytedance/seedance-2-fast";
+}
+
+/** Seedance models that bill via resolution tiers and accept `videoResolution` on generate. */
+export function studioVideoIsSeedanceBillingPickerId(pickerId: string): boolean {
+  return studioVideoIsSeedance15ProPickerId(pickerId) || studioVideoIsSeedance2ProPickerId(pickerId);
 }
 
 /** Create → Video: named Elements (@names + extra image URLs) for Kling 3.0 and Seedance 2 / Fast only (not Preview). */
@@ -233,6 +252,13 @@ export function validateStudioVideoJobDuration(
   if (isSora2ProResolved(resolvedModel)) {
     if (duration !== 10 && duration !== 15) {
       throw new Error("Invalid duration for Sora 2 Pro. Must be 10 or 15.");
+    }
+    return;
+  }
+  if (resolvedModel === "bytedance/seedance-1.5-pro") {
+    const d = Number(duration);
+    if (d !== 4 && d !== 8 && d !== 12) {
+      throw new Error("Invalid duration for Seedance 1.5 Pro. Must be 4, 8, or 12 seconds.");
     }
     return;
   }

@@ -15,6 +15,7 @@ import {
   SEEDANCE_PRO_MAX_IMAGE_URLS,
   SEEDANCE_PRO_MAX_VIDEO_URLS,
   SEEDANCE_PRO_OMNI_MAX_MEDIA_ITEMS,
+  SEEDANCE_15_PRO_PROMPT_MAX_CHARS,
   SEEDANCE_PRO_PROMPT_MAX_CHARS,
 } from "@/lib/piapiSeedance";
 import { hasPersonalApiKey } from "@/lib/personalApiBypass";
@@ -263,6 +264,23 @@ function buildSeedanceOrderedReferenceUrls(
   }
   if (end) pushUniqueMediaUrl(out, end, max);
   return out;
+}
+
+/** Seedance 1.5 Pro `input.aspect_ratio` (no `adaptive` / `auto`). */
+function mapAspectRatioForKieSeedance15(raw: string | undefined): string {
+  const a = String(raw ?? "16:9").trim();
+  if (a === "auto") return "16:9";
+  switch (a) {
+    case "1:1":
+    case "4:3":
+    case "3:4":
+    case "16:9":
+    case "9:16":
+    case "21:9":
+      return a;
+    default:
+      return "16:9";
+  }
 }
 
 /** Seedance 2.0 `input.aspect_ratio` (includes `adaptive` for “auto”). */
@@ -597,7 +615,9 @@ export async function POST(req: Request) {
     // Compute cost server-side. Mirrors the client-side calc; differences would only block edge cases.
     const costDisplayCredits = calculateVideoCreditsForModel({
       modelId: model,
-      duration: Number(body.duration) || (rawModel.startsWith("bytedance/seedance") ? 10 : 5),
+      duration:
+        Number(body.duration) ||
+        (rawModel === "bytedance/seedance-1.5-pro" ? 8 : rawModel.startsWith("bytedance/seedance") ? 10 : 5),
       audio: body.sound ?? true,
       quality: body.mode,
       videoResolution: body.videoResolution,
@@ -715,11 +735,98 @@ export async function POST(req: Request) {
       if (hasKieReferenceImage) {
         input.image_urls = [imageUrlRaw];
       }
+    } else if (rawModel === "bytedance/seedance-1.5-pro") {
+      if (useSeedanceProOmniRefs || useCompactSeedancePreviewRefs || klingElementsForJob.length > 0) {
+        return NextResponse.json(
+          {
+            error:
+              "Seedance 1.5 Pro supports up to two reference images via `imageUrl` and `endImageUrl` only.",
+          },
+          { status: 400 },
+        );
+      }
+
+      if (hasKieEndImage && !hasKieReferenceImage) {
+        return NextResponse.json(
+          { error: "Provide `imageUrl` (start frame) when using `endImageUrl` on Seedance 1.5 Pro." },
+          { status: 400 },
+        );
+      }
+
+      const durationRaw = Number(body.duration ?? 8);
+      const kieDuration: "4" | "8" | "12" =
+        durationRaw === 4 || durationRaw === 8 || durationRaw === 12
+          ? (String(durationRaw) as "4" | "8" | "12")
+          : durationRaw <= 6
+            ? "4"
+            : durationRaw <= 10
+              ? "8"
+              : "12";
+
+      const normalizedSeedancePrompt = normalizeSeedanceGeneratePrompt(prompt);
+      if (!normalizedSeedancePrompt) {
+        return NextResponse.json({ error: "Missing `prompt`." }, { status: 400 });
+      }
+
+      const seedancePromptForApi =
+        normalizedSeedancePrompt.length > SEEDANCE_15_PRO_PROMPT_MAX_CHARS
+          ? normalizedSeedancePrompt.slice(0, SEEDANCE_15_PRO_PROMPT_MAX_CHARS).trim()
+          : normalizedSeedancePrompt;
+
+      const seedanceResolutionTier: "480p" | "720p" | "1080p" =
+        body.videoResolution === "480p" || body.videoResolution === "720p" || body.videoResolution === "1080p"
+          ? body.videoResolution
+          : "720p";
+
+      const kieInput: Record<string, unknown> = {
+        prompt: seedancePromptForApi,
+        aspect_ratio: mapAspectRatioForKieSeedance15(body.aspectRatio),
+        resolution: seedanceResolutionTier,
+        duration: kieDuration,
+        generate_audio: body.sound !== false,
+      };
+
+      try {
+        const input_urls: string[] = [];
+        if (hasKieReferenceImage) {
+          input_urls.push(await mirrorImageUrlForPiapiSeedance(imageUrlRaw, user.id));
+        }
+        if (hasKieEndImage) {
+          if (input_urls.length >= 2) {
+            return NextResponse.json(
+              { error: "Seedance 1.5 Pro accepts at most two reference images." },
+              { status: 400 },
+            );
+          }
+          input_urls.push(await mirrorImageUrlForPiapiSeedance(endImageUrlRaw, user.id));
+        }
+        if (input_urls.length) kieInput.input_urls = input_urls;
+      } catch (mirrorErr) {
+        logGenerationFailure("kling/generate/mirror-seedance-15", mirrorErr, {
+          model,
+        });
+        return NextResponse.json(
+          {
+            error:
+              mirrorErr instanceof Error
+                ? mirrorErr.message
+                : "Could not prepare reference media for the video provider.",
+          },
+          { status: 502 },
+        );
+      }
+
+      const taskId = await kieMarketCreateTask({ model: rawModel, input: kieInput }, personalKey);
+      return NextResponse.json({
+        taskId,
+        provider: "kie-market",
+        model,
+      });
     } else if (rawModel.startsWith("bytedance/seedance")) {
       if (rawModel !== "bytedance/seedance-2" && rawModel !== "bytedance/seedance-2-fast") {
         return NextResponse.json(
           {
-            error: `Unsupported Seedance model: ${rawModel}. Use bytedance/seedance-2 or bytedance/seedance-2-fast.`,
+            error: `Unsupported Seedance model: ${rawModel}. Use bytedance/seedance-1.5-pro, bytedance/seedance-2, or bytedance/seedance-2-fast.`,
           },
           { status: 400 },
         );

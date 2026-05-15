@@ -252,6 +252,7 @@ const VIDEO_MODELS: { value: string; label: string }[] = [
   { value: "kling-2.6/video", label: "Kling 2.6" },
   { value: "openai/sora-2", label: "Sora 2" },
   { value: "openai/sora-2-pro", label: "Sora 2 Pro" },
+  { value: "bytedance/seedance-1.5-pro", label: "Seedance 1.5 Pro" },
   { value: "bytedance/seedance-2", label: "Seedance 2.0" },
   { value: "bytedance/seedance-2-fast", label: "Seedance 2.0 Fast" },
   { value: "veo3_lite", label: "Veo 3.1 Lite" },
@@ -260,6 +261,7 @@ const VIDEO_MODELS: { value: string; label: string }[] = [
 ];
 const VIDEO_CHAIN_SEEDANCE_MODELS: { value: string; label: string }[] = [
   { value: "bytedance/seedance-2-fast", label: "Seedance 2.0 Fast" },
+  { value: "bytedance/seedance-1.5-pro", label: "Seedance 1.5 Pro" },
   { value: "bytedance/seedance-2", label: "Seedance 2.0" },
 ];
 

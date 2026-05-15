@@ -36,6 +36,12 @@ export const SEEDANCE_PREVIEW_PROMPT_MAX_CHARS = 1800;
 export const SEEDANCE_PRO_PROMPT_MAX_CHARS = 20000;
 
 /**
+ * Seedance 1.5 Pro `input.prompt` max length.
+ * @see https://docs.kie.ai/market/bytedance/seedance-1-5-pro
+ */
+export const SEEDANCE_15_PRO_PROMPT_MAX_CHARS = 2500;
+
+/**
  * Exponential backoff with jitter. PiAPI 502/503 storms last 1–4s; the previous flat
  * 350ms × n window often expired before recovery, surfacing the failure to the user.
  * @param attempt zero-based attempt index that just failed

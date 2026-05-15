@@ -388,6 +388,7 @@ export function StudioGenerationsHistory({
       "kling-2.6/video",
       "kling-3.0/video",
       "openai/sora-2-pro",
+      "bytedance/seedance-1.5-pro",
       "bytedance/seedance-2",
       "bytedance/seedance-2-fast",
     ]);

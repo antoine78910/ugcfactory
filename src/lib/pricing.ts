@@ -1102,27 +1102,41 @@ export const SEEDANCE_2_FAST_PROVIDER_USD_PER_SECOND = {
   "1080p": 0.4,
 } as const;
 
+/** KIE Seedance 1.5 Pro — between Fast and Seedance 2 standard tiers. */
+export const SEEDANCE_15_PRO_PROVIDER_USD_PER_SECOND = {
+  "480p": 0.09,
+  "720p": 0.18,
+  "1080p": 0.45,
+} as const;
+
 export type SeedanceBillingResolution = keyof typeof SEEDANCE_2_PROVIDER_USD_PER_SECOND;
 
-export function seedanceVariantFromMarketModelId(modelId: string): "seedance-2" | "seedance-2-fast" {
-  return modelId.includes("seedance-2-fast") ? "seedance-2-fast" : "seedance-2";
+export type SeedanceBillingVariant = "seedance-1-5-pro" | "seedance-2" | "seedance-2-fast";
+
+export function seedanceVariantFromMarketModelId(modelId: string): SeedanceBillingVariant {
+  const id = normalizeLegacySeedanceMarketModelId(modelId);
+  if (id === "bytedance/seedance-1.5-pro") return "seedance-1-5-pro";
+  if (id.includes("seedance-2-fast")) return "seedance-2-fast";
+  return "seedance-2";
 }
 
 export function seedanceCreditsPerSecond(opts: {
-  variant: "seedance-2" | "seedance-2-fast";
+  variant: SeedanceBillingVariant;
   resolution: SeedanceBillingResolution;
 }): number {
   const our =
-    opts.variant === "seedance-2"
-      ? SEEDANCE_2_PROVIDER_USD_PER_SECOND[opts.resolution]
-      : SEEDANCE_2_FAST_PROVIDER_USD_PER_SECOND[opts.resolution];
+    opts.variant === "seedance-1-5-pro"
+      ? SEEDANCE_15_PRO_PROVIDER_USD_PER_SECOND[opts.resolution]
+      : opts.variant === "seedance-2"
+        ? SEEDANCE_2_PROVIDER_USD_PER_SECOND[opts.resolution]
+        : SEEDANCE_2_FAST_PROVIDER_USD_PER_SECOND[opts.resolution];
   const retailPerSec = our * 2;
   return Math.max(1, Math.round(retailPerSec / VIDEO_DYNAMIC_CREDIT_USD));
 }
 
 export function calculateSeedanceVideoCredits(
   durationSec: number,
-  variant: "seedance-2" | "seedance-2-fast",
+  variant: SeedanceBillingVariant,
   resolution: SeedanceBillingResolution,
 ): number {
   const d = Math.max(0, Number(durationSec) || 0);
@@ -1181,6 +1195,7 @@ export function calculateVideoCreditsForModel(opts: VideoCreditOptions): number 
     case "kling-2.6/text-to-video":
       return calculateKling26VideoCredits(d, quality, audio);
 
+    case "bytedance/seedance-1.5-pro":
     case "bytedance/seedance-2-preview":
     case "bytedance/seedance-2-preview-vip":
     case "bytedance/seedance-2":

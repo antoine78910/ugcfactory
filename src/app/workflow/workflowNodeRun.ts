@@ -844,6 +844,8 @@ function workflowVideoDefaultDuration(modelId: string): number {
     case "openai/sora-2":
     case "openai/sora-2-pro":
       return 10;
+    case "bytedance/seedance-1.5-pro":
+      return 8;
     case "bytedance/seedance-2":
     case "bytedance/seedance-2-fast":
       return 10;
@@ -1230,6 +1232,7 @@ export type WorkflowRunVideoParams = {
 /** True when the picker accepts a discrete first-frame image (image-to-video / first+last). */
 export function workflowVideoModelHasStartFrame(modelId: string): boolean {
   const normalized = normalizeLegacySeedanceMarketModelId(modelId);
+  if (normalized === "bytedance/seedance-1.5-pro") return true;
   // Seedance 2 / Fast: we accept start/end frames as part of omni_reference media set.
   if (normalized === "bytedance/seedance-2" || normalized === "bytedance/seedance-2-fast") return true;
   if (modelId.startsWith("bytedance/seedance")) return false;
@@ -1239,6 +1242,7 @@ export function workflowVideoModelHasStartFrame(modelId: string): boolean {
 /** True when the picker accepts a discrete last-frame image. */
 export function workflowVideoModelHasEndFrame(modelId: string): boolean {
   const normalized = normalizeLegacySeedanceMarketModelId(modelId);
+  if (normalized === "bytedance/seedance-1.5-pro") return true;
   // Seedance 2 / Fast: end frame is allowed as part of omni_reference media set.
   if (normalized === "bytedance/seedance-2" || normalized === "bytedance/seedance-2-fast") return true;
   if (modelId === "kling-3.0/video") return true;
@@ -1258,6 +1262,8 @@ export function workflowVideoGeneratorAcceptsUpstreamVideo(rawModel: string): bo
 /** True when the picker accepts extra reference images (Kling 3.0 elements / Seedance refs). */
 export function workflowVideoModelHasReferences(modelId: string): boolean {
   if (modelId === "kling-3.0/video") return true;
+  const n = normalizeLegacySeedanceMarketModelId(modelId);
+  if (n === "bytedance/seedance-1.5-pro") return false;
   if (modelId.startsWith("bytedance/seedance")) return true;
   return false;
 }
@@ -1729,6 +1735,7 @@ async function runWorkflowVideoJobOnce(params: WorkflowRunVideoParams): Promise<
    * through `imageUrl` / `endImageUrl` so the route actually uses the dedicated first/last frame
    * fields. Otherwise we stay on omni references.
    */
+  const seedance15Kie = seedanceResolvedModel === "bytedance/seedance-1.5-pro";
   const seedanceKie =
     seedanceResolvedModel === "bytedance/seedance-2" ||
     seedanceResolvedModel === "bytedance/seedance-2-fast";
@@ -1765,7 +1772,8 @@ async function runWorkflowVideoJobOnce(params: WorkflowRunVideoParams): Promise<
     !startUrl &&
     seedanceMergedImageUrls.length === 0 &&
     seedanceResolvedModel !== "bytedance/seedance-2" &&
-    seedanceResolvedModel !== "bytedance/seedance-2-fast"
+    seedanceResolvedModel !== "bytedance/seedance-2-fast" &&
+    seedanceResolvedModel !== "bytedance/seedance-1.5-pro"
   ) {
     throw new Error("This model needs a reference image. Connect an image module or set a reference on the node.");
   }
@@ -1896,16 +1904,20 @@ async function runWorkflowVideoJobOnce(params: WorkflowRunVideoParams): Promise<
       accountPlan: params.planId,
       marketModel: marketModelForGenerate,
       prompt: promptForAttempt,
-      imageUrl: seedanceKie
-        ? seedanceUseFirstLastFrames
-          ? startUrl
-          : undefined
-        : startUrl ?? refUrls[0],
-      endImageUrl: seedanceKie
-        ? seedanceUseFirstLastFrames
-          ? endUrl
-          : undefined
-        : endUrl,
+      imageUrl: seedance15Kie
+        ? startUrl
+        : seedanceKie
+          ? seedanceUseFirstLastFrames
+            ? startUrl
+            : undefined
+          : startUrl ?? refUrls[0],
+      endImageUrl: seedance15Kie
+        ? endUrl
+        : seedanceKie
+          ? seedanceUseFirstLastFrames
+            ? endUrl
+            : undefined
+          : endUrl,
       seedancePreviewImageUrls: undefined,
       seedanceOmniMedia,
       klingElements,

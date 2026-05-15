@@ -106,7 +106,9 @@ import {
   studioVideoCreateAspectRatioOptions,
   studioVideoDurationRangeLabel,
   studioVideoDurationSecOptions,
+  studioVideoIsSeedance15ProPickerId,
   studioVideoIsSeedance2ProPickerId,
+  studioVideoIsSeedanceBillingPickerId,
   studioVideoIsSeedancePickerId,
   studioVideoShowsAspectRatioCreate,
   studioVideoSupportsMultiShot,
@@ -391,6 +393,7 @@ type VideoModelId =
   | "kling-2.6/video"
   | "openai/sora-2"
   | "openai/sora-2-pro"
+  | "bytedance/seedance-1.5-pro"
   | "bytedance/seedance-2"
   | "bytedance/seedance-2-fast"
   | "veo3_lite"
@@ -405,6 +408,7 @@ const MODEL_OPTIONS: { id: VideoModelId; label: string; family: VideoFamily }[] 
   { id: "kling-2.6/video", label: "Kling 2.6", family: "kie" },
   { id: "openai/sora-2", label: "Sora 2", family: "sora" },
   { id: "openai/sora-2-pro", label: "Sora 2 Pro", family: "sora" },
+  { id: "bytedance/seedance-1.5-pro", label: "Seedance 1.5 Pro", family: "kie" },
   { id: "bytedance/seedance-2", label: "Seedance 2.0", family: "kie" },
   { id: "bytedance/seedance-2-fast", label: "Seedance 2.0 Fast", family: "kie" },
   { id: "veo3_lite", label: "Veo 3.1 Lite", family: "veo" },
@@ -496,6 +500,16 @@ const VIDEO_MODEL_PICKER_ITEMS: StudioModelPickerItem[] = [
     durationRange: studioVideoDurationRangeLabel("openai/sora-2-pro"),
   },
   {
+    id: "bytedance/seedance-1.5-pro",
+    label: "Seedance 1.5 Pro",
+    subtitle: "Start/end frames · native audio",
+    icon: "seedance",
+    newBadge: true,
+    resolution: "480p / 720p / 1080p · 21:9–9:16",
+    durationRange: studioVideoDurationRangeLabel("bytedance/seedance-1.5-pro"),
+    searchText: "seedance 1.5 pro bytedance",
+  },
+  {
     id: "bytedance/seedance-2",
     label: "Seedance 2.0",
     subtitle: "Higher quality",
@@ -550,6 +564,7 @@ const VIDEO_MODEL_ACCESS_ORDER: VideoModelId[] = [
   "kling-2.5-turbo/video",
   "kling-2.6/video",
   "bytedance/seedance-2-fast",
+  "bytedance/seedance-1.5-pro",
   "bytedance/seedance-2",
   "kling-3.0/video",
   "veo3_lite",
@@ -1098,6 +1113,7 @@ export default function StudioVideoPanel({
         "kling-2.6/video",
         "kling-3.0/video",
         "openai/sora-2-pro",
+        "bytedance/seedance-1.5-pro",
         "bytedance/seedance-2",
         "bytedance/seedance-2-fast",
       ]);
@@ -1583,7 +1599,7 @@ export default function StudioVideoPanel({
   const billingDurationSec = klingCustomMulti ? klingMultiTotalSec : Number(duration);
 
   const seedanceVideoResolution = useMemo((): "480p" | "720p" | "1080p" | undefined => {
-    if (!studioVideoIsSeedance2ProPickerId(modelId)) return undefined;
+    if (!studioVideoIsSeedanceBillingPickerId(modelId)) return undefined;
     if (modelId === "bytedance/seedance-2-fast" && seedanceResolution === "1080p") return "720p";
     return seedanceResolution;
   }, [modelId, seedanceResolution]);
@@ -3870,7 +3886,7 @@ export default function StudioVideoPanel({
       klingShots: klingCustom ? klingShots.map((s) => ({ ...s })) : undefined,
       klingElementsPayload,
       historyAspect,
-      seedanceResolution: studioVideoIsSeedance2ProPickerId(modelId) ? seedanceResolution : undefined,
+      seedanceResolution: studioVideoIsSeedanceBillingPickerId(modelId) ? seedanceResolution : undefined,
     };
 
     // Track the DB-registered generation id so the catch block can decide whether
@@ -4019,6 +4035,7 @@ export default function StudioVideoPanel({
               : studioVideoIsSeedancePickerId(snap.modelId) &&
                   (Boolean(snap.startUrl) ||
                     studioVideoIsSeedance2ProPickerId(snap.modelId) ||
+                    studioVideoIsSeedance15ProPickerId(snap.modelId) ||
                     (Array.isArray(compactSnapRefs) && compactSnapRefs.length > 0) ||
                     (Array.isArray(omniSnap) && omniSnap.length > 0))
                 ? snap.aspect
@@ -4048,7 +4065,7 @@ export default function StudioVideoPanel({
         if (supportsKlingElementsOnApi && snap.klingElementsPayload?.length) {
           klingGenerateBody.klingElements = snap.klingElementsPayload;
         }
-        if (studioVideoIsSeedance2ProPickerId(snap.modelId)) {
+        if (studioVideoIsSeedanceBillingPickerId(snap.modelId)) {
           const r = snap.seedanceResolution ?? "720p";
           klingGenerateBody.videoResolution =
             snap.modelId === "bytedance/seedance-2-fast" && r === "1080p" ? "720p" : r;

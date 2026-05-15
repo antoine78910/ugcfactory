@@ -46,6 +46,7 @@ const VIDEO_MIN_RANK: Record<string, number> = {
   "kling-2.5-turbo/video": 1, // Starter+
   "kling-2.6/video": 1, // Starter+
   // Starter should not include Seedance 2; unlock on Growth+
+  "bytedance/seedance-1.5-pro": 2,
   "bytedance/seedance-2": 2,
   "bytedance/seedance-2-fast": 2,
   "kling-3.0/video": 2,
@@ -204,6 +205,7 @@ const STUDIO_VIDEO_LABELS: Record<string, string> = {
   "kling-2.6/video": "Kling 2.6",
   "openai/sora-2": "Sora 2",
   "openai/sora-2-pro": "Sora 2 Pro",
+  "bytedance/seedance-1.5-pro": "Seedance 1.5 Pro",
   "bytedance/seedance-2": "Seedance 2.0",
   "bytedance/seedance-2-fast": "Seedance 2.0 Fast",
   veo3_lite: "Veo 3.1 Lite",
@@ -224,6 +226,7 @@ export const STUDIO_VIDEO_IDS_ORDERED: readonly string[] = [
   "kling-2.5-turbo/video",
   "kling-2.6/video",
   "bytedance/seedance-2-fast",
+  "bytedance/seedance-1.5-pro",
   "bytedance/seedance-2",
   "kling-3.0/video",
   "veo3_lite",
@@ -375,6 +378,7 @@ export const SUBSCRIPTION_MODEL_MATRIX_ROWS: SubscriptionModelMatrixRow[] = [
   },
   { label: "Kling 2.5 Turbo", tiers: tierBools(VIDEO_MIN_RANK["kling-2.5-turbo/video"]) },
   { label: "Kling 2.6", tiers: tierBools(VIDEO_MIN_RANK["kling-2.6/video"]) },
+  { label: "Seedance 1.5 Pro", tiers: tierBools(VIDEO_MIN_RANK["bytedance/seedance-1.5-pro"]) },
   { label: "Seedance 2.0", tiers: tierBools(VIDEO_MIN_RANK["bytedance/seedance-2"]) },
   { label: "Seedance 2.0 Fast", tiers: tierBools(VIDEO_MIN_RANK["bytedance/seedance-2-fast"]) },
   {
