@@ -2,9 +2,10 @@
 
 import { useCallback, useEffect, useState } from "react";
 import Link from "next/link";
-import { LayoutDashboard, Loader2, Plus, Settings2, Trash2 } from "lucide-react";
+import { Loader2, MoreHorizontal, Plus, Settings2, Trash2 } from "lucide-react";
 
 import { BrandProjectDashboard, type BrandProjectRow } from "@/app/projects-onboarding/_components/BrandProjectDashboard";
+import { CompetitorAngleMixView } from "@/app/projects-onboarding/_components/CompetitorAngleMixView";
 import { Button } from "@/components/ui/button";
 import {
   Card,
@@ -19,7 +20,7 @@ import { cn } from "@/lib/utils";
 import type { BrandMarketingAngle } from "@/lib/onboardingBrandClaude";
 import { toast } from "sonner";
 
-type Tab = "dashboard" | "settings";
+type Tab = "dashboard" | "angles" | "competitors" | "ads" | "settings";
 
 function newAngle(): BrandMarketingAngle {
   const id =
@@ -29,10 +30,24 @@ function newAngle(): BrandMarketingAngle {
   return { id, label: "", rationale: "" };
 }
 
+function siteHostname(url: string): string {
+  try {
+    return new URL(url.startsWith("http") ? url : `https://${url}`).hostname.replace(/^www\./, "");
+  } catch {
+    return url.replace(/^https?:\/\//, "").split("/")[0] ?? url;
+  }
+}
+
+function brandInitial(title: string, siteName: string | null): string {
+  const s = (siteName?.trim() || title.trim() || "B")[0];
+  return (s ?? "B").toUpperCase();
+}
+
 export default function BrandProjectEditClient({ projectId }: { projectId: string }) {
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [tab, setTab] = useState<Tab>("dashboard");
+  const [competitorMix, setCompetitorMix] = useState<{ index: number; name: string } | null>(null);
   const [row, setRow] = useState<BrandProjectRow | null>(null);
   const [title, setTitle] = useState("");
   const [angles, setAngles] = useState<BrandMarketingAngle[]>([]);
@@ -127,53 +142,179 @@ export default function BrandProjectEditClient({ projectId }: { projectId: strin
 
   if (loading || !row) {
     return (
-      <div className="flex min-h-[50vh] items-center justify-center bg-[#050507] text-white/60">
+      <div className="flex min-h-[100dvh] items-center justify-center bg-[#0a0a0b] text-white/60">
         <Loader2 className="size-8 animate-spin" />
       </div>
     );
   }
 
-  const tabs: { id: Tab; label: string; icon: React.ReactElement }[] = [
-    { id: "dashboard", label: "Dashboard", icon: <LayoutDashboard className="size-3.5" /> },
-    { id: "settings", label: "Settings", icon: <Settings2 className="size-3.5" /> },
+  const navTabs: { id: Tab; label: string }[] = [
+    { id: "dashboard", label: "Dashboard" },
+    { id: "angles", label: "Winning angles" },
+    { id: "competitors", label: "Competitors" },
+    { id: "ads", label: "Ad samples" },
+    { id: "settings", label: "Settings" },
   ];
 
+  const displayName = row.site_name?.trim() || row.title;
+  const domain = siteHostname(row.site_url);
+
   return (
-    <div className="min-h-[100dvh] bg-[#050507] px-4 py-8 text-white sm:px-6">
-      <div className="mx-auto max-w-6xl space-y-6">
-        <div className="flex flex-wrap items-center justify-between gap-3">
-          <div>
-            <Link href="/projects-onboarding/projects" className="text-sm text-violet-300 hover:underline">
-              ← My projects
+    <div className="min-h-[100dvh] bg-[#0a0a0b] text-white antialiased">
+      <header className="sticky top-0 z-20 border-b border-white/[0.08] bg-[#0a0a0b]/92 backdrop-blur-md">
+        <div className="mx-auto flex max-w-7xl flex-wrap items-center justify-between gap-4 px-4 py-4 sm:px-6">
+          <div className="flex min-w-0 items-center gap-3">
+            <Link
+              href="/projects-onboarding/projects"
+              className="mr-1 hidden text-xs text-white/40 hover:text-white/70 sm:inline"
+            >
+              ← Projects
             </Link>
-            <h1 className="mt-2 text-2xl font-semibold tracking-tight">{row.title}</h1>
-            <p className="mt-1 text-sm text-white/50">{row.site_url}</p>
+            <span className="flex size-10 shrink-0 items-center justify-center rounded-lg border border-white/10 bg-black text-base font-bold text-white">
+              {brandInitial(row.title, row.site_name)}
+            </span>
+            <div className="min-w-0">
+              <h1 className="truncate text-base font-semibold text-white sm:text-lg">{displayName}</h1>
+              <p className="truncate text-xs text-white/40">{domain}</p>
+            </div>
           </div>
-          <div className="flex rounded-xl border border-white/10 bg-white/[0.03] p-1">
-            {tabs.map((t) => (
-              <button
-                key={t.id}
-                type="button"
-                onClick={() => setTab(t.id)}
-                className={cn(
-                  "inline-flex items-center gap-2 rounded-lg px-3 py-2 text-sm font-medium transition",
-                  tab === t.id ? "bg-violet-500/20 text-violet-100" : "text-white/50 hover:text-white",
-                )}
-              >
-                {t.icon}
-                {t.label}
-              </button>
-            ))}
-          </div>
+          <button
+            type="button"
+            className="rounded-lg p-2 text-white/40 transition hover:bg-white/[0.06] hover:text-white/70"
+            aria-label="More options"
+          >
+            <MoreHorizontal className="size-5" />
+          </button>
         </div>
 
-        {tab === "dashboard" ? (
-          <BrandProjectDashboard project={row} onProjectUpdated={() => void load()} />
+        <nav className="mx-auto flex max-w-7xl gap-1 overflow-x-auto px-4 sm:px-6">
+          {navTabs.map((t) => (
+            <button
+              key={t.id}
+              type="button"
+              onClick={() => {
+                setCompetitorMix(null);
+                setTab(t.id);
+              }}
+              className={cn(
+                "relative shrink-0 px-3 pb-3 pt-1 text-sm font-medium transition",
+                tab === t.id ? "text-white" : "text-white/45 hover:text-white/75",
+              )}
+            >
+              {t.label}
+              {tab === t.id ? (
+                <span className="absolute inset-x-1 bottom-0 h-0.5 rounded-full bg-white" />
+              ) : null}
+            </button>
+          ))}
+        </nav>
+      </header>
+
+      <main className="mx-auto max-w-7xl px-4 py-6 sm:px-6 sm:py-8">
+        {competitorMix ? (
+          <CompetitorAngleMixView
+            projectId={projectId}
+            competitorIndex={competitorMix.index}
+            competitorName={competitorMix.name}
+            onBack={() => setCompetitorMix(null)}
+          />
+        ) : tab === "dashboard" ? (
+          <BrandProjectDashboard
+            project={row}
+            onProjectUpdated={() => void load()}
+            onCompetitorClick={(index, name) => setCompetitorMix({ index, name })}
+          />
+        ) : tab === "angles" ? (
+          <div className="overflow-hidden rounded-2xl border border-white/[0.08] bg-[#121212] p-6">
+            <h2 className="text-lg font-semibold text-white">Winning angles</h2>
+            <p className="mt-1 text-sm text-white/45">
+              Angles from your site analysis. Edit labels and rationale in Settings.
+            </p>
+            <ul className="mt-6 space-y-3">
+              {(row.marketing_angles ?? []).length === 0 ? (
+                <li className="text-sm text-white/45">No angles yet.</li>
+              ) : (
+                row.marketing_angles.map((a) => (
+                  <li
+                    key={a.id}
+                    className="rounded-xl border border-white/[0.08] bg-black/25 px-4 py-3"
+                  >
+                    <p className="font-medium text-white">{a.label}</p>
+                    {a.rationale ? (
+                      <p className="mt-1 text-sm leading-relaxed text-white/55">{a.rationale}</p>
+                    ) : null}
+                  </li>
+                ))
+              )}
+            </ul>
+            <Button
+              type="button"
+              variant="secondary"
+              className="mt-6 border-white/15 bg-white/10 text-white hover:bg-white/15"
+              onClick={() => setTab("settings")}
+            >
+              Edit in Settings
+            </Button>
+          </div>
+        ) : tab === "competitors" ? (
+          <div className="overflow-hidden rounded-2xl border border-white/[0.08] bg-[#121212] p-6">
+            <h2 className="text-lg font-semibold text-white">Competitors</h2>
+            <p className="mt-1 text-sm text-white/45">
+              Tracked brands from onboarding. Refresh ads from the Dashboard sidebar.
+            </p>
+            <ul className="mt-6 space-y-3">
+              {(row.competitors ?? []).length === 0 ? (
+                <li className="text-sm text-white/45">No competitors stored.</li>
+              ) : (
+                (row.competitors as unknown[]).map((c, i) => {
+                  const o = c && typeof c === "object" ? (c as Record<string, unknown>) : {};
+                  const name = typeof o.input_name === "string" ? o.input_name : `Competitor ${i + 1}`;
+                  const ads = Array.isArray(o.trendtrack_ads) ? o.trendtrack_ads.length : 0;
+                  return (
+                    <li key={`${name}-${i}`}>
+                      <button
+                        type="button"
+                        onClick={() => setCompetitorMix({ index: i, name })}
+                        className="flex w-full items-center gap-3 rounded-xl border border-white/[0.08] bg-black/25 px-4 py-3 text-left transition hover:border-white/15 hover:bg-black/35"
+                      >
+                        <span className="flex size-9 items-center justify-center rounded-lg border border-white/10 bg-white/[0.06] text-sm font-bold">
+                          {(name[0] ?? "?").toUpperCase()}
+                        </span>
+                        <div>
+                          <p className="font-medium text-white">{name}</p>
+                          <p className="text-xs text-white/40">
+                            {ads} ad{ads !== 1 ? "s" : ""} collected
+                            {typeof o.input_domain === "string" ? ` · ${o.input_domain}` : ""}
+                          </p>
+                          <p className="mt-1 text-[10px] font-medium text-violet-300/80">
+                            View market angle mix →
+                          </p>
+                        </div>
+                      </button>
+                    </li>
+                  );
+                })
+              )}
+            </ul>
+            <Button
+              type="button"
+              variant="secondary"
+              className="mt-6 border-white/15 bg-white/10 text-white hover:bg-white/15"
+              onClick={() => setTab("settings")}
+            >
+              Manage in Settings
+            </Button>
+          </div>
+        ) : tab === "ads" ? (
+          <BrandProjectDashboard project={row} onProjectUpdated={() => void load()} focus="ads" />
         ) : (
           <div className="mx-auto max-w-3xl space-y-6">
-            <Card className="border-white/10 bg-white/[0.03] shadow-none">
+            <Card className="border-white/10 bg-[#121212] shadow-none">
               <CardHeader>
-                <CardTitle>Project settings</CardTitle>
+                <CardTitle className="flex items-center gap-2">
+                  <Settings2 className="size-4 text-white/50" />
+                  Project settings
+                </CardTitle>
                 <CardDescription className="text-white/55">Title, angles, and competitor list.</CardDescription>
               </CardHeader>
               <CardContent className="space-y-4">
@@ -197,13 +338,13 @@ export default function BrandProjectEditClient({ projectId }: { projectId: strin
               </CardContent>
             </Card>
 
-            <Card className="border-white/10 bg-white/[0.03] shadow-none">
+            <Card className="border-white/10 bg-[#121212] shadow-none">
               <CardHeader>
                 <CardTitle>Marketing angles</CardTitle>
               </CardHeader>
               <CardContent className="space-y-3">
                 {angles.map((a, idx) => (
-                  <div key={a.id} className="rounded-lg border border-white/10 bg-black/25 p-3 space-y-2">
+                  <div key={a.id} className="space-y-2 rounded-lg border border-white/10 bg-black/25 p-3">
                     <div className="flex items-start justify-between gap-2">
                       <div className="grid flex-1 gap-2 sm:grid-cols-2">
                         <div>
@@ -254,7 +395,7 @@ export default function BrandProjectEditClient({ projectId }: { projectId: strin
               </CardContent>
             </Card>
 
-            <Card className="border-white/10 bg-white/[0.03] shadow-none">
+            <Card className="border-white/10 bg-[#121212] shadow-none">
               <CardHeader>
                 <CardTitle>Competitors</CardTitle>
                 <CardDescription className="text-white/55">
@@ -310,7 +451,7 @@ export default function BrandProjectEditClient({ projectId }: { projectId: strin
             </Card>
           </div>
         )}
-      </div>
+      </main>
     </div>
   );
 }

@@ -6,7 +6,9 @@ export type ClaudeModel =
   | "claude-sonnet-4-5-20250929"
   | "claude-sonnet-4-6"
   /** Claude Opus 4.7 (frontier). */
-  | "claude-opus-4-7";
+  | "claude-opus-4-7"
+  /** Low-cost batch classification. */
+  | "claude-haiku-4-5-20251001";
 
 const DEFAULT_MODEL: ClaudeModel = "claude-sonnet-4-5-20250929";
 
