@@ -23,9 +23,11 @@ export type RecreateResultsPanelProps = {
   globalUploadBusy: boolean;
   scriptDraft: string;
   scriptApproved: boolean;
+  imageModelChoice: string;
   sceneModelChoice: Record<string, string>;
   scenePromptOverrides: Record<string, string>;
   logs: LogEntry[];
+  onImageModelChange: (modelId: string) => void;
   pickValidStudioModelId: (raw: string | undefined) => string;
   formatSeconds: (value: number) => string;
   onScriptDraftChange: (value: string) => void;
@@ -39,6 +41,7 @@ export type RecreateResultsPanelProps = {
   onUploadFrameProduct: (sceneId: string, role: "start" | "end", file: File) => void;
   onApplyDefaultProductToAllFrames: () => void;
   onGenerateKeyframe: (sceneId: string, role: "start" | "end", force: boolean) => void;
+  onGenerateScene: (sceneId: string, force: boolean) => void;
   onGenerateAllKeyframes: () => void;
   onCopyText: (label: string, text: string) => void;
   onDownloadBriefPack: () => void;
@@ -57,11 +60,13 @@ export function RecreateResultsPanel(props: RecreateResultsPanelProps) {
         globalUploadBusy={props.globalUploadBusy}
         scriptDraft={props.scriptDraft}
         scriptApproved={props.scriptApproved}
+        imageModelChoice={props.imageModelChoice}
         sceneModelChoice={props.sceneModelChoice}
         scenePromptOverrides={props.scenePromptOverrides}
         logs={props.logs}
         pickValidStudioModelId={props.pickValidStudioModelId}
         formatSeconds={props.formatSeconds}
+        onImageModelChange={props.onImageModelChange}
         onScriptDraftChange={props.onScriptDraftChange}
         onScriptApprove={props.onScriptApprove}
         onSceneModelChange={props.onSceneModelChange}
@@ -70,6 +75,7 @@ export function RecreateResultsPanel(props: RecreateResultsPanelProps) {
         onUploadFrameProduct={props.onUploadFrameProduct}
         onApplyDefaultProductToAllFrames={props.onApplyDefaultProductToAllFrames}
         onGenerateKeyframe={props.onGenerateKeyframe}
+        onGenerateScene={props.onGenerateScene}
         onGenerateAllKeyframes={props.onGenerateAllKeyframes}
         onCopyText={props.onCopyText}
         onDownloadBriefPack={props.onDownloadBriefPack}

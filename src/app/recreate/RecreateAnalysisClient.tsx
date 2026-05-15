@@ -20,6 +20,7 @@ import {
 import { RecreateResultsPanel } from "./RecreateResultsPanel";
 import { RECREATE_SCENE_THRESHOLD } from "@/lib/recreateSceneDetection";
 import { STUDIO_VIDEO_PICKER_IDS } from "@/lib/studioVideoModelCapabilities";
+import { pickValidRecreateImageModelId } from "./recreateModelPickers";
 import { assertStudioVideoUpload, STUDIO_VIDEO_FILE_ACCEPT } from "@/lib/studioUploadValidation";
 import { uploadFileToCdn } from "@/lib/uploadBlobUrlToCdn";
 import { toast } from "sonner";
@@ -108,6 +109,7 @@ export function RecreateAnalysisClient() {
   const [result, setResult] = useState<RecreateAnalyzeResponse | null>(null);
   const [scriptDraft, setScriptDraft] = useState("");
   const [scriptApproved, setScriptApproved] = useState(false);
+  const [imageModelChoice, setImageModelChoice] = useState("gpt_image_2");
   const [sceneModelChoice, setSceneModelChoice] = useState<Record<string, string>>({});
   const [scenePromptOverrides, setScenePromptOverrides] = useState<Record<string, string>>({});
   const [productFile, setProductFile] = useState<File | null>(null);
@@ -193,6 +195,7 @@ export function RecreateAnalysisClient() {
         client_state_json?: {
           scriptDraft?: string;
           scriptApproved?: boolean;
+          imageModelChoice?: string;
           sceneModelChoice?: Record<string, string>;
           scenePromptOverrides?: Record<string, string>;
         };
@@ -213,6 +216,9 @@ export function RecreateAnalysisClient() {
       const cs = row.client_state_json ?? {};
       if (typeof cs.scriptDraft === "string") setScriptDraft(cs.scriptDraft);
       if (typeof cs.scriptApproved === "boolean") setScriptApproved(cs.scriptApproved);
+      if (typeof cs.imageModelChoice === "string") {
+        setImageModelChoice(pickValidRecreateImageModelId(cs.imageModelChoice));
+      }
       if (cs.sceneModelChoice && typeof cs.sceneModelChoice === "object") {
         setSceneModelChoice(cs.sceneModelChoice as Record<string, string>);
       }
@@ -258,6 +264,7 @@ export function RecreateAnalysisClient() {
           clientState: {
             scriptDraft,
             scriptApproved,
+            imageModelChoice,
             sceneModelChoice,
             scenePromptOverrides,
           },
@@ -265,7 +272,7 @@ export function RecreateAnalysisClient() {
       }).catch(() => {});
     }, 1000);
     return () => window.clearTimeout(tid);
-  }, [projectId, result, scriptApproved, scriptDraft, sceneModelChoice, scenePromptOverrides]);
+  }, [projectId, result, scriptApproved, scriptDraft, imageModelChoice, sceneModelChoice, scenePromptOverrides]);
 
   const fileMeta = useMemo(() => {
     if (!file) return null;
@@ -565,7 +572,12 @@ export function RecreateAnalysisClient() {
         const res = await fetch(`/api/recreate/projects/${encodeURIComponent(projectId)}/keyframes/single`, {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ sceneId, role, force: force === true }),
+          body: JSON.stringify({
+          sceneId,
+          role,
+          force: force === true,
+          imageModel: pickValidRecreateImageModelId(imageModelChoice),
+        }),
         });
         const json = (await res.json()) as {
           error?: string;
@@ -583,7 +595,15 @@ export function RecreateAnalysisClient() {
         setKeyframeRunning(null);
       }
     },
-    [projectId],
+    [imageModelChoice, projectId],
+  );
+
+  const runGenerateScene = useCallback(
+    async (sceneId: string, force: boolean) => {
+      await runSingleKeyframe(sceneId, "start", force);
+      await runSingleKeyframe(sceneId, "end", force);
+    },
+    [runSingleKeyframe],
   );
 
   const runAllKeyframes = useCallback(async () => {
@@ -597,23 +617,80 @@ export function RecreateAnalysisClient() {
   }, [projectId, result, runSingleKeyframe]);
 
   return (
-    <div className="min-h-screen bg-[#09090b] px-4 py-8 text-white sm:px-6">
-      <div className="mx-auto flex max-w-7xl flex-col gap-6">
-        <div className="space-y-2">
+    <div
+      className={
+        result
+          ? "flex h-dvh flex-col overflow-hidden bg-[#09090b] text-white"
+          : "min-h-screen bg-[#09090b] px-4 py-8 text-white sm:px-6"
+      }
+    >
+      <div
+        className={
+          result ? "flex min-h-0 flex-1 flex-col" : "mx-auto flex w-full max-w-7xl flex-col gap-6"
+        }
+      >
+        <div
+          className={
+            result
+              ? "flex shrink-0 flex-wrap items-center gap-2 border-b border-white/10 px-4 py-2"
+              : "space-y-2"
+          }
+        >
           <div className="inline-flex items-center gap-2 rounded-full border border-white/10 bg-white/5 px-3 py-1 text-xs uppercase tracking-[0.18em] text-white/60">
             <Video className="size-3.5" />
-            Recreate Analysis
+            Recreate
           </div>
-          <h1 className="text-3xl font-semibold tracking-tight">Analyze a video scene by scene</h1>
-          <p className="max-w-3xl text-sm text-white/65">
-            Upload a local ad video, detect cuts with ffmpeg first, then analyze the start and end screenshot of each
-            scene with <span className="font-medium text-white">Claude</span>. You get rich production cues (UGC vs
-            claymation vs Pixar-like CGI), background and on-screen talent notes, recommended Studio video models per
-            scene, a draft script, marketing angles, and exportable briefs for each scene clip plus final assembly notes.
-          </p>
+          {!result ? (
+            <>
+              <h1 className="text-3xl font-semibold tracking-tight">Analyze a video scene by scene</h1>
+              <p className="max-w-3xl text-sm text-white/65">
+                Upload a local ad video, detect cuts, then swap your product into each scene before regenerating with
+                your chosen image and video models.
+              </p>
+            </>
+          ) : (
+            <div className="ml-auto flex flex-wrap items-center gap-2">
+              <input
+                ref={videoInputRef}
+                type="file"
+                accept={STUDIO_VIDEO_FILE_ACCEPT}
+                className="sr-only"
+                disabled={running}
+                onChange={(event) => setFile(event.target.files?.[0] ?? null)}
+              />
+              <Button
+                type="button"
+                size="sm"
+                variant="secondary"
+                disabled={running}
+                onClick={() => videoInputRef.current?.click()}
+                className="h-8 border-white/15 bg-white/10 text-xs text-white"
+              >
+                <Upload className="mr-1.5 size-3.5" />
+                New video
+              </Button>
+              <Button
+                type="button"
+                size="sm"
+                disabled={!file || running}
+                onClick={() => void handleAnalyze()}
+                className="h-8 bg-violet-400 text-xs text-black hover:bg-violet-300"
+              >
+                {running ? <Loader2 className="mr-1.5 size-3.5 animate-spin" /> : null}
+                Re-analyze
+              </Button>
+            </div>
+          )}
         </div>
 
-        <div className="grid gap-6 xl:grid-cols-[380px_minmax(0,1fr)]">
+        <div
+          className={
+            result
+              ? "flex min-h-0 flex-1 flex-col px-3 pb-3"
+              : "grid gap-6 xl:grid-cols-[380px_minmax(0,1fr)]"
+          }
+        >
+          {!result ? (
           <div className="space-y-6">
             <Card className="border-emerald-400/20 bg-emerald-500/[0.06] text-white shadow-none">
               <CardHeader>
@@ -752,8 +829,9 @@ export function RecreateAnalysisClient() {
               </CardContent>
             </Card>
           </div>
+          ) : null}
 
-          <div className="space-y-6">
+          <div className={result ? "flex min-h-0 flex-1 flex-col" : "space-y-6"}>
           <RecreateResultsPanel
             result={result}
             projectId={projectId}
@@ -764,11 +842,13 @@ export function RecreateAnalysisClient() {
             globalUploadBusy={globalUploadBusy}
             scriptDraft={scriptDraft}
             scriptApproved={scriptApproved}
+            imageModelChoice={imageModelChoice}
             sceneModelChoice={sceneModelChoice}
             scenePromptOverrides={scenePromptOverrides}
             logs={logs}
             pickValidStudioModelId={pickValidStudioModelId}
             formatSeconds={formatSeconds}
+            onImageModelChange={setImageModelChoice}
             onScriptDraftChange={(value) => {
               setScriptDraft(value);
               setScriptApproved(false);
@@ -787,6 +867,7 @@ export function RecreateAnalysisClient() {
             onUploadFrameProduct={(sceneId, role, file) => void uploadFrameProduct(sceneId, role, file)}
             onApplyDefaultProductToAllFrames={() => void applyDefaultProductToAllFrames()}
             onGenerateKeyframe={(sceneId, role, force) => void runSingleKeyframe(sceneId, role, force)}
+            onGenerateScene={(sceneId, force) => void runGenerateScene(sceneId, force)}
             onGenerateAllKeyframes={() => void runAllKeyframes()}
             onCopyText={(label, text) => void copyText(label, text)}
             onDownloadBriefPack={() => downloadBriefPack()}

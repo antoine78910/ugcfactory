@@ -5,6 +5,10 @@ import { NextResponse } from "next/server";
 import { getEnv } from "@/lib/env";
 import { createStudioKieImageTasks } from "@/lib/studioKieImageTask";
 import { pollKieMarketImageTaskForUrls } from "@/lib/recreateKieImagePoll";
+import {
+  isStudioImageKiePickerModelId,
+  resolveStudioImageModelForReferences,
+} from "@/lib/studioImageModels";
 import type { RecreateAnalyzeResponse, RecreateScene } from "@/lib/recreateAnalysis";
 import {
   buildRecreateKeyframeGeneration,
@@ -18,6 +22,7 @@ type Body = {
   sceneId?: unknown;
   role?: unknown;
   force?: unknown;
+  imageModel?: unknown;
 };
 
 function collectRefUrls(urls: Array<string | null | undefined>, max: number): string[] {
@@ -61,6 +66,9 @@ export async function POST(
   const sceneId = typeof body.sceneId === "string" ? body.sceneId.trim() : "";
   const role = body.role === "end" ? "end" : "start";
   const force = body.force === true;
+  const imageModelRaw = typeof body.imageModel === "string" ? body.imageModel.trim() : "gpt_image_2";
+  const imagePickerId = isStudioImageKiePickerModelId(imageModelRaw) ? imageModelRaw : "gpt_image_2";
+  const resolvedImageModel = resolveStudioImageModelForReferences(imagePickerId, true);
 
   if (!sceneId) return NextResponse.json({ error: "Missing sceneId." }, { status: 400 });
 
@@ -133,7 +141,7 @@ export async function POST(
   try {
     const created = await createStudioKieImageTasks({
       prompt,
-      model: "gpt_image_2_image_to_image",
+      model: resolvedImageModel,
       imageUrls: safeImageUrls,
       aspectRatio: "auto",
     });

@@ -38,6 +38,7 @@ export type RecreateSceneKeyframes = {
 export type RecreateProjectClientState = {
   scriptDraft?: string;
   scriptApproved?: boolean;
+  imageModelChoice?: string;
   sceneModelChoice?: Record<string, string>;
   scenePromptOverrides?: Record<string, string>;
 };
