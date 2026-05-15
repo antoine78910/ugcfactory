@@ -116,7 +116,10 @@ function subtitleLine(hit: TTLookupResult): string {
   const parts: string[] = [];
   if (hit.domain?.trim()) parts.push(hit.domain.trim().toLowerCase());
   if (typeof hit.activeAds === "number" && hit.activeAds > 0) {
-    parts.push(`${hit.activeAds.toLocaleString("en-US")} active ads`);
+    parts.push(`${hit.activeAds.toLocaleString("en-US")} live ads`);
+  }
+  if (typeof hit.totalAds === "number" && hit.totalAds > 0) {
+    parts.push(`${hit.totalAds.toLocaleString("en-US")} total ads`);
   }
   const reachLabel =
     typeof hit.reach30d === "number" && hit.reach30d > 0 ? formatReach30d(hit.reach30d) : "";
@@ -174,9 +177,17 @@ export function CompetitorsPanel({
   const [saving, setSaving] = useState(false);
   const [searchedOnce, setSearchedOnce] = useState(false);
 
+  const [similarSuggestions, setSimilarSuggestions] = useState<TTLookupResult[]>([]);
+  const [similarLoading, setSimilarLoading] = useState(false);
+  const [similarError, setSimilarError] = useState<string | null>(null);
+  const [similarEmptyMessage, setSimilarEmptyMessage] = useState<string | null>(null);
+
   const lookupAbortRef = useRef<AbortController | null>(null);
+  const similarAbortRef = useRef<AbortController | null>(null);
 
   const selectedLookupId = selectedLookup?.id ?? null;
+
+  const primaryBrand = trackers[0] ?? null;
 
   const maxedOut = useMemo(() => {
     if (!selectedLookup) return saved.length >= maxSaved;
@@ -204,6 +215,87 @@ export function CompetitorsPanel({
       cancelled = true;
     };
   }, [refreshSaved]);
+
+  const primaryId = primaryBrand?.id ?? "";
+  const primaryName = primaryBrand?.name ?? "";
+  const primaryDomain = primaryBrand?.domain ?? "";
+
+  useEffect(() => {
+    similarAbortRef.current?.abort();
+    if (!primaryName.trim() && !primaryDomain.trim()) {
+      setSimilarSuggestions([]);
+      setSimilarLoading(false);
+      setSimilarError(null);
+      setSimilarEmptyMessage(null);
+      return;
+    }
+
+    const ctrl = new AbortController();
+    similarAbortRef.current = ctrl;
+    setSimilarLoading(true);
+    setSimilarError(null);
+    setSimilarEmptyMessage(null);
+
+    const params = new URLSearchParams();
+    if (primaryName.trim()) params.set("q", primaryName.trim());
+    if (primaryDomain.trim()) params.set("domain", primaryDomain.trim());
+    if (primaryId) params.set("excludeId", primaryId);
+
+    void fetch(`/api/intelligence/similar-shops?${params.toString()}`, {
+      signal: ctrl.signal,
+      cache: "no-store",
+    })
+      .then(async (res) => {
+        if (ctrl.signal.aborted) return;
+        const json = (await res.json().catch(() => ({}))) as TTLookupResult[] | { error?: string };
+        if (!res.ok) {
+          setSimilarSuggestions([]);
+          const errPayload = !Array.isArray(json) && json && typeof json === "object" ? json : null;
+          const msg =
+            errPayload && "error" in errPayload && typeof (errPayload as { error?: unknown }).error === "string"
+              ? (errPayload as { error: string }).error
+              : "Could not load similar shops.";
+          setSimilarError(msg);
+          return;
+        }
+        if (!Array.isArray(json)) {
+          setSimilarSuggestions([]);
+          setSimilarError("Could not load similar shops.");
+          return;
+        }
+        setSimilarSuggestions(json);
+        if (json.length === 0) {
+          setSimilarEmptyMessage(
+            "No similar shops found for your brand yet. Use search below to add competitors manually.",
+          );
+        }
+      })
+      .catch((e: unknown) => {
+        if (ctrl.signal.aborted) return;
+        setSimilarSuggestions([]);
+        setSimilarError(e instanceof Error ? e.message : "Network error");
+      })
+      .finally(() => {
+        if (!ctrl.signal.aborted) setSimilarLoading(false);
+      });
+
+    return () => ctrl.abort();
+  }, [primaryId, primaryName, primaryDomain]);
+
+  const visibleSimilarSuggestions = useMemo(() => {
+    const savedIds = new Set(
+      saved.map((c) => String(c.lookupId ?? c.id ?? "").trim()).filter(Boolean),
+    );
+    return similarSuggestions.filter((s) => s.id && !savedIds.has(s.id.trim()));
+  }, [similarSuggestions, saved]);
+
+  const allSimilarAlreadySaved = useMemo(() => {
+    return (
+      !similarLoading &&
+      similarSuggestions.length > 0 &&
+      visibleSimilarSuggestions.length === 0
+    );
+  }, [similarLoading, similarSuggestions.length, visibleSimilarSuggestions.length]);
 
   const executeLookup = useCallback(
     async (rawQ: string) => {
@@ -350,6 +442,81 @@ export function CompetitorsPanel({
     <div className="flex min-h-0 flex-col gap-2">
       <div className="px-1">
         <p className="text-[11px] font-medium uppercase tracking-[0.12em] text-white/40">Competitors</p>
+      </div>
+
+      {primaryBrand ? (
+        <div className="rounded-xl border border-violet-500/25 bg-violet-500/[0.07] p-3">
+          <p className="text-[11px] font-semibold uppercase tracking-[0.12em] text-violet-200/90">Similar shops</p>
+          <p className="mt-1 text-[11px] leading-relaxed text-white/50">
+            TrendTrack matches for <span className="text-white/75">{primaryBrand.name}</span>
+            {primaryBrand.domain ? (
+              <>
+                {" "}
+                (<span className="text-white/65">{primaryBrand.domain}</span>)
+              </>
+            ) : null}
+            . Each row shows live and total ads when the data is available.
+          </p>
+          {similarLoading ? (
+            <p className="mt-2 flex items-center gap-2 text-xs text-white/55">
+              <Loader2 className="h-3.5 w-3.5 shrink-0 animate-spin" aria-hidden />
+              Loading suggestions…
+            </p>
+          ) : null}
+          {similarError ? <p className="mt-2 text-xs text-red-400">{similarError}</p> : null}
+          {!similarLoading && !similarError && similarEmptyMessage ? (
+            <p className="mt-2 text-xs text-white/50">{similarEmptyMessage}</p>
+          ) : null}
+          {!similarLoading && !similarError && allSimilarAlreadySaved ? (
+            <p className="mt-2 text-xs text-white/50">
+              Every suggested competitor is already in your saved list. Remove one to pick another, or add brands
+              below.
+            </p>
+          ) : null}
+          {!similarLoading && visibleSimilarSuggestions.length > 0 ? (
+            <div className="mt-2 max-h-52 overflow-y-auto rounded-lg border border-white/10 bg-black/25 p-1">
+              {visibleSimilarSuggestions.map((r) => {
+                const active = r.id === selectedLookupId;
+                const isTracked = trackedIds.has(r.id);
+                return (
+                  <button
+                    key={`similar:${r.type}:${r.id}`}
+                    type="button"
+                    onClick={() => void selectLookup(r)}
+                    className={cn(
+                      "flex w-full items-center gap-2.5 rounded-lg px-2.5 py-2 text-left transition",
+                      active ? "bg-violet-500/15 text-white" : "text-white/80 hover:bg-white/5",
+                    )}
+                  >
+                    <CompetitorDomainAvatar domain={r.domain} logoUrl={r.logo ?? r.logoUrl} name={r.name} />
+                    <div className="min-w-0 flex-1">
+                      <div className="truncate text-sm font-medium text-white">{r.name}</div>
+                      <div className="truncate text-[11px] text-white/55">{subtitleLine(r)}</div>
+                    </div>
+                    <span
+                      className={cn(
+                        "shrink-0 rounded-md border px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-wide",
+                        isTracked
+                          ? "border-emerald-400/30 bg-emerald-500/12 text-emerald-200"
+                          : "border-white/10 bg-white/5 text-white/55",
+                      )}
+                    >
+                      {isTracked ? "Tracked" : "Not tracked"}
+                    </span>
+                  </button>
+                );
+              })}
+            </div>
+          ) : null}
+        </div>
+      ) : (
+        <p className="px-1 text-[11px] leading-relaxed text-white/40">
+          Save your brand under Brands first. We will load TrendTrack similar shop suggestions here automatically.
+        </p>
+      )}
+
+      <div className="px-1">
+        <p className="text-[11px] font-medium uppercase tracking-[0.12em] text-white/35">Add brands</p>
       </div>
 
       <div className="flex items-center gap-2">
