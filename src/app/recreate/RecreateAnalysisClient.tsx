@@ -320,7 +320,11 @@ export function RecreateAnalysisClient() {
         }
 
         if (!res.ok || !json.scenes || !json.frames) {
-          throw new Error(json.error || `Analysis failed (HTTP ${res.status}).`);
+          const statusHint =
+            res.status === 504
+              ? "The server timed out while analyzing your video. Try a shorter clip, or retry in a moment — long ads with many scenes can take several minutes."
+              : null;
+          throw new Error(json.error || statusHint || `Analysis failed (HTTP ${res.status}).`);
         }
 
         const responseJson: RecreateAnalyzeResponse = {

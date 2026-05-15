@@ -1,5 +1,6 @@
 export const runtime = "nodejs";
-export const maxDuration = 120;
+/** Scene detection + parallel Claude batches can exceed 2 min on 30–60s ads. */
+export const maxDuration = 300;
 
 import { execFile } from "child_process";
 import { randomUUID } from "crypto";
@@ -255,36 +256,47 @@ async function detectSceneCapturePairs(opts: {
     const captures = buildSceneCaptureFrames(scenes);
     const captureImages = new Map<string, { dataUrl: string; storageUrl: string | null }>();
 
-    for (const capture of captures) {
-      const output = getSceneCaptureOutputConfig(capture.captureId);
-      const outputPath = join(workDir, output.fileName);
-      await runFfmpeg(bin, [
-        "-hide_banner",
-        "-ss",
-        capture.timestampSec.toFixed(3),
-        "-i",
-        inputPath,
-        "-frames:v",
-        "1",
-        "-update",
-        "1",
-        "-vf",
-        `scale='if(gte(iw,ih),${SCENE_FRAME_MAX_LONG_EDGE},-2)':'if(gte(iw,ih),-2,${SCENE_FRAME_MAX_LONG_EDGE})'`,
-        "-y",
-        outputPath,
-      ]);
+    logs.push(`Extracting ${captures.length} scene screenshots in parallel…`);
+    const captureResults = await Promise.all(
+      captures.map(async (capture) => {
+        const output = getSceneCaptureOutputConfig(capture.captureId);
+        const outputPath = join(workDir, output.fileName);
+        await runFfmpeg(bin, [
+          "-hide_banner",
+          "-ss",
+          capture.timestampSec.toFixed(3),
+          "-i",
+          inputPath,
+          "-frames:v",
+          "1",
+          "-update",
+          "1",
+          "-vf",
+          `scale='if(gte(iw,ih),${SCENE_FRAME_MAX_LONG_EDGE},-2)':'if(gte(iw,ih),-2,${SCENE_FRAME_MAX_LONG_EDGE})'`,
+          "-y",
+          outputPath,
+        ]);
 
-      const buf = await readFile(outputPath);
-      const dataUrl = imageBufferToDataUrl(buf, output.mediaType);
-      let storageUrl: string | null = null;
-      try {
-        storageUrl = await uploadRecreateSceneFrameJpeg(userId, buf);
-        logs.push(`Uploaded scene frame ${capture.captureId} to storage.`);
-      } catch (err) {
-        const msg = err instanceof Error ? err.message : String(err);
-        logs.push(`Scene frame ${capture.captureId} storage upload skipped: ${msg}`);
+        const buf = await readFile(outputPath);
+        const dataUrl = imageBufferToDataUrl(buf, output.mediaType);
+        let storageUrl: string | null = null;
+        try {
+          storageUrl = await uploadRecreateSceneFrameJpeg(userId, buf);
+        } catch (err) {
+          const msg = err instanceof Error ? err.message : String(err);
+          return { captureId: capture.captureId, dataUrl, storageUrl, uploadError: msg };
+        }
+        return { captureId: capture.captureId, dataUrl, storageUrl, uploadError: null };
+      }),
+    );
+
+    for (const row of captureResults) {
+      if (row.storageUrl) {
+        logs.push(`Uploaded scene frame ${row.captureId} to storage.`);
+      } else if (row.uploadError) {
+        logs.push(`Scene frame ${row.captureId} storage upload skipped: ${row.uploadError}`);
       }
-      captureImages.set(capture.captureId, { dataUrl, storageUrl });
+      captureImages.set(row.captureId, { dataUrl: row.dataUrl, storageUrl: row.storageUrl });
     }
 
     const scenePairs: SceneCapturePair[] = scenes.map((scene: RecreateDetectedScene) => {
@@ -932,27 +944,39 @@ export async function POST(req: Request) {
 
       const sceneDescriptions = new Map<string, SceneDescriptionRow>();
 
-      for (const [batchIndex, batchScenes] of sceneBatches.entries()) {
-        const batchLabel = `Scene batch ${batchIndex + 1}/${sceneBatches.length}`;
-        logs.push(`${batchLabel} starting with ${batchScenes.length} scenes / ${batchScenes.length * 2} screenshots.`);
-        const text = await runClaudeSceneBatchWithRetries({
-          logs,
-          batchLabel,
-          system: buildSceneDeveloperPrompt(),
-          user: buildSceneUserPrompt(safeRequest, batchScenes, batchIndex, sceneBatches.length),
-          imageUrls: batchScenes.flatMap((scene) => [scene.startImageUrl, scene.endImageUrl]),
-        });
-        logs.push(`${batchLabel} responded with ${text.length} characters.`);
+      logs.push(`Running ${sceneBatches.length} Claude scene batch(es) in parallel…`);
+      const batchResults = await Promise.all(
+        sceneBatches.map(async (batchScenes, batchIndex) => {
+          const batchLabel = `Scene batch ${batchIndex + 1}/${sceneBatches.length}`;
+          const batchLogs: string[] = [];
+          batchLogs.push(
+            `${batchLabel} starting with ${batchScenes.length} scenes / ${batchScenes.length * 2} screenshots.`,
+          );
+          const text = await runClaudeSceneBatchWithRetries({
+            logs: batchLogs,
+            batchLabel,
+            system: buildSceneDeveloperPrompt(),
+            user: buildSceneUserPrompt(safeRequest, batchScenes, batchIndex, sceneBatches.length),
+            imageUrls: batchScenes.flatMap((scene) => [scene.startImageUrl, scene.endImageUrl]),
+          });
+          batchLogs.push(`${batchLabel} responded with ${text.length} characters.`);
 
-        const parsed = parseJsonObject(text) as SceneBatchModelResponse;
-        for (const scene of normalizeSceneBatch(parsed.scenes, batchScenes)) {
+          const parsed = parseJsonObject(text) as SceneBatchModelResponse;
+          const scenes = normalizeSceneBatch(parsed.scenes, batchScenes);
+          const batchSummary =
+            typeof parsed.batchSummary === "string" && parsed.batchSummary.trim()
+              ? parsed.batchSummary.trim()
+              : "No batch summary returned.";
+          batchLogs.push(`${batchLabel} parsed successfully: ${batchSummary}`);
+          return { scenes, batchLogs };
+        }),
+      );
+
+      for (const result of batchResults) {
+        logs.push(...result.batchLogs);
+        for (const scene of result.scenes) {
           sceneDescriptions.set(scene.sceneId, scene);
         }
-        const batchSummary =
-          typeof parsed.batchSummary === "string" && parsed.batchSummary.trim()
-            ? parsed.batchSummary.trim()
-            : "No batch summary returned.";
-        logs.push(`${batchLabel} parsed successfully: ${batchSummary}`);
       }
 
       const scenes: RecreateScene[] = sceneCaptures.map((cap) => {
