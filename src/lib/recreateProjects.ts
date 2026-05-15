@@ -6,11 +6,29 @@ export type RecreateKeyframeSlotStatus = "idle" | "processing" | "ready" | "erro
 
 export type RecreateKeyframeSlot = {
   status: RecreateKeyframeSlotStatus;
+  /** Per-frame product reference; falls back to project-level product when generating. */
+  productImageUrl?: string;
   taskId?: string;
   outputUrl?: string;
   error?: string;
   updatedAt?: string;
 };
+
+export type RecreateProjectAssets = {
+  productImageUrl: string | null;
+  packagingImageUrl: string | null;
+  logoImageUrl: string | null;
+};
+
+export function resolveFrameProductUrl(
+  slot: RecreateKeyframeSlot | undefined,
+  projectProductUrl: string | null | undefined,
+): string {
+  const slotUrl = (slot?.productImageUrl ?? "").trim();
+  if (/^https?:\/\//i.test(slotUrl)) return slotUrl;
+  const fallback = (projectProductUrl ?? "").trim();
+  return /^https?:\/\//i.test(fallback) ? fallback : "";
+}
 
 export type RecreateSceneKeyframes = {
   start: RecreateKeyframeSlot;

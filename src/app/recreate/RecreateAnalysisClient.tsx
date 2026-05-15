@@ -1,7 +1,7 @@
 "use client";
 
-import { Fragment, useCallback, useEffect, useMemo, useRef, useState, type ChangeEvent } from "react";
-import { Check, Copy, Download, Loader2, Sparkles, Upload, Video } from "lucide-react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { Copy, Loader2, Upload, Video } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
 import {
@@ -11,11 +11,13 @@ import {
   CardHeader,
   CardTitle,
 } from "@/components/ui/card";
-import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
-import { Textarea } from "@/components/ui/textarea";
 import { type RecreateAnalyzeResponse } from "@/lib/recreateAnalysis";
-import { type RecreateSceneKeyframes } from "@/lib/recreateProjects";
+import {
+  emptySceneKeyframes,
+  type RecreateProjectAssets,
+  type RecreateSceneKeyframes,
+} from "@/lib/recreateProjects";
+import { RecreateResultsPanel } from "./RecreateResultsPanel";
 import { RECREATE_SCENE_THRESHOLD } from "@/lib/recreateSceneDetection";
 import { STUDIO_VIDEO_PICKER_IDS } from "@/lib/studioVideoModelCapabilities";
 import { assertStudioVideoUpload, STUDIO_VIDEO_FILE_ACCEPT } from "@/lib/studioUploadValidation";
@@ -39,6 +41,12 @@ const INITIAL_PROGRESS: ProgressState = {
   sourceUploaded: false,
   detectedScenes: 0,
   analyzedKeyframes: 0,
+};
+
+const EMPTY_PROJECT_ASSETS: RecreateProjectAssets = {
+  productImageUrl: null,
+  packagingImageUrl: null,
+  logoImageUrl: null,
 };
 
 function formatLogMessage(message: string): string {
@@ -111,7 +119,10 @@ export function RecreateAnalysisClient() {
   const [projectsLoading, setProjectsLoading] = useState(false);
   const [projectKeyframes, setProjectKeyframes] = useState<Record<string, RecreateSceneKeyframes>>({});
   const [keyframeRunning, setKeyframeRunning] = useState<string | null>(null);
-  const [assetBusy, setAssetBusy] = useState(false);
+  const [projectAssets, setProjectAssets] = useState<RecreateProjectAssets>(EMPTY_PROJECT_ASSETS);
+  const [frameUploadBusy, setFrameUploadBusy] = useState<string | null>(null);
+  const [globalUploadBusy, setGlobalUploadBusy] = useState(false);
+  const videoInputRef = useRef<HTMLInputElement>(null);
   const skipResultBootstrapRef = useRef(false);
   const allowProjectSaveRef = useRef(false);
 
@@ -176,6 +187,9 @@ export function RecreateAnalysisClient() {
         error?: string;
         analysis_json?: RecreateAnalyzeResponse;
         keyframes_json?: Record<string, RecreateSceneKeyframes>;
+        product_image_url?: string | null;
+        packaging_image_url?: string | null;
+        logo_image_url?: string | null;
         client_state_json?: {
           scriptDraft?: string;
           scriptApproved?: boolean;
@@ -190,6 +204,11 @@ export function RecreateAnalysisClient() {
       skipResultBootstrapRef.current = true;
       setProjectId(row.id);
       setProjectKeyframes((row.keyframes_json ?? {}) as Record<string, RecreateSceneKeyframes>);
+      setProjectAssets({
+        productImageUrl: row.product_image_url ?? null,
+        packagingImageUrl: row.packaging_image_url ?? null,
+        logoImageUrl: row.logo_image_url ?? null,
+      });
       setResult(row.analysis_json);
       const cs = row.client_state_json ?? {};
       if (typeof cs.scriptDraft === "string") setScriptDraft(cs.scriptDraft);
@@ -265,6 +284,7 @@ export function RecreateAnalysisClient() {
     setResult(null);
     setProjectId(null);
     setProjectKeyframes({});
+    setProjectAssets(EMPTY_PROJECT_ASSETS);
     allowProjectSaveRef.current = false;
     setProgress(INITIAL_PROGRESS);
 
@@ -358,10 +378,18 @@ export function RecreateAnalysisClient() {
             id?: string;
             error?: string;
             keyframes_json?: Record<string, RecreateSceneKeyframes>;
+            product_image_url?: string | null;
+            packaging_image_url?: string | null;
+            logo_image_url?: string | null;
           };
           if (pres.ok && pro.id) {
             setProjectId(pro.id);
             setProjectKeyframes((pro.keyframes_json ?? {}) as Record<string, RecreateSceneKeyframes>);
+            setProjectAssets({
+              productImageUrl: pro.product_image_url ?? null,
+              packagingImageUrl: pro.packaging_image_url ?? null,
+              logoImageUrl: pro.logo_image_url ?? null,
+            });
             try {
               localStorage.setItem("recreate_last_project_id", pro.id);
               window.history.replaceState(null, "", `/recreate?project=${encodeURIComponent(pro.id)}`);
@@ -443,29 +471,87 @@ export function RecreateAnalysisClient() {
     [projectId],
   );
 
-  const uploadBrandAsset = useCallback(
-    async (f: File | null, field: "productImageUrl" | "packagingImageUrl" | "logoImageUrl") => {
+  const uploadProjectAsset = useCallback(
+    async (f: File, field: "productImageUrl" | "packagingImageUrl" | "logoImageUrl") => {
       if (!projectId) {
         toast.error("Run video analysis first to create a saved project.");
         return;
       }
-      if (!f) {
-        toast.error("Pick an image file.");
-        return;
-      }
-      setAssetBusy(true);
+      setGlobalUploadBusy(true);
       try {
         const url = await uploadFileToCdn(f, { kind: "image" });
         await patchProjectFields({ [field]: url });
+        setProjectAssets((prev) => ({
+          ...prev,
+          [field === "productImageUrl"
+            ? "productImageUrl"
+            : field === "packagingImageUrl"
+              ? "packagingImageUrl"
+              : "logoImageUrl"]: url,
+        }));
         toast.success("Reference saved on the project.");
       } catch (e) {
         toast.error(e instanceof Error ? e.message : "Upload failed");
       } finally {
-        setAssetBusy(false);
+        setGlobalUploadBusy(false);
       }
     },
     [patchProjectFields, projectId],
   );
+
+  const uploadFrameProduct = useCallback(
+    async (sceneId: string, role: "start" | "end", f: File) => {
+      if (!projectId) {
+        toast.error("Run analysis first so a project exists.");
+        return;
+      }
+      const busyKey = `${sceneId}:${role}`;
+      setFrameUploadBusy(busyKey);
+      try {
+        const url = await uploadFileToCdn(f, { kind: "image" });
+        const next = { ...projectKeyframes };
+        const prev = next[sceneId] ?? emptySceneKeyframes();
+        next[sceneId] =
+          role === "start"
+            ? { ...prev, start: { ...prev.start, productImageUrl: url } }
+            : { ...prev, end: { ...prev.end, productImageUrl: url } };
+        await patchProjectFields({ keyframesJson: next });
+        setProjectKeyframes(next);
+        toast.success(`Product saved for ${sceneId} (${role}).`);
+      } catch (e) {
+        toast.error(e instanceof Error ? e.message : "Upload failed");
+      } finally {
+        setFrameUploadBusy(null);
+      }
+    },
+    [patchProjectFields, projectId, projectKeyframes],
+  );
+
+  const applyDefaultProductToAllFrames = useCallback(async () => {
+    const url = projectAssets.productImageUrl?.trim() ?? "";
+    if (!projectId || !result || !/^https?:\/\//i.test(url)) {
+      toast.error("Upload a default product image first.");
+      return;
+    }
+    setGlobalUploadBusy(true);
+    try {
+      const next = { ...projectKeyframes };
+      for (const s of result.scenes) {
+        const prev = next[s.sceneId] ?? emptySceneKeyframes();
+        next[s.sceneId] = {
+          start: { ...prev.start, productImageUrl: url },
+          end: { ...prev.end, productImageUrl: url },
+        };
+      }
+      await patchProjectFields({ keyframesJson: next });
+      setProjectKeyframes(next);
+      toast.success("Default product applied to all frames.");
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : "Could not apply product.");
+    } finally {
+      setGlobalUploadBusy(false);
+    }
+  }, [patchProjectFields, projectAssets.productImageUrl, projectId, projectKeyframes, result]);
 
   const runSingleKeyframe = useCallback(
     async (sceneId: string, role: "start" | "end", force?: boolean) => {
@@ -602,13 +688,24 @@ export function RecreateAnalysisClient() {
               <CardContent className="space-y-4">
                 <div className="space-y-2">
                   <label className="text-sm font-medium text-white">Video file</label>
-                  <Input
+                  <input
+                    ref={videoInputRef}
                     type="file"
                     accept={STUDIO_VIDEO_FILE_ACCEPT}
+                    className="sr-only"
                     disabled={running}
                     onChange={(event) => setFile(event.target.files?.[0] ?? null)}
-                    className="border-white/10 bg-black/30 text-white file:mr-3 file:rounded-md file:border-0 file:bg-violet-400 file:px-3 file:py-2 file:text-sm file:font-medium file:text-black"
                   />
+                  <Button
+                    type="button"
+                    variant="secondary"
+                    disabled={running}
+                    onClick={() => videoInputRef.current?.click()}
+                    className="w-full border-white/15 bg-white/10 text-white hover:bg-white/15"
+                  >
+                    <Upload className="mr-2 size-4" />
+                    {file ? "Change video" : "Choose video file"}
+                  </Button>
                   <p className="text-xs text-white/45">Allowed: MP4, MOV, or WebM.</p>
                 </div>
 
@@ -657,439 +754,43 @@ export function RecreateAnalysisClient() {
           </div>
 
           <div className="space-y-6">
-            <Card className="border-white/10 bg-white/[0.03] text-white shadow-none">
-              <CardHeader>
-                <CardTitle>Logs</CardTitle>
-                <CardDescription className="text-white/55">
-                  Every major upload, scene detection, Claude, and merge step is logged here.
-                </CardDescription>
-              </CardHeader>
-              <CardContent>
-                <div className="max-h-[420px] overflow-y-auto rounded-lg border border-white/10 bg-black/30 p-3 font-mono text-xs leading-6 text-white/80">
-                  {logs.length === 0 ? (
-                    <div className="text-white/40">No logs yet.</div>
-                  ) : (
-                    logs.map((entry) => <div key={entry.id}>{entry.message}</div>)
-                  )}
-                </div>
-              </CardContent>
-            </Card>
-
-            {result ? (
-              <>
-                <Card className="border-white/10 bg-white/[0.03] text-white shadow-none">
-                  <CardHeader>
-                    <CardTitle>Segmentation Summary</CardTitle>
-                  </CardHeader>
-                  <CardContent className="space-y-3 text-sm text-white/80">
-                    <div>Model used: {result.model}</div>
-                    <div>Analyzed screenshots: {result.analyzedFrameCount}</div>
-                    <div>Detected scenes: {result.sceneCount}</div>
-                    <div>Scene detection threshold: {RECREATE_SCENE_THRESHOLD}</div>
-                    <div className="rounded-lg border border-white/10 bg-black/20 p-3">
-                      {result.segmentationSummary}
-                    </div>
-                    <div className="rounded-lg border border-white/10 bg-black/20 p-3">{result.videoSummary}</div>
-                  </CardContent>
-                </Card>
-
-                {result.creativeBrief ? (
-                  <Card className="border-white/10 bg-white/[0.03] text-white shadow-none">
-                    <CardHeader>
-                      <CardTitle>Global creative brief</CardTitle>
-                      <CardDescription className="text-white/55">
-                        Marketing angles, testing hypotheses, script draft, and product upload reminder.
-                      </CardDescription>
-                    </CardHeader>
-                    <CardContent className="space-y-4 text-sm text-white/80">
-                      <div className="rounded-lg border border-white/10 bg-black/20 p-3 space-y-2">
-                        <div className="text-xs uppercase tracking-wide text-white/45">Overall visual lane</div>
-                        <div className="font-medium text-white">{result.creativeBrief.globalVisualStyleCategory}</div>
-                        <div className="text-white/70">{result.creativeBrief.globalVisualStyleRationale}</div>
-                      </div>
-                      <div className="rounded-lg border border-violet-400/20 bg-violet-500/10 p-3 space-y-2">
-                        <div className="text-xs uppercase tracking-wide text-violet-200/90">Primary marketing angle</div>
-                        <div className="font-medium text-white">{result.creativeBrief.primaryMarketingAngleLabel}</div>
-                        <div className="text-white/75">{result.creativeBrief.primaryMarketingAngleRationale}</div>
-                      </div>
-                      {result.creativeBrief.secondaryMarketingAngles.length > 0 ? (
-                        <div className="space-y-2">
-                          <div className="text-xs uppercase tracking-wide text-white/45">Secondary angles</div>
-                          <ul className="list-disc space-y-1 pl-5 text-white/75">
-                            {result.creativeBrief.secondaryMarketingAngles.map((a) => (
-                              <li key={a.label}>
-                                <span className="font-medium text-white">{a.label}</span>
-                                <span className="text-white/60"> — {a.rationale}</span>
-                              </li>
-                            ))}
-                          </ul>
-                        </div>
-                      ) : null}
-                      <div className="rounded-lg border border-white/10 bg-black/20 p-3 text-white/75">
-                        <div className="text-xs uppercase tracking-wide text-white/45">Angle testing notes</div>
-                        <p className="mt-2">{result.creativeBrief.marketingTestingNotes}</p>
-                      </div>
-                      <div className="rounded-lg border border-white/10 bg-black/20 p-3 text-white/75">
-                        <div className="text-xs uppercase tracking-wide text-white/45">Final video assembly</div>
-                        <p className="mt-2">{result.creativeBrief.finalEditAssemblyNotes}</p>
-                      </div>
-                      <div className="space-y-2">
-                        <Label className="text-white">Script draft (edit, then approve)</Label>
-                        <Textarea
-                          value={scriptDraft}
-                          onChange={(e: ChangeEvent<HTMLTextAreaElement>) => {
-                            setScriptDraft(e.target.value);
-                            setScriptApproved(false);
-                          }}
-                          rows={12}
-                          className="border-white/10 bg-black/40 font-mono text-xs leading-relaxed text-white"
-                        />
-                        <div className="flex flex-wrap items-center gap-3">
-                          <Button
-                            type="button"
-                            variant="secondary"
-                            className="bg-emerald-500/90 text-black hover:bg-emerald-400"
-                            onClick={() => {
-                              setScriptApproved(true);
-                              toast.success("Script marked approved for this session.");
-                            }}
-                          >
-                            <Check className="mr-2 size-4" />
-                            Approve script
-                          </Button>
-                          {scriptApproved ? (
-                            <span className="text-xs font-medium text-emerald-300">Script approved</span>
-                          ) : (
-                            <span className="text-xs text-white/45">Approve when copy is ready for production.</span>
-                          )}
-                        </div>
-                      </div>
-                      <div className="space-y-2">
-                        <Label className="text-white">Product reference image (optional, for export pack)</Label>
-                        <Input
-                          type="file"
-                          accept="image/png,image/jpeg,image/webp"
-                          disabled={running}
-                          onChange={(e) => setProductFile(e.target.files?.[0] ?? null)}
-                          className="border-white/10 bg-black/30 text-white file:mr-3 file:rounded-md file:border-0 file:bg-white/15 file:px-3 file:py-2 file:text-sm file:text-white"
-                        />
-                        <p className="text-xs text-white/55">{result.creativeBrief.productUploadCallout}</p>
-                        {productFile ? (
-                          <p className="text-xs text-violet-200">Selected for export: {productFile.name}</p>
-                        ) : null}
-                      </div>
-                      <div className="rounded-lg border border-white/10 bg-black/25 p-3 space-y-3">
-                        <div className="text-xs font-semibold uppercase tracking-wide text-white/45">
-                          Brand assets on project (for GPT Image 2)
-                        </div>
-                        <p className="text-xs text-white/50">
-                          Upload your hero product (required), plus packaging and logo if you want the model to match
-                          labels and marks. Files are stored on the project and reused for every scene.
-                        </p>
-                        <div className="grid gap-3 sm:grid-cols-1">
-                          <div className="space-y-1">
-                            <Label className="text-xs text-white/70">Product (required for swaps)</Label>
-                            <Input
-                              type="file"
-                              accept="image/png,image/jpeg,image/webp"
-                              disabled={!projectId || assetBusy}
-                              onChange={(e) =>
-                                void uploadBrandAsset(e.target.files?.[0] ?? null, "productImageUrl")
-                              }
-                              className="border-white/10 bg-black/30 text-white file:mr-3 file:rounded-md file:border-0 file:bg-white/15 file:px-3 file:py-2 file:text-xs file:text-white"
-                            />
-                          </div>
-                          <div className="space-y-1">
-                            <Label className="text-xs text-white/70">Packaging (optional)</Label>
-                            <Input
-                              type="file"
-                              accept="image/png,image/jpeg,image/webp"
-                              disabled={!projectId || assetBusy}
-                              onChange={(e) =>
-                                void uploadBrandAsset(e.target.files?.[0] ?? null, "packagingImageUrl")
-                              }
-                              className="border-white/10 bg-black/30 text-white file:mr-3 file:rounded-md file:border-0 file:bg-white/15 file:px-3 file:py-2 file:text-xs file:text-white"
-                            />
-                          </div>
-                          <div className="space-y-1">
-                            <Label className="text-xs text-white/70">Logo (optional)</Label>
-                            <Input
-                              type="file"
-                              accept="image/png,image/jpeg,image/webp"
-                              disabled={!projectId || assetBusy}
-                              onChange={(e) => void uploadBrandAsset(e.target.files?.[0] ?? null, "logoImageUrl")}
-                              className="border-white/10 bg-black/30 text-white file:mr-3 file:rounded-md file:border-0 file:bg-white/15 file:px-3 file:py-2 file:text-xs file:text-white"
-                            />
-                          </div>
-                        </div>
-                        {assetBusy ? (
-                          <p className="flex items-center gap-2 text-xs text-white/55">
-                            <Loader2 className="size-3.5 animate-spin" /> Uploading…
-                          </p>
-                        ) : null}
-                      </div>
-                      <div className="flex flex-wrap gap-2">
-                        <Button
-                          type="button"
-                          variant="secondary"
-                          className="border-white/15 bg-white/10 text-white hover:bg-white/15"
-                          onClick={() => void copyText("script", scriptDraft)}
-                        >
-                          <Copy className="mr-2 size-4" />
-                          Copy script
-                        </Button>
-                        <Button
-                          type="button"
-                          className="border border-violet-300/30 bg-violet-500/20 text-violet-50 hover:bg-violet-500/30"
-                          disabled={!projectId || !result || Boolean(keyframeRunning)}
-                          onClick={() => void runAllKeyframes()}
-                        >
-                          <Sparkles className="mr-2 size-4" />
-                          Generate all scene keyframes
-                        </Button>
-                        <Button
-                          type="button"
-                          className="bg-violet-400 text-black hover:bg-violet-300"
-                          onClick={() => downloadBriefPack()}
-                        >
-                          <Download className="mr-2 size-4" />
-                          Download scene brief pack (JSON)
-                        </Button>
-                      </div>
-                      <p className="text-xs text-white/45">
-                        This pack lists each scene&apos;s generative prompt, your selected Studio model id, the edited
-                        script, and assembly notes. Render MP4 clips in Studio Video, then stitch using the assembly
-                        notes (or your editor of choice). A future step can auto-launch generations from this file.
-                      </p>
-                    </CardContent>
-                  </Card>
-                ) : (
-                  <Card className="border-white/10 bg-white/[0.03] text-white shadow-none">
-                    <CardHeader>
-                      <CardTitle>Creative brief</CardTitle>
-                    </CardHeader>
-                    <CardContent className="text-sm text-white/60">
-                      No aggregated creative brief was returned (analysis may have stopped early).
-                    </CardContent>
-                  </Card>
-                )}
-
-                <Card className="border-white/10 bg-white/[0.03] text-white shadow-none">
-                  <CardHeader>
-                    <CardTitle>Scenes</CardTitle>
-                    <CardDescription className="text-white/55">
-                      Per-scene look breakdown, generative video prompt, and Studio model picker (defaults follow AI
-                      recommendations).
-                    </CardDescription>
-                  </CardHeader>
-                  <CardContent className="space-y-3">
-                    {result.scenes.map((scene) => (
-                      <div
-                        key={scene.sceneId}
-                        className="rounded-lg border border-white/10 bg-black/20 p-4 text-sm text-white/80"
-                      >
-                        <div className="font-medium text-white">{scene.sceneId}</div>
-                        <div className="mt-1 text-white/60">
-                          Frames {scene.startFrameIndex} to {scene.endFrameIndex} |{" "}
-                          {formatSeconds(scene.startSec)} to {formatSeconds(scene.endSec)}
-                        </div>
-                        <div className="mt-2">{scene.shortDescription}</div>
-                        <div className="mt-2 text-white/65">{scene.summary}</div>
-                        <div className="mt-3 rounded-lg border border-white/10 bg-black/20 p-3">
-                          <div className="text-xs uppercase tracking-wide text-white/45">Visual style lane</div>
-                          <div className="mt-1 font-medium text-white">
-                            {scene.visualStyleCategory ?? "unknown"}
-                            {scene.visualStyleConfidence ? (
-                              <span className="ml-2 text-xs font-normal text-white/50">
-                                confidence: {scene.visualStyleConfidence}
-                              </span>
-                            ) : null}
-                          </div>
-                          <div className="mt-1 text-white/70">{scene.visualStyleRationale ?? "—"}</div>
-                        </div>
-                        <div className="mt-3 rounded-lg border border-white/10 bg-black/20 p-3">
-                          <div className="text-xs uppercase tracking-wide text-white/45">Background & set</div>
-                          <div className="mt-1">{scene.backgroundDescription ?? "—"}</div>
-                        </div>
-                        <div className="mt-3 rounded-lg border border-white/10 bg-black/20 p-3">
-                          <div className="text-xs uppercase tracking-wide text-white/45">On-screen talent</div>
-                          <div className="mt-1">{scene.onScreenTalentDescription ?? "—"}</div>
-                        </div>
-                        <div className="mt-3 rounded-lg border border-white/10 bg-black/20 p-3">
-                          <div className="text-xs uppercase tracking-wide text-white/45">Lighting & grade</div>
-                          <div className="mt-1">{scene.lightingAndGradeNotes ?? "—"}</div>
-                        </div>
-                        <div className="mt-3 rounded-lg border border-white/10 bg-black/20 p-3">
-                          <div className="text-xs uppercase tracking-wide text-white/45">Dialogue / VO hints</div>
-                          <div className="mt-1">{scene.dialogueOrVoiceoverHints ?? "—"}</div>
-                        </div>
-                        <div className="mt-3 rounded-lg border border-amber-400/15 bg-amber-500/10 p-3">
-                          <div className="text-xs uppercase tracking-wide text-amber-100/80">Scene marketing angle</div>
-                          <div className="mt-1 font-medium text-white">
-                            {scene.primaryMarketingAngleLabel ?? "—"}
-                          </div>
-                          <div className="mt-1 text-white/75">{scene.primaryMarketingAngleRationale ?? "—"}</div>
-                        </div>
-                        <div className="mt-3 rounded-lg border border-white/10 bg-black/20 p-3">
-                          <div className="text-xs uppercase tracking-wide text-white/45">Start</div>
-                          <div className="mt-1">{scene.startDescription ?? "No start description."}</div>
-                        </div>
-                        <div className="mt-3 rounded-lg border border-white/10 bg-black/20 p-3">
-                          <div className="text-xs uppercase tracking-wide text-white/45">End</div>
-                          <div className="mt-1">{scene.endDescription ?? "No end description."}</div>
-                        </div>
-                        <div className="mt-3 rounded-lg border border-white/10 bg-black/20 p-3">
-                          <div className="text-xs uppercase tracking-wide text-white/45">Transition</div>
-                          <div className="mt-1">{scene.transitionSummary ?? "No transition summary."}</div>
-                        </div>
-                        <div className="mt-3 rounded-lg border border-white/10 bg-black/20 p-3">
-                          <div className="text-xs uppercase tracking-wide text-white/45">Recreation Notes</div>
-                          <div className="mt-1">{scene.recreationNotes ?? "No recreation notes."}</div>
-                        </div>
-                        {projectId ? (
-                          <div className="mt-4 rounded-lg border border-violet-400/25 bg-violet-500/10 p-3 space-y-3">
-                            <div className="text-xs font-semibold uppercase tracking-wide text-violet-100/90">
-                              GPT Image 2 — start & end frames
-                            </div>
-                            {!scene.sceneStartImageUrl || !scene.sceneEndImageUrl ? (
-                              <p className="text-xs text-amber-200/85">
-                                Public scene frame URLs are missing. Ensure SUPABASE_SERVICE_ROLE_KEY is set on the
-                                server, then run Analyze again.
-                              </p>
-                            ) : (
-                              <div className="flex flex-wrap gap-4">
-                                {(["start", "end"] as const).map((role) => {
-                                  const slot = projectKeyframes[scene.sceneId]?.[role];
-                                  const busy = keyframeRunning === `${scene.sceneId}:${role}`;
-                                  return (
-                                    <div key={role} className="min-w-[150px] flex-1 space-y-2">
-                                      <div className="text-[11px] font-medium capitalize text-white/60">{role} frame</div>
-                                      {slot?.outputUrl ? (
-                                        // eslint-disable-next-line @next/next/no-img-element
-                                        <img
-                                          src={slot.outputUrl}
-                                          alt=""
-                                          className="aspect-video w-full max-w-[220px] rounded-md border border-white/10 object-cover"
-                                        />
-                                      ) : (
-                                        <div className="flex aspect-video w-full max-w-[220px] items-center justify-center rounded-md border border-dashed border-white/15 bg-black/30 text-[10px] text-white/35">
-                                          Not generated
-                                        </div>
-                                      )}
-                                      <Button
-                                        type="button"
-                                        size="sm"
-                                        variant="secondary"
-                                        disabled={assetBusy || busy}
-                                        onClick={() =>
-                                          void runSingleKeyframe(scene.sceneId, role, Boolean(slot?.outputUrl))
-                                        }
-                                        className="w-full border-white/15 bg-white/10 text-white hover:bg-white/15"
-                                      >
-                                        {busy ? (
-                                          <Loader2 className="mr-2 size-3.5 animate-spin" />
-                                        ) : (
-                                          <Sparkles className="mr-2 size-3.5" />
-                                        )}
-                                        {busy ? "Working…" : slot?.outputUrl ? "Regenerate" : "Generate"}
-                                      </Button>
-                                    </div>
-                                  );
-                                })}
-                              </div>
-                            )}
-                          </div>
-                        ) : null}
-                        <div className="mt-4 space-y-2">
-                          <Label className="text-xs text-white/70">Video generation prompt (scene clip)</Label>
-                          <Textarea
-                            value={scenePromptOverrides[scene.sceneId] ?? ""}
-                            onChange={(e: ChangeEvent<HTMLTextAreaElement>) =>
-                              setScenePromptOverrides((prev) => ({ ...prev, [scene.sceneId]: e.target.value }))
-                            }
-                            rows={6}
-                            className="border-white/10 bg-black/40 text-xs leading-relaxed text-white"
-                          />
-                          <div className="flex flex-wrap items-end gap-3">
-                            <div className="min-w-[200px] flex-1 space-y-1">
-                              <Label className="text-xs text-white/70">Studio video model</Label>
-                              <select
-                                className="h-10 w-full rounded-md border border-white/10 bg-black/50 px-2 text-xs text-white"
-                                value={sceneModelChoice[scene.sceneId] ?? pickValidStudioModelId(scene.recommendedVideoModels?.[0])}
-                                onChange={(e: ChangeEvent<HTMLSelectElement>) =>
-                                  setSceneModelChoice((prev) => ({ ...prev, [scene.sceneId]: e.target.value }))
-                                }
-                              >
-                                {STUDIO_VIDEO_PICKER_IDS.map((id) => (
-                                  <option key={id} value={id} className="bg-zinc-900 text-white">
-                                    {id}
-                                  </option>
-                                ))}
-                              </select>
-                            </div>
-                            <Button
-                              type="button"
-                              variant="secondary"
-                              size="sm"
-                              className="border-white/15 bg-white/10 text-white hover:bg-white/15"
-                              onClick={() =>
-                                void copyText(
-                                  `${scene.sceneId} prompt`,
-                                  scenePromptOverrides[scene.sceneId] ?? "",
-                                )
-                              }
-                            >
-                              <Copy className="mr-1 size-3.5" />
-                              Copy prompt
-                            </Button>
-                          </div>
-                          {scene.recommendedVideoModels && scene.recommendedVideoModels.length > 0 ? (
-                            <p className="text-xs text-white/45">
-                              AI recommended: {scene.recommendedVideoModels.join(", ")}
-                            </p>
-                          ) : null}
-                        </div>
-                      </div>
-                    ))}
-                  </CardContent>
-                </Card>
-
-                <Card className="border-white/10 bg-white/[0.03] text-white shadow-none">
-                  <CardHeader>
-                    <CardTitle>Scene Screenshot Analysis</CardTitle>
-                  </CardHeader>
-                  <CardContent>
-                    <div className="max-h-[560px] overflow-y-auto rounded-lg border border-white/10 bg-black/20">
-                      <div className="grid grid-cols-[90px_90px_90px_100px_minmax(220px,1fr)_minmax(220px,1fr)_minmax(180px,1fr)] gap-px bg-white/10 text-xs">
-                        <div className="bg-black/40 px-3 py-2 font-medium text-white/70">Shot</div>
-                        <div className="bg-black/40 px-3 py-2 font-medium text-white/70">Time</div>
-                        <div className="bg-black/40 px-3 py-2 font-medium text-white/70">Role</div>
-                        <div className="bg-black/40 px-3 py-2 font-medium text-white/70">Scene</div>
-                        <div className="bg-black/40 px-3 py-2 font-medium text-white/70">Description</div>
-                        <div className="bg-black/40 px-3 py-2 font-medium text-white/70">Action</div>
-                        <div className="bg-black/40 px-3 py-2 font-medium text-white/70">Movement</div>
-
-                        {result.frames.map((frame) => (
-                          <Fragment key={frame.frameIndex}>
-                            <div className="bg-black/20 px-3 py-2 text-white/80">{frame.frameIndex}</div>
-                            <div className="bg-black/20 px-3 py-2 text-white/80">
-                              {formatSeconds(frame.timestampSec)}
-                            </div>
-                            <div className="bg-black/20 px-3 py-2 text-white/80">
-                              {frame.captureRole ?? "scene"}
-                            </div>
-                            <div className="bg-black/20 px-3 py-2 text-white/80">{frame.sceneId}</div>
-                            <div className="bg-black/20 px-3 py-2 text-white/80">{frame.description}</div>
-                            <div className="bg-black/20 px-3 py-2 text-white/80">{frame.subjectAction}</div>
-                            <div className="bg-black/20 px-3 py-2 text-white/80">{frame.movement}</div>
-                          </Fragment>
-                        ))}
-                      </div>
-                    </div>
-                  </CardContent>
-                </Card>
-              </>
-            ) : null}
+          <RecreateResultsPanel
+            result={result}
+            projectId={projectId}
+            projectAssets={projectAssets}
+            projectKeyframes={projectKeyframes}
+            keyframeRunning={keyframeRunning}
+            frameUploadBusy={frameUploadBusy}
+            globalUploadBusy={globalUploadBusy}
+            scriptDraft={scriptDraft}
+            scriptApproved={scriptApproved}
+            sceneModelChoice={sceneModelChoice}
+            scenePromptOverrides={scenePromptOverrides}
+            logs={logs}
+            pickValidStudioModelId={pickValidStudioModelId}
+            formatSeconds={formatSeconds}
+            onScriptDraftChange={(value) => {
+              setScriptDraft(value);
+              setScriptApproved(false);
+            }}
+            onScriptApprove={() => {
+              setScriptApproved(true);
+              toast.success("Script marked approved for this session.");
+            }}
+            onSceneModelChange={(sceneId, modelId) =>
+              setSceneModelChoice((prev) => ({ ...prev, [sceneId]: modelId }))
+            }
+            onScenePromptChange={(sceneId, prompt) =>
+              setScenePromptOverrides((prev) => ({ ...prev, [sceneId]: prompt }))
+            }
+            onUploadProjectAsset={(file, field) => void uploadProjectAsset(file, field)}
+            onUploadFrameProduct={(sceneId, role, file) => void uploadFrameProduct(sceneId, role, file)}
+            onApplyDefaultProductToAllFrames={() => void applyDefaultProductToAllFrames()}
+            onGenerateKeyframe={(sceneId, role, force) => void runSingleKeyframe(sceneId, role, force)}
+            onGenerateAllKeyframes={() => void runAllKeyframes()}
+            onCopyText={(label, text) => void copyText(label, text)}
+            onDownloadBriefPack={() => downloadBriefPack()}
+          />
           </div>
         </div>
       </div>

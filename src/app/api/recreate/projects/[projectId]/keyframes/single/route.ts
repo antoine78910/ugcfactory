@@ -9,6 +9,7 @@ import type { RecreateAnalyzeResponse, RecreateScene } from "@/lib/recreateAnaly
 import {
   buildRecreateProductSwapPrompt,
   emptySceneKeyframes,
+  resolveFrameProductUrl,
   type RecreateSceneKeyframes,
 } from "@/lib/recreateProjects";
 import { requireSupabaseUser } from "@/lib/supabase/requireUser";
@@ -73,13 +74,7 @@ export async function POST(
   if (loadErr) return NextResponse.json({ error: loadErr.message }, { status: 500 });
   if (!row) return NextResponse.json({ error: "Not found." }, { status: 404 });
 
-  const productUrl = (row.product_image_url as string | null)?.trim() ?? "";
-  if (!/^https?:\/\//i.test(productUrl)) {
-    return NextResponse.json(
-      { error: "Upload a product reference image first (HTTPS URL required on the project)." },
-      { status: 400 },
-    );
-  }
+  const projectProductUrl = (row.product_image_url as string | null)?.trim() ?? "";
 
   const analysis = row.analysis_json as RecreateAnalyzeResponse;
   const scenes = Array.isArray(analysis?.scenes) ? (analysis.scenes as RecreateScene[]) : [];
@@ -104,6 +99,17 @@ export async function POST(
   const keyframesRaw = (row.keyframes_json ?? {}) as Record<string, RecreateSceneKeyframes>;
   const slotPath = keyframesRaw[sceneId] ?? emptySceneKeyframes();
   const slot = role === "start" ? slotPath.start : slotPath.end;
+
+  const productUrl = resolveFrameProductUrl(slot, projectProductUrl);
+  if (!productUrl) {
+    return NextResponse.json(
+      {
+        error:
+          "Upload a product photo for this frame (or set a default product on the project) before generating.",
+      },
+      { status: 400 },
+    );
+  }
   if (!force && slot.status === "ready" && slot.outputUrl) {
     return NextResponse.json({
       sceneId,
