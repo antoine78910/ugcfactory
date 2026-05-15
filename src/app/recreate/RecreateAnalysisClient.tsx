@@ -17,6 +17,7 @@ import {
   type RecreateProjectAssets,
   type RecreateSceneKeyframes,
 } from "@/lib/recreateProjects";
+import { RecreateProjectsSidebar } from "./RecreateProjectsSidebar";
 import { RecreateResultsPanel } from "./RecreateResultsPanel";
 import { RECREATE_SCENE_THRESHOLD } from "@/lib/recreateSceneDetection";
 import { STUDIO_VIDEO_PICKER_IDS } from "@/lib/studioVideoModelCapabilities";
@@ -115,6 +116,7 @@ export function RecreateAnalysisClient() {
   const [productFile, setProductFile] = useState<File | null>(null);
 
   const [projectId, setProjectId] = useState<string | null>(null);
+  const [sourceVideoUrl, setSourceVideoUrl] = useState<string | null>(null);
   const [projectsList, setProjectsList] = useState<
     { id: string; title: string; updated_at: string; video_file_name: string | null }[]
   >([]);
@@ -188,6 +190,7 @@ export function RecreateAnalysisClient() {
         id?: string;
         error?: string;
         analysis_json?: RecreateAnalyzeResponse;
+        video_url?: string | null;
         keyframes_json?: Record<string, RecreateSceneKeyframes>;
         product_image_url?: string | null;
         packaging_image_url?: string | null;
@@ -206,6 +209,8 @@ export function RecreateAnalysisClient() {
       }
       skipResultBootstrapRef.current = true;
       setProjectId(row.id);
+      const vUrl = (row.video_url ?? "").trim();
+      setSourceVideoUrl(/^https?:\/\//i.test(vUrl) ? vUrl : null);
       setProjectKeyframes((row.keyframes_json ?? {}) as Record<string, RecreateSceneKeyframes>);
       setProjectAssets({
         productImageUrl: row.product_image_url ?? null,
@@ -323,6 +328,7 @@ export function RecreateAnalysisClient() {
         const videoUrl = await uploadFileToCdn(file, { kind: "video" });
         setProgress((prev) => ({ ...prev, sourceUploaded: true }));
         appendLog(`Source video uploaded: ${videoUrl}`);
+        setSourceVideoUrl(videoUrl);
         appendLog("Starting server-side scene detection and start/end screenshot extraction.");
 
         const res = await fetch("/api/recreate/analyze", {
@@ -686,10 +692,19 @@ export function RecreateAnalysisClient() {
         <div
           className={
             result
-              ? "flex min-h-0 flex-1 flex-col px-3 pb-3"
+              ? "flex min-h-0 flex-1 overflow-hidden"
               : "grid gap-6 xl:grid-cols-[380px_minmax(0,1fr)]"
           }
         >
+          {result ? (
+            <RecreateProjectsSidebar
+              projects={projectsList}
+              activeProjectId={projectId}
+              loading={projectsLoading}
+              onRefresh={() => void refreshProjectsList()}
+              onSelect={(id) => void loadProjectById(id)}
+            />
+          ) : null}
           {!result ? (
           <div className="space-y-6">
             <Card className="border-emerald-400/20 bg-emerald-500/[0.06] text-white shadow-none">
@@ -831,9 +846,10 @@ export function RecreateAnalysisClient() {
           </div>
           ) : null}
 
-          <div className={result ? "flex min-h-0 flex-1 flex-col" : "space-y-6"}>
+          <div className={result ? "flex min-h-0 min-w-0 flex-1 flex-col px-3 pb-3" : "space-y-6"}>
           <RecreateResultsPanel
             result={result}
+            sourceVideoUrl={sourceVideoUrl}
             projectId={projectId}
             projectAssets={projectAssets}
             projectKeyframes={projectKeyframes}

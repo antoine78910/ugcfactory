@@ -15,6 +15,7 @@ type LogEntry = { id: string; message: string };
 
 export type RecreateResultsPanelProps = {
   result: RecreateAnalyzeResponse | null;
+  sourceVideoUrl: string | null;
   projectId: string | null;
   projectAssets: RecreateProjectAssets;
   projectKeyframes: Record<string, RecreateSceneKeyframes>;
@@ -52,6 +53,7 @@ export function RecreateResultsPanel(props: RecreateResultsPanelProps) {
     return (
       <RecreateSceneDashboard
         result={props.result}
+        sourceVideoUrl={props.sourceVideoUrl}
         projectId={props.projectId}
         projectAssets={props.projectAssets}
         projectKeyframes={props.projectKeyframes}

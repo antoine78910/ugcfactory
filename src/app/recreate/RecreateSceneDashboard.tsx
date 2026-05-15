@@ -7,18 +7,15 @@ import {
   useRef,
   useState,
   type ChangeEvent,
-  type ReactNode,
 } from "react";
 import { createPortal } from "react-dom";
 import {
   Check,
-  Clapperboard,
   Copy,
   Download,
   ImageIcon,
   Loader2,
   Package,
-  RefreshCw,
   ScrollText,
   Sparkles,
   Terminal,
@@ -30,14 +27,14 @@ import { Textarea } from "@/components/ui/textarea";
 import { type RecreateAnalyzeResponse, type RecreateScene } from "@/lib/recreateAnalysis";
 import {
   emptySceneKeyframes,
-  resolveFrameProductUrl,
   type RecreateProjectAssets,
   type RecreateSceneKeyframes,
 } from "@/lib/recreateProjects";
 import { STUDIO_VIDEO_PICKER_IDS } from "@/lib/studioVideoModelCapabilities";
 import { cn } from "@/lib/utils";
 
-import { RecreateFilePick } from "./RecreateFilePick";
+import { RecreateFrameEditorColumn } from "./RecreateFrameEditorColumn";
+import { FramePreviewThumb } from "./RecreateFramePreviewThumb";
 import {
   formatRecreateVideoModelLabel,
   pickValidRecreateImageModelId,
@@ -50,6 +47,7 @@ type ClientLogEntry = { id: string; message: string };
 
 type RecreateSceneDashboardProps = {
   result: RecreateAnalyzeResponse;
+  sourceVideoUrl: string | null;
   projectId: string | null;
   projectAssets: RecreateProjectAssets;
   projectKeyframes: Record<string, RecreateSceneKeyframes>;
@@ -93,73 +91,119 @@ function sceneIndexFromId(sceneId: string): number {
   return tail ? Number.parseInt(tail, 10) : 1;
 }
 
-function FramePreviewThumb({
-  url,
-  alt,
-  className,
-  placeholder,
-}: {
-  url?: string;
-  alt: string;
-  className?: string;
-  placeholder?: ReactNode;
+function DefaultProductToolbar(props: {
+  productUrl: string | null;
+  projectId: string | null;
+  busy: boolean;
+  onPick: (file: File) => void;
+  onApplyToAll: () => void;
 }) {
-  if (url?.trim()) {
-    return (
-      // eslint-disable-next-line @next/next/no-img-element
-      <img src={url} alt={alt} className={cn("object-cover", className)} />
-    );
-  }
+  const inputRef = useRef<HTMLInputElement>(null);
+  const url = props.productUrl?.trim() ?? "";
+
   return (
-    <div className={cn("flex items-center justify-center bg-black/40 text-white/30", className)}>
-      {placeholder ?? <Clapperboard className="size-8 opacity-40" />}
+    <div className="flex items-center gap-2">
+      <input
+        ref={inputRef}
+        type="file"
+        accept={IMAGE_ACCEPT}
+        className="sr-only"
+        disabled={!props.projectId || props.busy}
+        onChange={(e) => {
+          const f = e.target.files?.[0];
+          e.target.value = "";
+          if (f) props.onPick(f);
+        }}
+      />
+      <button
+        type="button"
+        disabled={!props.projectId || props.busy}
+        onClick={() => inputRef.current?.click()}
+        className="flex h-10 items-center gap-2 rounded-lg border border-white/15 bg-black/40 px-2 transition hover:bg-white/5"
+      >
+        <div className="flex size-8 shrink-0 items-center justify-center overflow-hidden rounded-md bg-black">
+          {url ? (
+            <FramePreviewThumb url={url} alt="" className="max-h-full max-w-full" fit="contain" />
+          ) : (
+            <Package className="size-4 text-white/35" />
+          )}
+        </div>
+        <span className="text-xs text-white/80">
+          {props.busy ? "Uploading…" : url ? "Default product" : "Set default product"}
+        </span>
+      </button>
+      <Button
+        type="button"
+        size="sm"
+        variant="secondary"
+        className="h-8 border-white/15 bg-white/10 text-xs text-white"
+        disabled={!props.projectId || !url}
+        onClick={props.onApplyToAll}
+      >
+        <Package className="mr-1.5 size-3.5" />
+        Apply to all
+      </Button>
     </div>
   );
 }
 
-function HoverScenePreview({
+function SceneVideoHoverPreview({
+  videoUrl,
   scene,
   anchorRect,
   formatSeconds,
 }: {
+  videoUrl: string;
   scene: RecreateScene;
   anchorRect: DOMRect;
   formatSeconds: (value: number) => string;
 }) {
+  const videoRef = useRef<HTMLVideoElement>(null);
   const pad = 12;
-  const width = 320;
+  const width = 360;
   const left = Math.min(
     Math.max(pad, anchorRect.left + anchorRect.width / 2 - width / 2),
     window.innerWidth - width - pad,
   );
   const top = anchorRect.bottom + 8;
 
+  useEffect(() => {
+    const v = videoRef.current;
+    if (!v) return;
+    const start = () => {
+      v.currentTime = Math.max(0, scene.startSec);
+      void v.play().catch(() => {});
+    };
+    if (v.readyState >= 1) start();
+    else v.addEventListener("loadedmetadata", start, { once: true });
+    return () => {
+      v.pause();
+    };
+  }, [scene.sceneId, scene.startSec, videoUrl]);
+
   return createPortal(
     <div
-      className="pointer-events-none fixed z-[80] overflow-hidden rounded-xl border border-white/15 bg-[#141416] shadow-2xl shadow-black/60"
+      className="pointer-events-none fixed z-[80] overflow-hidden rounded-xl border border-white/15 bg-black shadow-2xl shadow-black/70"
       style={{ left, top, width }}
       role="tooltip"
     >
-      <div className="grid grid-cols-2 gap-px bg-white/10">
-        <div className="space-y-1 bg-[#141416] p-2">
-          <p className="text-[9px] font-semibold uppercase tracking-wider text-white/45">Start</p>
-          <FramePreviewThumb
-            url={scene.sceneStartImageUrl}
-            alt=""
-            className="aspect-video w-full rounded-md border border-white/10"
-          />
-        </div>
-        <div className="space-y-1 bg-[#141416] p-2">
-          <p className="text-[9px] font-semibold uppercase tracking-wider text-white/45">End</p>
-          <FramePreviewThumb
-            url={scene.sceneEndImageUrl}
-            alt=""
-            className="aspect-video w-full rounded-md border border-white/10"
-          />
-        </div>
-      </div>
-      <div className="border-t border-white/10 px-3 py-2">
-        <p className="line-clamp-2 text-xs text-white/80">{scene.shortDescription}</p>
+      <video
+        ref={videoRef}
+        src={videoUrl}
+        muted
+        playsInline
+        preload="metadata"
+        className="aspect-video w-full bg-black object-contain"
+        onTimeUpdate={(e) => {
+          const v = e.currentTarget;
+          if (v.currentTime >= scene.endSec - 0.05) {
+            v.currentTime = scene.startSec;
+            void v.play().catch(() => {});
+          }
+        }}
+      />
+      <div className="border-t border-white/10 bg-[#141416] px-3 py-2">
+        <p className="line-clamp-2 text-xs text-white/85">{scene.shortDescription}</p>
         <p className="mt-0.5 text-[10px] text-white/45">
           {formatSeconds(scene.startSec)} → {formatSeconds(scene.endSec)}
         </p>
@@ -199,8 +243,8 @@ function SceneTimelineCard(props: {
       <span className="absolute left-2 top-2 z-10 rounded bg-black/70 px-1.5 py-0.5 text-[10px] font-semibold text-white">
         {index}
       </span>
-      <div className="relative aspect-[4/3] w-full bg-black/30">
-        <FramePreviewThumb url={thumb} alt="" className="h-full w-full" />
+      <div className="relative flex h-[88px] w-full items-center justify-center bg-black">
+        <FramePreviewThumb url={thumb} alt="" className="max-h-full max-w-full" fit="contain" />
       </div>
       <div className="flex flex-1 flex-col gap-1 p-2">
         <p className="text-[10px] text-white/50">
@@ -214,114 +258,6 @@ function SceneTimelineCard(props: {
         </span>
       </div>
     </button>
-  );
-}
-
-function FrameEditorColumn(props: {
-  scene: RecreateScene;
-  role: "start" | "end";
-  referenceUrl: string | undefined;
-  slot: RecreateSceneKeyframes["start"];
-  projectAssets: RecreateProjectAssets;
-  projectId: string | null;
-  frameUploadBusy: string | null;
-  keyframeRunning: string | null;
-  onUploadFrameProduct: (sceneId: string, role: "start" | "end", file: File) => void;
-  onGenerateKeyframe: (sceneId: string, role: "start" | "end", force: boolean) => void;
-}) {
-  const {
-    scene,
-    role,
-    referenceUrl,
-    slot,
-    projectAssets,
-    projectId,
-    frameUploadBusy,
-    keyframeRunning,
-    onUploadFrameProduct,
-    onGenerateKeyframe,
-  } = props;
-
-  const busyKey = frameKey(scene.sceneId, role);
-  const uploadBusy = frameUploadBusy === busyKey;
-  const genBusy = keyframeRunning === busyKey;
-  const productUrl = resolveFrameProductUrl(slot, projectAssets.productImageUrl);
-  const beat = role === "start" ? scene.startDescription : scene.endDescription;
-  const displayUrl = slot.outputUrl ?? referenceUrl;
-  const hasReference = Boolean(referenceUrl?.trim());
-  const fileInputRef = useRef<HTMLInputElement>(null);
-
-  return (
-    <div className="flex min-h-0 min-w-0 flex-1 flex-col rounded-xl border border-white/10 bg-black/25">
-      <div className="border-b border-white/10 px-3 py-2">
-        <span className="text-[10px] font-semibold uppercase tracking-[0.14em] text-white/55">
-          {role} frame
-        </span>
-      </div>
-      <div className="flex min-h-0 flex-1 flex-col gap-2 p-3">
-        <div className="relative aspect-video w-full shrink-0 overflow-hidden rounded-lg border border-white/10 bg-black/40">
-          <FramePreviewThumb
-            url={displayUrl}
-            alt=""
-            className="h-full w-full"
-            placeholder={
-              role === "end" ? (
-                <div className="h-full w-full bg-[repeating-conic-gradient(#333_0%_25%,#222_0%_50%)] bg-[length:12px_12px] opacity-60" />
-              ) : undefined
-            }
-          />
-        </div>
-        <p className="line-clamp-3 min-h-[2.75rem] flex-1 text-[11px] leading-snug text-white/60">
-          {beat ?? "—"}
-        </p>
-        <div className="flex shrink-0 flex-wrap gap-2">
-          <input
-            ref={fileInputRef}
-            type="file"
-            accept={IMAGE_ACCEPT}
-            className="sr-only"
-            disabled={!projectId || uploadBusy}
-            onChange={(e) => {
-              const f = e.target.files?.[0];
-              e.target.value = "";
-              if (f) onUploadFrameProduct(scene.sceneId, role, f);
-            }}
-          />
-          <Button
-            type="button"
-            size="sm"
-            variant="secondary"
-            disabled={!projectId || uploadBusy}
-            onClick={() => fileInputRef.current?.click()}
-            className="h-8 min-w-0 flex-1 border-white/15 bg-white/10 text-xs text-white hover:bg-white/15"
-          >
-            {uploadBusy ? (
-              <Loader2 className="mr-1.5 size-3.5 animate-spin" />
-            ) : productUrl ? (
-              <Check className="mr-1.5 size-3.5 text-emerald-400" />
-            ) : (
-              <Package className="mr-1.5 size-3.5" />
-            )}
-            {productUrl ? "Product set" : "Set product"}
-          </Button>
-          <Button
-            type="button"
-            size="sm"
-            variant="secondary"
-            disabled={!projectId || !hasReference || !productUrl || uploadBusy || genBusy}
-            onClick={() => onGenerateKeyframe(scene.sceneId, role, Boolean(slot.outputUrl))}
-            className="h-8 shrink-0 border-white/15 bg-white/10 px-3 text-xs text-white hover:bg-white/15"
-          >
-            {genBusy ? (
-              <Loader2 className="mr-1.5 size-3.5 animate-spin" />
-            ) : (
-              <RefreshCw className="mr-1.5 size-3.5" />
-            )}
-            Regenerate
-          </Button>
-        </div>
-      </div>
-    </div>
   );
 }
 
@@ -376,27 +312,13 @@ export function RecreateSceneDashboard(props: RecreateSceneDashboardProps) {
       {/* Toolbar */}
       <div className="flex shrink-0 flex-wrap items-center gap-2 border-b border-white/10 px-3 py-2">
         <div className="flex min-w-0 flex-1 flex-wrap items-center gap-2">
-          <RecreateFilePick
-            accept={IMAGE_ACCEPT}
-            label="Default product"
-            variant="compact"
-            disabled={!props.projectId}
+          <DefaultProductToolbar
+            productUrl={props.projectAssets.productImageUrl}
+            projectId={props.projectId}
             busy={props.globalUploadBusy}
-            previewUrl={props.projectAssets.productImageUrl}
             onPick={(file) => void props.onUploadProjectAsset(file, "productImageUrl")}
-            className="w-auto max-w-[140px] space-y-1"
+            onApplyToAll={() => props.onApplyDefaultProductToAllFrames()}
           />
-          <Button
-            type="button"
-            size="sm"
-            variant="secondary"
-            className="h-8 border-white/15 bg-white/10 text-xs text-white"
-            disabled={!props.projectId || !props.projectAssets.productImageUrl}
-            onClick={() => props.onApplyDefaultProductToAllFrames()}
-          >
-            <Package className="mr-1.5 size-3.5" />
-            Apply to all
-          </Button>
         </div>
 
         <div className="flex flex-wrap items-center gap-2">
@@ -467,8 +389,13 @@ export function RecreateSceneDashboard(props: RecreateSceneDashboardProps) {
         </div>
       </div>
 
-      {hoverScene && hoverRect ? (
-        <HoverScenePreview scene={hoverScene} anchorRect={hoverRect} formatSeconds={props.formatSeconds} />
+      {hoverScene && hoverRect && props.sourceVideoUrl ? (
+        <SceneVideoHoverPreview
+          videoUrl={props.sourceVideoUrl}
+          scene={hoverScene}
+          anchorRect={hoverRect}
+          formatSeconds={props.formatSeconds}
+        />
       ) : null}
 
       {/* Scene editor */}
@@ -516,7 +443,7 @@ export function RecreateSceneDashboard(props: RecreateSceneDashboardProps) {
         </div>
 
         <div className="grid min-h-0 flex-1 grid-cols-1 gap-3 overflow-hidden p-3 md:grid-cols-2">
-          <FrameEditorColumn
+          <RecreateFrameEditorColumn
             scene={selectedScene}
             role="start"
             referenceUrl={selectedScene.sceneStartImageUrl}
@@ -528,7 +455,7 @@ export function RecreateSceneDashboard(props: RecreateSceneDashboardProps) {
             onUploadFrameProduct={props.onUploadFrameProduct}
             onGenerateKeyframe={props.onGenerateKeyframe}
           />
-          <FrameEditorColumn
+          <RecreateFrameEditorColumn
             scene={selectedScene}
             role="end"
             referenceUrl={selectedScene.sceneEndImageUrl}
