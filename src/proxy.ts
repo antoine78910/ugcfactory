@@ -17,7 +17,7 @@ function isStudioHost(hostHeader: string): boolean {
 }
 
 /** Routes that have their own `src/app/<name>` pages, do not rewrite to `/app/*`. */
-function isExcludedFromStudioRewrite(pathname: string): boolean {
+export function isExcludedFromStudioRewrite(pathname: string): boolean {
   if (pathname.startsWith("/auth")) return true;
   const first = pathname.split("/").filter(Boolean)[0] ?? "";
   return new Set([
@@ -39,11 +39,14 @@ function isExcludedFromStudioRewrite(pathname: string): boolean {
     "workflow",
     /** Onboarding + setup, standalone pages, not part of the studio shell. */
     "onboarding",
+    "projects-onboarding",
     "setup",
     /** Clipping studio, intentionally hidden / unlisted, must stay outside the studio shell. */
     "clipping",
     /** Intelligence dashboard — standalone page, must not rewrite to /app/intelligence or catch-all shows Link to Ad. */
     "intelligence",
+    /** Standalone GPT recreate analyzer page; must not fall into the studio shell rewrite. */
+    "recreate",
   ]).has(first);
 }
 
