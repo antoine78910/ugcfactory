@@ -7,7 +7,7 @@ import { createStudioKieImageTasks } from "@/lib/studioKieImageTask";
 import { pollKieMarketImageTaskForUrls } from "@/lib/recreateKieImagePoll";
 import type { RecreateAnalyzeResponse, RecreateScene } from "@/lib/recreateAnalysis";
 import {
-  buildRecreateProductSwapPrompt,
+  buildRecreateKeyframeGeneration,
   emptySceneKeyframes,
   resolveFrameProductUrl,
   type RecreateSceneKeyframes,
@@ -119,15 +119,22 @@ export async function POST(
     });
   }
 
-  const prompt = buildRecreateProductSwapPrompt({ scene, role });
-  const imageUrls = collectRefUrls([baseFrame, productUrl, packaging, logo], 16);
+  const { prompt, imageUrls } = buildRecreateKeyframeGeneration({
+    scene,
+    role,
+    sceneFrameUrl: baseFrame,
+    productUrl,
+    packagingUrl: packaging || null,
+    logoUrl: logo || null,
+  });
+  const safeImageUrls = collectRefUrls(imageUrls, 16);
 
   let taskId: string | undefined;
   try {
     const created = await createStudioKieImageTasks({
       prompt,
       model: "gpt_image_2_image_to_image",
-      imageUrls,
+      imageUrls: safeImageUrls,
       aspectRatio: "auto",
     });
     taskId = created.taskId ?? created.taskIds?.[0];

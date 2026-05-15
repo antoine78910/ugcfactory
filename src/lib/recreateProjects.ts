@@ -67,29 +67,95 @@ export function emptySceneKeyframes(): RecreateSceneKeyframes {
   };
 }
 
+export type RecreateKeyframeGenerationInput = {
+  /** input_urls[0] = scene frame, [1] = product, optional packaging/logo after. */
+  imageUrls: string[];
+  prompt: string;
+};
+
+function trimOneLine(s: string, max = 220): string {
+  const t = s.replace(/\s+/g, " ").trim();
+  if (!t) return "";
+  return t.length <= max ? t : `${t.slice(0, max - 1)}…`;
+}
+
+/**
+ * GPT Image 2 i2i: image 1 = scene still, image 2 = hero product (required), optional packaging/logo.
+ * Prompt explicitly maps @image indices so the model swaps product instead of re-describing the whole scene.
+ */
+export function buildRecreateKeyframeGeneration(opts: {
+  scene: RecreateScene;
+  role: "start" | "end";
+  sceneFrameUrl: string;
+  productUrl: string;
+  packagingUrl?: string | null;
+  logoUrl?: string | null;
+}): RecreateKeyframeGenerationInput {
+  const { scene, role } = opts;
+  const roleLabel = role === "start" ? "start" : "end";
+  const beat = trimOneLine(
+    role === "start" ? (scene.startDescription ?? "") : (scene.endDescription ?? ""),
+    180,
+  );
+  const style = (scene.visualStyleCategory ?? "unknown").replace(/_/g, " ");
+
+  const hasPackaging = /^https?:\/\//i.test((opts.packagingUrl ?? "").trim());
+  const hasLogo = /^https?:\/\//i.test((opts.logoUrl ?? "").trim());
+
+  const imageLines = [
+    "IMAGE 1 — Scene frame (layout reference): This is the exact " +
+      `${roleLabel} frame from the reference ad (${scene.sceneId}). ` +
+      "Keep the same camera angle, framing, composition, background, lighting, color grade, and character/talent blocking as IMAGE 1. " +
+      "Do not change the set layout or add new watermarks.",
+    "IMAGE 2 — Hero product (swap target): The client's real product. Replace ONLY the product or pack visible in IMAGE 1 with the product shown in IMAGE 2. " +
+      "Match perspective, scale, placement, and lighting to IMAGE 1. Use accurate colors, label art, and materials from IMAGE 2.",
+  ];
+
+  if (hasPackaging) {
+    imageLines.push(
+      "IMAGE 3 — Packaging reference: If packaging appears in the shot, match this pack design (shape, label, colors) when integrating the product.",
+    );
+  }
+  if (hasLogo) {
+    imageLines.push(
+      `IMAGE ${hasPackaging ? 4 : 3} — Logo reference: Use this logo only where a brand mark belongs; do not add random text.`,
+    );
+  }
+
+  const contextBits = [
+    beat ? `Scene beat: ${beat}.` : "",
+    `Visual style to preserve: ${style}.`,
+    trimOneLine(scene.recreationNotes ?? "", 160)
+      ? `Style notes: ${trimOneLine(scene.recreationNotes ?? "", 160)}.`
+      : "",
+  ].filter(Boolean);
+
+  const prompt = [
+    "Product swap on one advertising still. Output a single frame.",
+    "",
+    ...imageLines,
+    "",
+    "Rules: Edit IMAGE 1 in place — swap the product using IMAGE 2. Everything else stays as in IMAGE 1.",
+    "No extra captions, UI chrome, or competitor branding unless already in IMAGE 1.",
+    ...contextBits,
+  ].join("\n");
+
+  const imageUrls = [opts.sceneFrameUrl.trim(), opts.productUrl.trim()];
+  if (hasPackaging) imageUrls.push((opts.packagingUrl ?? "").trim());
+  if (hasLogo) imageUrls.push((opts.logoUrl ?? "").trim());
+
+  return { imageUrls, prompt };
+}
+
+/** @deprecated Use buildRecreateKeyframeGeneration */
 export function buildRecreateProductSwapPrompt(opts: {
   scene: RecreateScene;
   role: "start" | "end";
 }): string {
-  const { scene, role } = opts;
-  const beat = role === "start" ? scene.startDescription ?? "" : scene.endDescription ?? "";
-  const style = scene.visualStyleCategory ?? "unknown";
-  const bg = scene.backgroundDescription ?? "";
-  const light = scene.lightingAndGradeNotes ?? "";
-  const notes = scene.recreationNotes ?? "";
-
-  return [
-    "Recreate this advertising frame for a new brand.",
-    `Shot: ${scene.sceneId} (${role} of scene).`,
-    `Keep the same camera angle, framing, background layout, lighting direction, color grade, and talent blocking as reference image 1.`,
-    "Replace any generic or competitor product with the product, packaging, and logo shown in the following reference images.",
-    "Do not add watermarks or UI overlays.",
-    `Production style lane: ${style}.`,
-    beat ? `What we see in this beat: ${beat}` : "",
-    bg ? `Background / set: ${bg}` : "",
-    light ? `Lighting & grade: ${light}` : "",
-    notes ? `Recreation notes: ${notes}` : "",
-  ]
-    .filter(Boolean)
-    .join(" ");
+  return buildRecreateKeyframeGeneration({
+    scene: opts.scene,
+    role: opts.role,
+    sceneFrameUrl: "https://placeholder.invalid/frame",
+    productUrl: "https://placeholder.invalid/product",
+  }).prompt;
 }
