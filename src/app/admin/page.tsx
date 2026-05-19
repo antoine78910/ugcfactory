@@ -1278,7 +1278,7 @@ export default function AdminPage() {
                 https://youry.io/start
               </a>
               {" "}
-              (redirige vers signup + cookie 30j pour param <code className="rounded bg-white/10 px-1">entry=start</code> sur
+              (redirige vers la LP + cookie 30j pour param <code className="rounded bg-white/10 px-1">entry=start</code> sur
               les goals).
             </p>
           </div>

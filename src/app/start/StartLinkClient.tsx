@@ -3,18 +3,18 @@
 import { useEffect } from "react";
 import { Loader2 } from "lucide-react";
 import { DATAFAST_GOALS, trackDatafastGoal } from "@/lib/analytics/datafastGoals";
+import { marketingLandingUrl } from "@/lib/marketingOrigin";
 import { setStartLinkEntryCookie } from "@/lib/analytics/startLinkRef";
-import { studioAppPath } from "@/lib/studioAppOrigin";
 
 /**
- * Short link landing (youry.io/start): track visit, persist attribution, redirect to signup.
+ * Short link (youry.io/start): track visit, persist attribution, redirect to the marketing LP.
  */
 export default function StartLinkClient() {
   useEffect(() => {
     setStartLinkEntryCookie();
     trackDatafastGoal(DATAFAST_GOALS.start_link_visit, { surface: "start" });
 
-    const target = new URL(studioAppPath("/signup"));
+    const target = new URL(marketingLandingUrl());
     const qs = window.location.search;
     if (qs) {
       const incoming = new URLSearchParams(qs);
