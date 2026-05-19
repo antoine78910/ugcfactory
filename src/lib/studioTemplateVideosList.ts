@@ -21,6 +21,9 @@ const APP_TEMPLATE_PREVIEW_SUBDIR = "app-template-preview";
 /** Basenames (no extension) hidden from the App templates grid only. */
 const APP_TEMPLATE_LISTING_EXCLUDED_BASE_NAMES = new Set(["0504 (1)(2)"]);
 
+/** Clipping-only previews — never listed in Ads Studio product templates. */
+const PRODUCT_TEMPLATE_LISTING_EXCLUDED_BASE_NAMES = new Set(["0510"]);
+
 function toLabel(filename: string): string {
   const base = filename.replace(/\.[^.]+$/, "");
   if (base.trim().toLowerCase() === "ugc") return "UGC Woman";
@@ -66,6 +69,11 @@ function isExcludedFromAppTemplateListing(filename: string): boolean {
   return APP_TEMPLATE_LISTING_EXCLUDED_BASE_NAMES.has(base);
 }
 
+function isExcludedFromProductTemplateListing(filename: string): boolean {
+  const base = toBaseNameKey(filename);
+  return PRODUCT_TEMPLATE_LISTING_EXCLUDED_BASE_NAMES.has(base);
+}
+
 function isClippingNamedTemplate(filename: string): boolean {
   const base = toBaseNameKey(filename);
   return base.includes("clipping");
@@ -89,7 +97,11 @@ export async function listStudioTemplateVideosFromDisk(
     const clippingBaseNames = new Set(clippingItems.map((item) => toBaseNameKey(item.filename)));
     return productItems.filter((item) => {
       const base = toBaseNameKey(item.filename);
-      return !isClippingNamedTemplate(item.filename) && !clippingBaseNames.has(base);
+      return (
+        !isClippingNamedTemplate(item.filename) &&
+        !isExcludedFromProductTemplateListing(item.filename) &&
+        !clippingBaseNames.has(base)
+      );
     });
   }
   const appMain = await listTemplateVideosInPublicStudioSubdir(APP_TEMPLATE_SUBDIR);
