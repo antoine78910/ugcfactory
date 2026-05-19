@@ -850,7 +850,7 @@ export default function AdminPage() {
               <h1 className="text-lg font-bold tracking-tight">Admin Dashboard</h1>
               <p className="text-xs text-white/40">
                 {tab === "start-link"
-                  ? "youry.io/start — clics & conversions (DataFast, entry page /start)"
+                  ? "youry.io/start — clics, inscriptions et paiements (entrée /start)"
                   : tab === "credits"
                   ? "Credit gift links & redemption audit"
                   : tab === "templates"
@@ -941,30 +941,26 @@ export default function AdminPage() {
         {tab === "start-link" && startLinkStats && (
           <div className="mt-6 grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
             <StatCard
-              label="Visites /start"
-              value={Math.max(startLinkStats.pageVisits, startLinkStats.goalVisits)}
+              label="Clics /start"
+              value={startLinkStats.clicks}
               icon={MousePointerClick}
               accent="bg-sky-500/20 text-sky-300"
             />
             <StatCard
               label="Inscriptions"
-              value={
-                startLinkStats.funnel.find((r) => r.goal === "signup")?.visitors ?? 0
-              }
+              value={startLinkStats.signups}
               icon={Users}
               accent="bg-violet-500/20 text-violet-300"
             />
             <StatCard
-              label="Abos payés"
-              value={
-                startLinkStats.funnel.find((r) => r.goal === "subscription_paid")?.visitors ?? 0
-              }
+              label="Paiements"
+              value={startLinkStats.payments}
               icon={Zap}
               accent="bg-emerald-500/20 text-emerald-300"
             />
             <StatCard
-              label="Revenu attribué (/start)"
-              value={Math.round(startLinkStats.pageRevenue)}
+              label="Revenu (entrée /start)"
+              value={Math.round(startLinkStats.revenue)}
               icon={Activity}
               accent="bg-amber-500/20 text-amber-300"
             />
@@ -1197,10 +1193,9 @@ export default function AdminPage() {
           <div className="mt-6 space-y-4">
             <div className="flex flex-wrap items-center justify-between gap-3">
               <p className="text-[11px] text-white/45 max-w-2xl">
-                Funnel pour les visiteurs dont la <strong className="text-white/70">page d&apos;entrée</strong> est{" "}
-                <code className="rounded bg-white/10 px-1 py-0.5 text-[10px]">/start</code> (DataFast{" "}
-                <code className="rounded bg-white/10 px-1 py-0.5 text-[10px]">entry_page=/start</code>
-                ). Les goals existants (signup, trial, abo…) sont agrégés côté API.
+                Visiteurs dont la <strong className="text-white/70">page d&apos;entrée</strong> est{" "}
+                <code className="rounded bg-white/10 px-1 py-0.5 text-[10px]">/start</code>. Taux de conversion =
+                étape ÷ clics sur le lien court.
               </p>
               <div className="flex flex-wrap items-center gap-2">
                 {(["7d", "30d", "all"] as const).map((p) => (
@@ -1241,23 +1236,19 @@ export default function AdminPage() {
             ) : null}
             {startLinkStats ? (
               <div className="overflow-x-auto rounded-xl border border-white/[0.08]">
-                <table className="w-full min-w-[720px] text-left text-xs">
+                <table className="w-full min-w-[480px] text-left text-xs">
                   <thead>
                     <tr className="border-b border-white/10 text-[10px] uppercase tracking-wide text-white/40">
                       <th className="px-3 py-2.5 font-semibold">Étape</th>
-                      <th className="px-3 py-2.5 font-semibold">Goal</th>
-                      <th className="px-3 py-2.5 font-semibold text-right">Visiteurs</th>
-                      <th className="px-3 py-2.5 font-semibold text-right">Complétions</th>
-                      <th className="px-3 py-2.5 font-semibold text-right">% vs clics</th>
+                      <th className="px-3 py-2.5 font-semibold text-right">Nombre</th>
+                      <th className="px-3 py-2.5 font-semibold text-right">Taux vs clics</th>
                     </tr>
                   </thead>
                   <tbody>
-                    {startLinkStats.funnel.map((row) => (
-                      <tr key={row.goal} className="border-b border-white/5 transition hover:bg-white/[0.02]">
-                        <td className="px-3 py-2.5 text-white/85">{row.label}</td>
-                        <td className="px-3 py-2.5 font-mono text-[10px] text-white/40">{row.goal}</td>
-                        <td className="px-3 py-2.5 text-right tabular-nums text-white/80">{row.visitors}</td>
-                        <td className="px-3 py-2.5 text-right tabular-nums text-white/60">{row.completions}</td>
+                    {startLinkStats.metrics.map((row) => (
+                      <tr key={row.key} className="border-b border-white/5 transition hover:bg-white/[0.02]">
+                        <td className="px-3 py-2.5 font-medium text-white/85">{row.label}</td>
+                        <td className="px-3 py-2.5 text-right tabular-nums text-white/80">{row.count}</td>
                         <td className="px-3 py-2.5 text-right tabular-nums text-violet-200/90">
                           {row.rateFromClicksPct != null ? `${row.rateFromClicksPct}%` : "—"}
                         </td>

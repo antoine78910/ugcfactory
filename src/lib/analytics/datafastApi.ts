@@ -7,11 +7,12 @@ const DATAFAST_API_BASE = "https://datafa.st/api/v1";
 
 export type StartLinkStatsPeriod = "7d" | "30d" | "all";
 
-export type StartLinkFunnelRow = {
-  goal: string;
+export type StartLinkMetricKey = "clicks" | "signups" | "payments";
+
+export type StartLinkMetricRow = {
+  key: StartLinkMetricKey;
   label: string;
-  completions: number;
-  visitors: number;
+  count: number;
   rateFromClicksPct: number | null;
 };
 
@@ -19,11 +20,11 @@ export type StartLinkStatsPayload = {
   period: StartLinkStatsPeriod;
   configured: boolean;
   error?: string;
-  pageVisits: number;
-  pagePayments: number;
-  pageRevenue: number;
-  goalVisits: number;
-  funnel: StartLinkFunnelRow[];
+  clicks: number;
+  signups: number;
+  payments: number;
+  revenue: number;
+  metrics: StartLinkMetricRow[];
 };
 
 type DatafastGoalsApiRow = {
@@ -46,20 +47,8 @@ type DatafastApiEnvelope<T> = {
   error?: { message?: string };
 };
 
-const START_LINK_FUNNEL: Array<{ goal: string; label: string }> = [
-  { goal: "start_link_visit", label: "Clic /start (goal)" },
-  { goal: "view_signup", label: "Page signup vue" },
-  { goal: "signup", label: "Inscription" },
-  { goal: "signin", label: "Connexion" },
-  { goal: "trial_view_setup", label: "Setup trial vu" },
-  { goal: "trial_initiate_checkout", label: "Checkout trial lancé" },
-  { goal: "trial_paid_usd", label: "Trial payé (USD)" },
-  { goal: "trial_paid_eur", label: "Trial payé (EUR)" },
-  { goal: "onboarding_start_for_free_clicked", label: "Start for free" },
-  { goal: "subscription_initiate_checkout", label: "Checkout abo lancé" },
-  { goal: "subscription_paid", label: "Abonnement payé" },
-  { goal: "lta_url_submitted", label: "Link to Ad (URL)" },
-];
+const SIGNUP_GOAL = "signup";
+const PAYMENT_GOALS = ["subscription_paid", "trial_paid_usd", "trial_paid_eur"] as const;
 
 function periodQuery(period: StartLinkStatsPeriod): Record<string, string> {
   if (period === "all") return {};
@@ -123,88 +112,98 @@ function goalsByName(rows: DatafastGoalsApiRow[]): Map<string, DatafastGoalsApiR
   return map;
 }
 
-function sumStartPageVisits(rows: DatafastPagesApiRow[]): {
-  visitors: number;
-  payments: number;
-  revenue: number;
-} {
+function goalVisitors(map: Map<string, DatafastGoalsApiRow>, goal: string): number {
+  const row = map.get(goal);
+  return row?.visitors ?? row?.completions ?? 0;
+}
+
+function sumStartPathVisits(rows: DatafastPagesApiRow[]): number {
   let visitors = 0;
+  for (const row of rows) {
+    if ((row.path ?? "").trim() === "/start") visitors += row.visitors ?? 0;
+  }
+  return visitors;
+}
+
+function sumCohortPayments(rows: DatafastPagesApiRow[]): { payments: number; revenue: number } {
   let payments = 0;
   let revenue = 0;
   for (const row of rows) {
-    const path = (row.path ?? "").trim();
-    if (path !== "/start") continue;
-    visitors += row.visitors ?? 0;
     payments += row.payments ?? 0;
     revenue += row.revenue ?? 0;
   }
-  return { visitors, payments, revenue };
+  return { payments, revenue };
+}
+
+function rateFromClicks(count: number, clicks: number): number | null {
+  if (clicks <= 0) return count > 0 ? 0 : null;
+  if (count <= 0) return null;
+  return Math.round((count / clicks) * 1000) / 10;
+}
+
+function buildMetrics(clicks: number, signups: number, payments: number): StartLinkMetricRow[] {
+  return [
+    { key: "clicks", label: "Clics (/start)", count: clicks, rateFromClicksPct: clicks > 0 ? 100 : null },
+    { key: "signups", label: "Inscriptions", count: signups, rateFromClicksPct: rateFromClicks(signups, clicks) },
+    { key: "payments", label: "Paiements", count: payments, rateFromClicksPct: rateFromClicks(payments, clicks) },
+  ];
+}
+
+function emptyPayload(period: StartLinkStatsPeriod, error?: string): StartLinkStatsPayload {
+  return {
+    period,
+    configured: Boolean(getDatafastApiKey()),
+    error,
+    clicks: 0,
+    signups: 0,
+    payments: 0,
+    revenue: 0,
+    metrics: buildMetrics(0, 0, 0),
+  };
 }
 
 export async function fetchStartLinkStats(period: StartLinkStatsPeriod): Promise<StartLinkStatsPayload> {
-  const configured = Boolean(getDatafastApiKey());
-  if (!configured) {
-    return {
-      period,
-      configured: false,
-      error: "Ajoute DATAFAST_API_KEY (Website settings → API) dans Vercel.",
-      pageVisits: 0,
-      pagePayments: 0,
-      pageRevenue: 0,
-      goalVisits: 0,
-      funnel: START_LINK_FUNNEL.map(({ goal, label }) => ({
-        goal,
-        label,
-        completions: 0,
-        visitors: 0,
-        rateFromClicksPct: null,
-      })),
-    };
+  if (!getDatafastApiKey()) {
+    return emptyPayload(period, "Ajoute DATAFAST_API_KEY (Website settings → API) dans Vercel.");
   }
 
   const base = { limit: "200", ...periodQuery(period) };
 
-  const [pagesRes, goalsRes] = await Promise.all([
-    datafastGet<DatafastPagesApiRow[]>("/analytics/pages", {
-      ...base,
-      page: "/start",
-    }),
-    datafastGet<DatafastGoalsApiRow[]>("/analytics/goals", {
-      ...base,
-      entry_page: "/start",
-    }),
+  const [startPageRes, cohortPageRes, goalsRes] = await Promise.all([
+    datafastGet<DatafastPagesApiRow[]>("/analytics/pages", { ...base, page: "/start" }),
+    datafastGet<DatafastPagesApiRow[]>("/analytics/pages", { ...base, entry_page: "/start" }),
+    datafastGet<DatafastGoalsApiRow[]>("/analytics/goals", { ...base, entry_page: "/start" }),
   ]);
 
-  const firstError = !pagesRes.ok ? pagesRes.message : !goalsRes.ok ? goalsRes.message : undefined;
+  const firstError = !startPageRes.ok
+    ? startPageRes.message
+    : !cohortPageRes.ok
+      ? cohortPageRes.message
+      : !goalsRes.ok
+        ? goalsRes.message
+        : undefined;
 
-  const pageTotals = pagesRes.ok ? sumStartPageVisits(pagesRes.data) : { visitors: 0, payments: 0, revenue: 0 };
   const goalMap = goalsRes.ok ? goalsByName(goalsRes.data) : new Map<string, DatafastGoalsApiRow>();
 
-  const goalVisits =
-    goalMap.get("start_link_visit")?.visitors ??
-    goalMap.get("start_link_visit")?.completions ??
-    0;
+  const clicks = Math.max(
+    startPageRes.ok ? sumStartPathVisits(startPageRes.data) : 0,
+    goalVisitors(goalMap, "start_link_visit"),
+  );
 
-  const clickBaseline = Math.max(pageTotals.visitors, goalVisits, 1);
+  const signups = goalVisitors(goalMap, SIGNUP_GOAL);
 
-  const funnel: StartLinkFunnelRow[] = START_LINK_FUNNEL.map(({ goal, label }) => {
-    const row = goalMap.get(goal);
-    const completions = row?.completions ?? 0;
-    const visitors = row?.visitors ?? 0;
-    const denom = clickBaseline > 0 ? clickBaseline : null;
-    const rateFromClicksPct =
-      denom && visitors > 0 ? Math.round((visitors / denom) * 1000) / 10 : visitors > 0 ? 0 : null;
-    return { goal, label, completions, visitors, rateFromClicksPct };
-  });
+  const paymentGoalsTotal = PAYMENT_GOALS.reduce((sum, g) => sum + goalVisitors(goalMap, g), 0);
+  const cohortTotals = cohortPageRes.ok ? sumCohortPayments(cohortPageRes.data) : { payments: 0, revenue: 0 };
+  const payments = Math.max(cohortTotals.payments, paymentGoalsTotal);
 
   return {
     period,
     configured: true,
     error: firstError,
-    pageVisits: pageTotals.visitors,
-    pagePayments: pageTotals.payments,
-    pageRevenue: pageTotals.revenue,
-    goalVisits,
-    funnel,
+    clicks,
+    signups,
+    payments,
+    revenue: cohortTotals.revenue,
+    metrics: buildMetrics(clicks, signups, payments),
   };
 }
