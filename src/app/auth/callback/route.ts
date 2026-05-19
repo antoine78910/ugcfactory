@@ -7,6 +7,9 @@ import { getSupabaseAnonKey, getSupabaseUrl } from "@/lib/supabase/env";
 import { brevoUpsertContact, brevoTrackEvent } from "@/lib/brevo";
 import { normalizeDubClickId } from "@/lib/dub/clickId";
 import { trackDubLeadServer } from "@/lib/dub/trackLeadServer";
+import { START_LINK_VISITOR_COOKIE } from "@/lib/analytics/startLinkRef";
+import { recordStartLinkSignup } from "@/lib/analytics/startLinkServer";
+import { createSupabaseServiceClient } from "@/lib/supabase/admin";
 
 /** Same-origin path + query only; prevents open redirects. */
 function resolveSafeNextRedirect(reqUrl: URL): URL {
@@ -186,6 +189,18 @@ export async function GET(req: NextRequest) {
                 eventName: "Sign Up",
                 mode: clickId ? "wait" : "deferred",
               });
+
+              const startVisitorId = req.cookies.get(START_LINK_VISITOR_COOKIE)?.value?.trim();
+              if (startVisitorId) {
+                const admin = createSupabaseServiceClient();
+                if (admin) {
+                  try {
+                    await recordStartLinkSignup(admin, startVisitorId, userData.user.id);
+                  } catch (e) {
+                    console.warn("[start-link] oauth signup attribution failed", e);
+                  }
+                }
+              }
             }
           }
         }

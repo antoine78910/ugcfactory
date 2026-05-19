@@ -2,28 +2,28 @@
 
 import { useEffect } from "react";
 import { Loader2 } from "lucide-react";
-import { DATAFAST_GOALS, trackDatafastGoal } from "@/lib/analytics/datafastGoals";
+import { ensureStartLinkVisitorCookie, setStartLinkEntryCookie } from "@/lib/analytics/startLinkRef";
 import { marketingLandingUrl } from "@/lib/marketingOrigin";
-import { setStartLinkEntryCookie } from "@/lib/analytics/startLinkRef";
 
 /**
- * Short link (youry.io/start): track visit, persist attribution, redirect to the marketing LP.
+ * Short link (youry.io/start): record click server-side, redirect to the marketing LP.
  */
 export default function StartLinkClient() {
   useEffect(() => {
+    ensureStartLinkVisitorCookie();
     setStartLinkEntryCookie();
-    trackDatafastGoal(DATAFAST_GOALS.start_link_visit, { surface: "start" });
 
-    const target = new URL(marketingLandingUrl());
-    const qs = window.location.search;
-    if (qs) {
-      const incoming = new URLSearchParams(qs);
-      incoming.forEach((value, key) => {
-        if (!target.searchParams.has(key)) target.searchParams.set(key, value);
-      });
-    }
-
-    window.location.replace(target.toString());
+    void fetch("/api/start-link/click", { method: "POST", credentials: "include" }).finally(() => {
+      const target = new URL(marketingLandingUrl());
+      const qs = window.location.search;
+      if (qs) {
+        const incoming = new URLSearchParams(qs);
+        incoming.forEach((value, key) => {
+          if (!target.searchParams.has(key)) target.searchParams.set(key, value);
+        });
+      }
+      window.location.replace(target.toString());
+    });
   }, []);
 
   return (

@@ -13,6 +13,9 @@ import { NextResponse } from "next/server";
 import { brevoUpsertContact, brevoTrackEvent } from "@/lib/brevo";
 import { normalizeDubClickId } from "@/lib/dub/clickId";
 import { trackDubLeadServer } from "@/lib/dub/trackLeadServer";
+import { readStartLinkVisitorIdFromRequest } from "@/lib/analytics/startLinkFromRequest";
+import { recordStartLinkSignup } from "@/lib/analytics/startLinkServer";
+import { createSupabaseServiceClient } from "@/lib/supabase/admin";
 
 export async function POST(req: Request) {
   const traceId = `signup_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 8)}`;
@@ -78,6 +81,18 @@ export async function POST(req: Request) {
     mode,
     dubTracked,
   });
+
+  const startVisitorId = await readStartLinkVisitorIdFromRequest();
+  if (startVisitorId && userId) {
+    const admin = createSupabaseServiceClient();
+    if (admin) {
+      try {
+        await recordStartLinkSignup(admin, startVisitorId, userId);
+      } catch (e) {
+        console.warn("[start-link] signup attribution failed", e);
+      }
+    }
+  }
 
   return NextResponse.json({ ok: true, dubTracked });
 }

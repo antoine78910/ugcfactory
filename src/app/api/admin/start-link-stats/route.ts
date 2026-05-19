@@ -2,10 +2,7 @@ export const runtime = "nodejs";
 
 import { NextResponse } from "next/server";
 import { requireAdmin } from "@/lib/admin";
-import {
-  fetchStartLinkStats,
-  type StartLinkStatsPeriod,
-} from "@/lib/analytics/datafastApi";
+import { fetchStartLinkStats, type StartLinkStatsPeriod } from "@/lib/analytics/startLinkStats";
 
 function parsePeriod(raw: string | null): StartLinkStatsPeriod {
   if (raw === "7d" || raw === "30d" || raw === "all") return raw;

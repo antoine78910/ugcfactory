@@ -232,6 +232,22 @@ export async function POST(req: Request) {
           }
         }
 
+        const isPaidCheckout =
+          (session.amount_total ?? 0) > 0 ||
+          session.mode === "subscription" ||
+          session.metadata?.credit_trial === "1";
+        if (isPaidCheckout) {
+          try {
+            const { recordStartLinkPayment } = await import("@/lib/analytics/startLinkServer");
+            await recordStartLinkPayment(admin, userId);
+          } catch (startLinkErr) {
+            serverLog("start_link_payment_attribution_failed", {
+              userId,
+              error: startLinkErr instanceof Error ? startLinkErr.message : "unknown",
+            });
+          }
+        }
+
         // --- Brevo: track payment event (non-blocking) ---
         try {
           const customerEmail =

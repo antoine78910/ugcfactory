@@ -23,7 +23,7 @@ import {
   Zap,
   MousePointerClick,
 } from "lucide-react";
-import type { StartLinkStatsPayload, StartLinkStatsPeriod } from "@/lib/analytics/datafastApi";
+import type { StartLinkStatsPayload, StartLinkStatsPeriod } from "@/lib/analytics/startLinkStats";
 import { cn } from "@/lib/utils";
 import { ledgerTicksToDisplayCredits } from "@/lib/creditLedgerTicks";
 import { detectInputMediaType, type InputMediaType } from "@/lib/admin/detectInputMediaType";
@@ -850,7 +850,7 @@ export default function AdminPage() {
               <h1 className="text-lg font-bold tracking-tight">Admin Dashboard</h1>
               <p className="text-xs text-white/40">
                 {tab === "start-link"
-                  ? "youry.io/start — clics, inscriptions et paiements (entrée /start)"
+                  ? "youry.io/start — tracking interne (clics → inscription → paiement)"
                   : tab === "credits"
                   ? "Credit gift links & redemption audit"
                   : tab === "templates"
@@ -939,7 +939,7 @@ export default function AdminPage() {
 
         {/* Stats cards */}
         {tab === "start-link" && startLinkStats && (
-          <div className="mt-6 grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+          <div className="mt-6 grid gap-3 sm:grid-cols-3">
             <StatCard
               label="Clics /start"
               value={startLinkStats.clicks}
@@ -957,12 +957,6 @@ export default function AdminPage() {
               value={startLinkStats.payments}
               icon={Zap}
               accent="bg-emerald-500/20 text-emerald-300"
-            />
-            <StatCard
-              label="Revenu (entrée /start)"
-              value={Math.round(startLinkStats.revenue)}
-              icon={Activity}
-              accent="bg-amber-500/20 text-amber-300"
             />
           </div>
         )}
@@ -1187,15 +1181,15 @@ export default function AdminPage() {
         {tab === "start-link" && startLinkLoading && !startLinkStats ? (
           <div className="mt-12 flex items-center justify-center gap-2 text-white/40">
             <Loader2 className="h-5 w-5 animate-spin" />
-            Chargement DataFast…
+            Chargement…
           </div>
         ) : tab === "start-link" ? (
           <div className="mt-6 space-y-4">
             <div className="flex flex-wrap items-center justify-between gap-3">
               <p className="text-[11px] text-white/45 max-w-2xl">
-                Visiteurs dont la <strong className="text-white/70">page d&apos;entrée</strong> est{" "}
-                <code className="rounded bg-white/10 px-1 py-0.5 text-[10px]">/start</code>. Taux de conversion =
-                étape ÷ clics sur le lien court.
+                Clics enregistrés sur <code className="rounded bg-white/10 px-1 py-0.5 text-[10px]">/start</code>,
+                puis inscriptions et premiers paiements Stripe liés au même visiteur (cookie{" "}
+                <code className="rounded bg-white/10 px-1 py-0.5 text-[10px]">youry_start_vid</code>).
               </p>
               <div className="flex flex-wrap items-center gap-2">
                 {(["7d", "30d", "all"] as const).map((p) => (
@@ -1223,12 +1217,11 @@ export default function AdminPage() {
                 </button>
               </div>
             </div>
-            {!startLinkStats?.configured && (
+            {!startLinkStats?.configured && startLinkStats?.error ? (
               <div className="rounded-lg border border-amber-500/35 bg-amber-500/10 px-4 py-3 text-sm text-amber-100">
-                Configure <code className="rounded bg-black/30 px-1">DATAFAST_API_KEY</code> (clé site df_… dans DataFast →
-                Website settings → API) sur Vercel pour charger les stats.
+                {startLinkStats.error}
               </div>
-            )}
+            ) : null}
             {startLinkError ? (
               <div className="rounded-lg border border-red-500/30 bg-red-500/10 px-4 py-3 text-sm text-red-200">
                 {startLinkError}
@@ -1269,8 +1262,7 @@ export default function AdminPage() {
                 https://youry.io/start
               </a>
               {" "}
-              (redirige vers la LP + cookie 30j pour param <code className="rounded bg-white/10 px-1">entry=start</code> sur
-              les goals).
+              (redirige vers la LP ; cookie visiteur 30 jours pour lier inscription et paiement).
             </p>
           </div>
         ) : tab === "credits" && creditLoading && creditStats === null && !creditError ? (
