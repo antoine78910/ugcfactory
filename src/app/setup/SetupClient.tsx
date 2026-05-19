@@ -19,7 +19,8 @@ import { SubscriptionPlanFeatureList } from "@/app/_components/SubscriptionPlanF
 import { toast } from "sonner";
 import { cn } from "@/lib/utils";
 import { SUBSCRIPTIONS } from "@/lib/pricing";
-import { DATAFAST_GOALS, trackDatafastGoal } from "@/lib/analytics/datafastGoals";
+import { DATAFAST_GOALS, mergeDatafastParams, trackDatafastGoal } from "@/lib/analytics/datafastGoals";
+import { startLinkAttributionParams } from "@/lib/analytics/startLinkRef";
 import { formatMoneyAmount } from "@/lib/billing/formatMoney";
 import type { StripeDisplayPricesPayload } from "@/lib/billing/stripeDisplayTypes";
 import { buildUsdStripeDisplayPricesFallback } from "@/lib/billing/stripeDisplayFallback";
@@ -108,25 +109,39 @@ export default function SetupClient({ embedded = false }: SetupClientProps) {
   }, [embedded]);
 
   useEffect(() => {
-    trackDatafastGoal(DATAFAST_GOALS.trial_view_setup, {
-      surface: embedded ? "onboarding" : "setup",
-    });
+    trackDatafastGoal(
+      DATAFAST_GOALS.trial_view_setup,
+      mergeDatafastParams(
+        { surface: embedded ? "onboarding" : "setup" },
+        startLinkAttributionParams(),
+      ),
+    );
   }, [embedded]);
 
   function startForFree() {
-    trackDatafastGoal(DATAFAST_GOALS.onboarding_start_for_free_clicked, {
-      surface: embedded ? "onboarding_setup" : "setup",
-    });
+    trackDatafastGoal(
+      DATAFAST_GOALS.onboarding_start_for_free_clicked,
+      mergeDatafastParams(
+        { surface: embedded ? "onboarding_setup" : "setup" },
+        startLinkAttributionParams(),
+      ),
+    );
     window.location.href = sectionToPath("link_to_ad");
   }
 
   async function startPlanCheckout(planId: string) {
     setPlanLoading(planId);
-    trackDatafastGoal(DATAFAST_GOALS.subscription_initiate_checkout, {
-      plan_id: planId,
-      billing: "monthly",
-      surface: embedded ? "onboarding" : "setup",
-    });
+    trackDatafastGoal(
+      DATAFAST_GOALS.subscription_initiate_checkout,
+      mergeDatafastParams(
+        {
+          plan_id: planId,
+          billing: "monthly",
+          surface: embedded ? "onboarding" : "setup",
+        },
+        startLinkAttributionParams(),
+      ),
+    );
     try {
       const res = await fetch("/api/stripe/checkout/subscription", {
         method: "POST",

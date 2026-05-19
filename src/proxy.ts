@@ -47,6 +47,8 @@ export function isExcludedFromStudioRewrite(pathname: string): boolean {
     "intelligence",
     /** Standalone GPT recreate analyzer page; must not fall into the studio shell rewrite. */
     "recreate",
+    /** Short marketing link youry.io/start → signup (must not rewrite to /app/start). */
+    "start",
   ]).has(first);
 }
 

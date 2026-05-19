@@ -21,12 +21,14 @@ import {
   Video,
   X,
   Zap,
+  MousePointerClick,
 } from "lucide-react";
+import type { StartLinkStatsPayload, StartLinkStatsPeriod } from "@/lib/analytics/datafastApi";
 import { cn } from "@/lib/utils";
 import { ledgerTicksToDisplayCredits } from "@/lib/creditLedgerTicks";
 import { detectInputMediaType, type InputMediaType } from "@/lib/admin/detectInputMediaType";
 
-type Tab = "generations" | "runs" | "credits" | "onboarding" | "feedback" | "templates";
+type Tab = "generations" | "runs" | "credits" | "onboarding" | "feedback" | "templates" | "start-link";
 
 type OnboardingAdminRow = {
   user_id: string;
@@ -466,6 +468,11 @@ export default function AdminPage() {
   const [createError, setCreateError] = useState<string | null>(null);
   const [newLink, setNewLink] = useState<string | null>(null);
 
+  const [startLinkStats, setStartLinkStats] = useState<StartLinkStatsPayload | null>(null);
+  const [startLinkPeriod, setStartLinkPeriod] = useState<StartLinkStatsPeriod>("30d");
+  const [startLinkLoading, setStartLinkLoading] = useState(false);
+  const [startLinkError, setStartLinkError] = useState<string | null>(null);
+
   const perPage = 50;
   const creditLogPerPage = 50;
 
@@ -675,6 +682,23 @@ export default function AdminPage() {
     }
   }, [fetchWorkflowTemplates]);
 
+  const fetchStartLinkStats = useCallback(async () => {
+    setStartLinkLoading(true);
+    setStartLinkError(null);
+    try {
+      const r = await fetch(`/api/admin/start-link-stats?period=${encodeURIComponent(startLinkPeriod)}`);
+      if (!r.ok) throw new Error((await r.json().catch(() => ({}))).error ?? `HTTP ${r.status}`);
+      const d = (await r.json()) as StartLinkStatsPayload;
+      setStartLinkStats(d);
+      if (d.error) setStartLinkError(d.error);
+    } catch (e) {
+      setStartLinkError(e instanceof Error ? e.message : "Failed to load start-link stats");
+      setStartLinkStats(null);
+    } finally {
+      setStartLinkLoading(false);
+    }
+  }, [startLinkPeriod]);
+
   useEffect(() => {
     if (tab === "generations") void fetchGenerations();
     else if (tab === "runs") void fetchRuns();
@@ -683,6 +707,10 @@ export default function AdminPage() {
     else if (tab === "feedback") void fetchFeedback();
     else if (tab === "templates") void fetchWorkflowTemplates();
   }, [tab, fetchGenerations, fetchRuns, fetchCreditRedeems, fetchOnboarding, fetchFeedback, fetchWorkflowTemplates]);
+
+  useEffect(() => {
+    if (tab === "start-link") void fetchStartLinkStats();
+  }, [tab, startLinkPeriod, fetchStartLinkStats]);
 
   useEffect(() => {
     if (tab === "generations" && activeCompPlans.length === 0 && !partnerPlansLoading) {
@@ -821,7 +849,9 @@ export default function AdminPage() {
             <div>
               <h1 className="text-lg font-bold tracking-tight">Admin Dashboard</h1>
               <p className="text-xs text-white/40">
-                {tab === "credits"
+                {tab === "start-link"
+                  ? "youry.io/start — clics & conversions (DataFast, entry page /start)"
+                  : tab === "credits"
                   ? "Credit gift links & redemption audit"
                   : tab === "templates"
                     ? "Manage workflow community templates (review and delete)"
@@ -894,10 +924,52 @@ export default function AdminPage() {
             >
               Templates
             </button>
+            <button
+              type="button"
+              onClick={() => setTab("start-link")}
+              className={cn(
+                "rounded-lg px-3 py-1.5 text-xs font-semibold transition",
+                tab === "start-link" ? "bg-violet-500 text-white" : "bg-white/5 text-white/60 hover:bg-white/10",
+              )}
+            >
+              /start
+            </button>
           </div>
         </div>
 
         {/* Stats cards */}
+        {tab === "start-link" && startLinkStats && (
+          <div className="mt-6 grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+            <StatCard
+              label="Visites /start"
+              value={Math.max(startLinkStats.pageVisits, startLinkStats.goalVisits)}
+              icon={MousePointerClick}
+              accent="bg-sky-500/20 text-sky-300"
+            />
+            <StatCard
+              label="Inscriptions"
+              value={
+                startLinkStats.funnel.find((r) => r.goal === "signup")?.visitors ?? 0
+              }
+              icon={Users}
+              accent="bg-violet-500/20 text-violet-300"
+            />
+            <StatCard
+              label="Abos payés"
+              value={
+                startLinkStats.funnel.find((r) => r.goal === "subscription_paid")?.visitors ?? 0
+              }
+              icon={Zap}
+              accent="bg-emerald-500/20 text-emerald-300"
+            />
+            <StatCard
+              label="Revenu attribué (/start)"
+              value={Math.round(startLinkStats.pageRevenue)}
+              icon={Activity}
+              accent="bg-amber-500/20 text-amber-300"
+            />
+          </div>
+        )}
         {tab === "credits" && creditStats && (
           <div className="mt-6 grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
             <StatCard label="Redeem tokens" value={creditStats.tokensTotal} icon={Gift} accent="bg-fuchsia-500/20 text-fuchsia-300" />
@@ -911,7 +983,7 @@ export default function AdminPage() {
             />
           </div>
         )}
-        {tab !== "credits" && tab !== "onboarding" && tab !== "feedback" && stats && (
+        {tab !== "credits" && tab !== "onboarding" && tab !== "feedback" && tab !== "start-link" && stats && (
           <div className="mt-6 grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
             <StatCard label="Total Generations" value={stats.totalGenerations} icon={Activity} accent="bg-violet-500/20 text-violet-300" />
             <StatCard label="Total Users" value={stats.totalUsers} icon={Users} accent="bg-blue-500/20 text-blue-300" />
@@ -985,7 +1057,7 @@ export default function AdminPage() {
         )}
 
         {/* Filters bar */}
-        <div className={cn("mt-4 flex flex-wrap items-center gap-3", (tab === "credits" || tab === "feedback") && "hidden")}>
+        <div className={cn("mt-4 flex flex-wrap items-center gap-3", (tab === "credits" || tab === "feedback" || tab === "start-link") && "hidden")}>
           <div className="relative flex-1">
             <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-white/30" />
             <input
@@ -1116,7 +1188,101 @@ export default function AdminPage() {
         )}
 
         {/* Table */}
-        {tab === "credits" && creditLoading && creditStats === null && !creditError ? (
+        {tab === "start-link" && startLinkLoading && !startLinkStats ? (
+          <div className="mt-12 flex items-center justify-center gap-2 text-white/40">
+            <Loader2 className="h-5 w-5 animate-spin" />
+            Chargement DataFast…
+          </div>
+        ) : tab === "start-link" ? (
+          <div className="mt-6 space-y-4">
+            <div className="flex flex-wrap items-center justify-between gap-3">
+              <p className="text-[11px] text-white/45 max-w-2xl">
+                Funnel pour les visiteurs dont la <strong className="text-white/70">page d&apos;entrée</strong> est{" "}
+                <code className="rounded bg-white/10 px-1 py-0.5 text-[10px]">/start</code> (DataFast{" "}
+                <code className="rounded bg-white/10 px-1 py-0.5 text-[10px]">entry_page=/start</code>
+                ). Les goals existants (signup, trial, abo…) sont agrégés côté API.
+              </p>
+              <div className="flex flex-wrap items-center gap-2">
+                {(["7d", "30d", "all"] as const).map((p) => (
+                  <button
+                    key={p}
+                    type="button"
+                    onClick={() => setStartLinkPeriod(p)}
+                    className={cn(
+                      "rounded-lg px-3 py-1.5 text-xs font-semibold transition",
+                      startLinkPeriod === p
+                        ? "bg-violet-500 text-white"
+                        : "bg-white/5 text-white/60 hover:bg-white/10",
+                    )}
+                  >
+                    {p === "7d" ? "7 j" : p === "30d" ? "30 j" : "Tout"}
+                  </button>
+                ))}
+                <button
+                  type="button"
+                  onClick={() => void fetchStartLinkStats()}
+                  disabled={startLinkLoading}
+                  className="rounded-lg border border-white/10 bg-white/5 px-3 py-1.5 text-xs font-semibold text-white/70 transition hover:bg-white/10 disabled:opacity-40"
+                >
+                  Rafraîchir
+                </button>
+              </div>
+            </div>
+            {!startLinkStats?.configured && (
+              <div className="rounded-lg border border-amber-500/35 bg-amber-500/10 px-4 py-3 text-sm text-amber-100">
+                Configure <code className="rounded bg-black/30 px-1">DATAFAST_API_KEY</code> (clé site df_… dans DataFast →
+                Website settings → API) sur Vercel pour charger les stats.
+              </div>
+            )}
+            {startLinkError ? (
+              <div className="rounded-lg border border-red-500/30 bg-red-500/10 px-4 py-3 text-sm text-red-200">
+                {startLinkError}
+              </div>
+            ) : null}
+            {startLinkStats ? (
+              <div className="overflow-x-auto rounded-xl border border-white/[0.08]">
+                <table className="w-full min-w-[720px] text-left text-xs">
+                  <thead>
+                    <tr className="border-b border-white/10 text-[10px] uppercase tracking-wide text-white/40">
+                      <th className="px-3 py-2.5 font-semibold">Étape</th>
+                      <th className="px-3 py-2.5 font-semibold">Goal</th>
+                      <th className="px-3 py-2.5 font-semibold text-right">Visiteurs</th>
+                      <th className="px-3 py-2.5 font-semibold text-right">Complétions</th>
+                      <th className="px-3 py-2.5 font-semibold text-right">% vs clics</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {startLinkStats.funnel.map((row) => (
+                      <tr key={row.goal} className="border-b border-white/5 transition hover:bg-white/[0.02]">
+                        <td className="px-3 py-2.5 text-white/85">{row.label}</td>
+                        <td className="px-3 py-2.5 font-mono text-[10px] text-white/40">{row.goal}</td>
+                        <td className="px-3 py-2.5 text-right tabular-nums text-white/80">{row.visitors}</td>
+                        <td className="px-3 py-2.5 text-right tabular-nums text-white/60">{row.completions}</td>
+                        <td className="px-3 py-2.5 text-right tabular-nums text-violet-200/90">
+                          {row.rateFromClicksPct != null ? `${row.rateFromClicksPct}%` : "—"}
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            ) : null}
+            <p className="text-[10px] text-white/35">
+              Lien public :{" "}
+              <a
+                href="https://youry.io/start"
+                target="_blank"
+                rel="noreferrer"
+                className="text-violet-300 underline underline-offset-2"
+              >
+                https://youry.io/start
+              </a>
+              {" "}
+              (redirige vers signup + cookie 30j pour param <code className="rounded bg-white/10 px-1">entry=start</code> sur
+              les goals).
+            </p>
+          </div>
+        ) : tab === "credits" && creditLoading && creditStats === null && !creditError ? (
           <div className="mt-12 flex items-center justify-center gap-2 text-white/40">
             <Loader2 className="h-5 w-5 animate-spin" />
             Loading credit links…

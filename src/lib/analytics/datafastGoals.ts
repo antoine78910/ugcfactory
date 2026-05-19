@@ -15,6 +15,7 @@
  *  11. onboarding_start_for_free_clicked – User clicks "Start for Free" on setup / onboarding setup step.
  *  12. subscription_initiate_checkout – User clicks Subscribe / Upgrade on /subscription.
  *  13. subscription_paid           – User returns from Stripe after a subscription checkout.
+ *  14. start_link_visit             – Visitor lands on youry.io/start (short link).
  *
  * Goal naming rules (DataFast):
  *   - Lowercase letters, digits, `_` and `-` only.
@@ -38,6 +39,7 @@ export const DATAFAST_GOALS = {
   onboarding_start_for_free_clicked: "onboarding_start_for_free_clicked",
   subscription_initiate_checkout: "subscription_initiate_checkout",
   subscription_paid: "subscription_paid",
+  start_link_visit: "start_link_visit",
 } as const;
 
 export type DatafastGoal = (typeof DATAFAST_GOALS)[keyof typeof DATAFAST_GOALS];
@@ -81,6 +83,15 @@ function buildDatafastParams(
  * The `<Script id="datafast-queue">` snippet in `app/layout.tsx` guarantees that
  * calls made before the main script loads are queued and replayed.
  */
+/** Merge optional params with start-link attribution when the /start cookie is set. */
+export function mergeDatafastParams(
+  params?: Record<string, unknown>,
+  extra?: Record<string, unknown>,
+): Record<string, unknown> | undefined {
+  if (!params && !extra) return undefined;
+  return { ...params, ...extra };
+}
+
 export function trackDatafastGoal(
   goal: DatafastGoal,
   params?: Record<string, unknown>,

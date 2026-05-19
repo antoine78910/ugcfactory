@@ -14,6 +14,7 @@ import {
   useSupabaseBrowserClient,
 } from "@/lib/supabase/BrowserSupabaseProvider";
 import { getAuthCallbackUrl } from "@/lib/supabase/authRedirect";
+import { startLinkAttributionParams } from "@/lib/analytics/startLinkRef";
 
 type AuthMode = "signin" | "signup";
 
@@ -34,7 +35,10 @@ export default function AuthClient({ mode = "signin", redirectTo }: { mode?: Aut
   const [googlePending, setGooglePending] = useState(false);
 
   useEffect(() => {
-    window.datafast?.(mode === "signup" ? "view_signup" : "view_signin");
+    const viewGoal = mode === "signup" ? "view_signup" : "view_signin";
+    const extra = startLinkAttributionParams();
+    if (extra) window.datafast?.(viewGoal, extra);
+    else window.datafast?.(viewGoal);
   }, [mode]);
 
   if (!supabaseReady) {
@@ -73,7 +77,9 @@ export default function AuthClient({ mode = "signin", redirectTo }: { mode?: Aut
         password,
       });
       if (error) throw error;
-      window.datafast?.("signin");
+      const signinExtra = startLinkAttributionParams();
+      if (signinExtra) window.datafast?.("signin", signinExtra);
+      else window.datafast?.("signin");
       toast.success("Signed in");
       router.push(redirectTo || "/");
       router.refresh();
@@ -118,7 +124,10 @@ export default function AuthClient({ mode = "signin", redirectTo }: { mode?: Aut
         },
       });
       if (error) throw error;
-      window.datafast?.("signup", { email: cleanEmail });
+      const signupParams: Record<string, string> = { email: cleanEmail };
+      const startExtra = startLinkAttributionParams();
+      if (startExtra) Object.assign(signupParams, startExtra);
+      window.datafast?.("signup", signupParams);
       const dubClickFromCookie =
         typeof document !== "undefined"
           ? (() => {
