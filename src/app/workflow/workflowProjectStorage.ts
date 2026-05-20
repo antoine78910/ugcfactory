@@ -2,6 +2,66 @@ import type { Edge } from "@xyflow/react";
 
 import type { WorkflowCanvasNode } from "./workflowFlowTypes";
 
+function workflowEdgeSourceIsTextInput(
+  nodes: WorkflowCanvasNode[],
+  edge: Edge,
+): boolean {
+  const src = nodes.find((n) => n.id === edge.source);
+  if (!src) return false;
+  if (src.type === "textPrompt" || src.type === "stickyNote") return true;
+  if (src.type === "promptList") {
+    const sh = (edge.sourceHandle ?? "out").trim() || "out";
+    if (sh === "outText") return true;
+    if (sh !== "out") return false;
+    const d = src.data as { contentKind?: string };
+    return (d.contentKind ?? "text") === "text";
+  }
+  if (src.type === "adAsset") {
+    const d = src.data as {
+      kind?: string;
+      assistantOutput?: string;
+      prompt?: string;
+    };
+    if (d.kind === "assistant") return Boolean((d.assistantOutput ?? "").trim());
+    return Boolean((d.prompt ?? "").trim());
+  }
+  return false;
+}
+
+/**
+ * Assistants used a single legacy `in` text port; remap text wires to `text` so prompt
+ * collection and run validation see linked Prompt text modules.
+ */
+export function migrateAssistantLegacyTextEdges(
+  nodes: WorkflowCanvasNode[],
+  edges: Edge[],
+): Edge[] {
+  const assistantIds = new Set(
+    nodes
+      .filter(
+        (n) =>
+          n.type === "adAsset" && (n.data as { kind?: string }).kind === "assistant",
+      )
+      .map((n) => n.id),
+  );
+  if (assistantIds.size === 0) return edges;
+  return edges.map((e) => {
+    if (!assistantIds.has(e.target)) return e;
+    const h = (e.targetHandle ?? "").trim();
+    if (h !== "in" && h !== "") return e;
+    if (!workflowEdgeSourceIsTextInput(nodes, e)) return e;
+    return { ...e, targetHandle: "text" };
+  });
+}
+
+/** Apply all edge normalizations when loading or mutating a workflow page. */
+export function migrateWorkflowEdges(nodes: WorkflowCanvasNode[], edges: Edge[]): Edge[] {
+  return migrateAssistantLegacyTextEdges(
+    nodes,
+    migrateImageGeneratorOutEdgesToGenerated(nodes, edges),
+  );
+}
+
 /** Image generators used `out` before the dedicated `generated` bubble; rewrite on load. */
 export function migrateImageGeneratorOutEdgesToGenerated(nodes: WorkflowCanvasNode[], edges: Edge[]): Edge[] {
   const imageGenIds = new Set(
@@ -65,7 +125,7 @@ function parseProject(raw: string | null): WorkflowProjectStateV1 | null {
         id: typeof x?.id === "string" ? x.id : `p-${i}`,
         name: typeof x?.name === "string" && x.name.trim() ? x.name.trim() : `Page ${i + 1}`,
         nodes,
-        edges: migrateImageGeneratorOutEdgesToGenerated(nodes, rawEdges),
+        edges: migrateWorkflowEdges(nodes, rawEdges),
       };
     });
     const active =

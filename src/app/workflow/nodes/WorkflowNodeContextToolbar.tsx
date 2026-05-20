@@ -11,6 +11,10 @@ import { cn } from "@/lib/utils";
 import { cloneWorkflowSelection } from "../workflowClone";
 import type { WorkflowCanvasNode } from "../workflowFlowTypes";
 import type { AdAssetNodeData } from "./AdAssetNode";
+import {
+  planWorkflowRunFromHere,
+  workflowRunFromHereParentStepIndices,
+} from "../workflowRunFromHere";
 import { estimateWorkflowAdAssetRunCredits } from "../workflowNodeRun";
 
 const btn =
@@ -30,10 +34,6 @@ type WorkflowNodeContextToolbarProps = {
 
 function ToolbarDivider() {
   return <div className="mx-0.5 h-5 w-px shrink-0 bg-white/[0.12]" aria-hidden />;
-}
-
-function isRunnableWorkflowAdAssetKind(kind: AdAssetNodeData["kind"]): boolean {
-  return kind === "image" || kind === "video" || kind === "motion" || kind === "assistant" || kind === "website";
 }
 
 export function WorkflowNodeContextToolbar({
@@ -104,36 +104,11 @@ export function WorkflowNodeContextToolbar({
     if (!hasDownstream) return null;
     const nodes = getNodes() as WorkflowCanvasNode[];
     const edges = getEdges();
-
     const byId = new Map(nodes.map((n) => [n.id, n]));
     if (!byId.has(nodeId)) return null;
 
-    const outgoing = new Map<string, string[]>();
-    for (const e of edges) {
-      if (!outgoing.has(e.source)) outgoing.set(e.source, []);
-      outgoing.get(e.source)!.push(e.target);
-    }
-
-    const seen = new Set<string>();
-    const queue = [nodeId];
-    const reachable: string[] = [];
-    while (queue.length) {
-      const cur = queue.shift()!;
-      if (seen.has(cur)) continue;
-      seen.add(cur);
-      reachable.push(cur);
-      for (const nxt of outgoing.get(cur) ?? []) {
-        if (!seen.has(nxt)) queue.push(nxt);
-      }
-    }
-
-    const runIds = reachable.filter((nid) => {
-      const n = byId.get(nid);
-      if (!n || n.type !== "adAsset") return false;
-      const d = n.data as AdAssetNodeData;
-      return isRunnableWorkflowAdAssetKind(d.kind);
-    });
-    if (!runIds.length) {
+    const { orderedRunIds } = planWorkflowRunFromHere(nodeId, nodes, edges);
+    if (!orderedRunIds.length) {
       return {
         orderedRunIds: [],
         estimatedCredits: 0,
@@ -143,53 +118,7 @@ export function WorkflowNodeContextToolbar({
       };
     }
 
-    // Order runnable nodes topologically within the reachable subgraph.
-    const runSet = new Set(runIds);
-    const indegree = new Map<string, number>();
-    const children = new Map<string, string[]>();
-    const parents = new Map<string, string[]>();
-    const reachOrder = new Map<string, number>(reachable.map((nid, idx) => [nid, idx]));
-    for (const rid of runIds) {
-      indegree.set(rid, 0);
-      children.set(rid, []);
-      parents.set(rid, []);
-    }
-    for (const e of edges) {
-      if (!runSet.has(e.source) || !runSet.has(e.target)) continue;
-      children.get(e.source)!.push(e.target);
-      parents.get(e.target)!.push(e.source);
-      indegree.set(e.target, (indegree.get(e.target) ?? 0) + 1);
-    }
-    const ready: string[] = runIds.filter((rid) => (indegree.get(rid) ?? 0) === 0);
-    ready.sort((a, b) => (reachOrder.get(a) ?? 0) - (reachOrder.get(b) ?? 0));
-    const orderedRunIds: string[] = [];
-    while (ready.length) {
-      const cur = ready.shift()!;
-      orderedRunIds.push(cur);
-      for (const nxt of children.get(cur) ?? []) {
-        const nextDeg = (indegree.get(nxt) ?? 0) - 1;
-        indegree.set(nxt, nextDeg);
-        if (nextDeg === 0) {
-          ready.push(nxt);
-          ready.sort((a, b) => (reachOrder.get(a) ?? 0) - (reachOrder.get(b) ?? 0));
-        }
-      }
-    }
-    if (orderedRunIds.length !== runIds.length) {
-      for (const rid of runIds) if (!orderedRunIds.includes(rid)) orderedRunIds.push(rid);
-    }
-
-    const indexOfRunId = new Map<string, number>(orderedRunIds.map((rid, idx) => [rid, idx]));
-    const parentStepIndices = new Map<string, number[]>();
-    for (const rid of orderedRunIds) {
-      const pIds = parents.get(rid) ?? [];
-      const pIdx = pIds
-        .map((p) => indexOfRunId.get(p))
-        .filter((v): v is number => typeof v === "number")
-        .sort((a, b) => a - b);
-      parentStepIndices.set(rid, pIdx);
-    }
-
+    const parentStepIndices = workflowRunFromHereParentStepIndices(orderedRunIds, edges);
     const perStepCredits = new Map<string, number>();
     let estimatedCredits = 0;
     for (const rid of orderedRunIds) {

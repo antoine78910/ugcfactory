@@ -330,6 +330,72 @@ export function collectWorkflowBatchPrompts(
   return { batch: null, composedSingle, fromPromptList: false };
 }
 
+/** Text ports on generators (Video / Image / Motion). */
+export const WORKFLOW_TEXT_INPUT_HANDLES = ["text", "inText"] as const;
+
+/** Generators also accept legacy single `in` port and unset handle IDs. */
+export const WORKFLOW_GENERATOR_TEXT_TARGET_HANDLES = [
+  "text",
+  "inText",
+  "in",
+  "",
+] as const;
+
+/**
+ * Assistant text ports: includes legacy `in` and empty handle from older single-port wiring.
+ */
+export const WORKFLOW_ASSISTANT_TEXT_TARGET_HANDLES = [
+  "text",
+  "inText",
+  "in",
+  "",
+] as const;
+
+export function workflowTextInputTargetHandles(
+  targetNode: Node | undefined,
+): readonly string[] {
+  if (targetNode?.type !== "adAsset") return WORKFLOW_TEXT_INPUT_HANDLES;
+  const kind = (targetNode.data as AdAssetNodeData).kind;
+  if (kind === "assistant") return WORKFLOW_ASSISTANT_TEXT_TARGET_HANDLES;
+  if (kind === "image" || kind === "video" || kind === "motion") {
+    return WORKFLOW_GENERATOR_TEXT_TARGET_HANDLES;
+  }
+  return WORKFLOW_TEXT_INPUT_HANDLES;
+}
+
+const WORKFLOW_ANY_TEXT_TARGET_HANDLES = new Set([
+  "text",
+  "inText",
+  "in",
+  "",
+]);
+
+/** Text from Assistant modules wired into a generator's text-side ports (uses `assistantOutput`). */
+export function collectUpstreamAssistantTexts(
+  nodes: Node[],
+  edges: Edge[],
+  targetNodeId: string,
+): string[] {
+  const byId = new Map(nodes.map((n) => [n.id, n]));
+  const parts: string[] = [];
+  const seen = new Set<string>();
+  for (const e of edges) {
+    if (e.target !== targetNodeId) continue;
+    const h = e.targetHandle ?? "";
+    if (!WORKFLOW_ANY_TEXT_TARGET_HANDLES.has(h)) continue;
+    const src = byId.get(e.source);
+    if (!src || src.type !== "adAsset") continue;
+    const d = src.data as AdAssetNodeData;
+    if (d.kind !== "assistant") continue;
+    const out = (d.assistantOutput ?? "").trim();
+    const text = out || (d.prompt ?? "").trim();
+    if (!text || seen.has(text)) continue;
+    seen.add(text);
+    parts.push(text);
+  }
+  return parts;
+}
+
 /** Collect non-empty text from nodes connected to this node's target handle `in`. */
 export function collectLinkedPromptTexts(nodes: Node[], edges: Edge[], targetNodeId: string): string[] {
   const byId = new Map(nodes.map((n) => [n.id, n]));

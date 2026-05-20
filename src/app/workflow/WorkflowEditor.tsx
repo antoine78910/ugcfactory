@@ -99,7 +99,7 @@ import { storeInviteWelcome } from "./WorkflowInviteWelcome";
 import { WorkflowOnboarding, starterNodeForKind, type WorkflowStarterKind } from "./WorkflowOnboarding";
 import {
   defaultWorkflowProject,
-  migrateImageGeneratorOutEdgesToGenerated,
+  migrateWorkflowEdges,
   newPage,
   shouldShowWorkflowOnboarding,
   type WorkflowProjectStateV1,
@@ -171,6 +171,7 @@ import {
 import type { StickyNoteNodeData } from "./workflowStickyNoteTypes";
 import {
   appendMissingWorkflowVideoElementImageTags,
+  collectUpstreamAssistantTexts,
   estimateWorkflowAdAssetRunCredits,
   resolveWorkflowVideoModelId,
   WORKFLOW_SEEDANCE_2_PRO_VIDEO_FILE_ACCEPT,
@@ -180,6 +181,7 @@ import {
   workflowVideoModelHasStartFrame,
   workflowVideoOrderedElementImageRefs,
 } from "./workflowNodeRun";
+import { planWorkflowRunFromHere } from "./workflowRunFromHere";
 import { WorkflowMediaTrimDialog } from "./WorkflowMediaTrimDialog";
 
 /** Matches `workflowNodeFactory` default for new Video Generator nodes (picker chaining eligibility). */
@@ -2939,7 +2941,7 @@ function WorkflowFlowWorkspace({
       redoStackRef.current = [];
       lastSnapshotRef.current = cloneWorkflowCanvasSnapshot(p.nodes, p.edges);
       setNodes(p.nodes.map((n) => ({ ...n, selected: false })));
-      setEdges(migrateImageGeneratorOutEdgesToGenerated(p.nodes as WorkflowCanvasNode[], p.edges));
+      setEdges(migrateWorkflowEdges(p.nodes as WorkflowCanvasNode[], p.edges));
       setFrameOpen(false);
       setPlacementPicker(null);
       setTool("pan");
@@ -2970,7 +2972,7 @@ function WorkflowFlowWorkspace({
 
   const applyCanvasSnapshot = useCallback((snap: WorkflowCanvasSnapshot) => {
     skipHistoryCommitRef.current = true;
-    const migrated = migrateImageGeneratorOutEdgesToGenerated(snap.nodes as WorkflowCanvasNode[], snap.edges);
+    const migrated = migrateWorkflowEdges(snap.nodes as WorkflowCanvasNode[], snap.edges);
     lastSnapshotRef.current = cloneWorkflowCanvasSnapshot(snap.nodes, migrated);
     setNodes(snap.nodes);
     setEdges(migrated);
@@ -3912,83 +3914,28 @@ function WorkflowFlowWorkspace({
       const startId = detail?.nodeId?.trim();
       if (!startId) return;
 
-      const byId = new Map(nodes.map((n) => [n.id, n]));
+      const snap = nodesEdgesRef.current ?? { nodes, edges };
+      const snapNodes = snap.nodes as WorkflowCanvasNode[];
+      const snapEdges = snap.edges;
+      const byId = new Map(snapNodes.map((n) => [n.id, n]));
       if (!byId.has(startId)) return;
-      const outgoing = new Map<string, string[]>();
-      for (const e of edges) {
-        if (!outgoing.has(e.source)) outgoing.set(e.source, []);
-        outgoing.get(e.source)!.push(e.target);
-      }
 
-      const seen = new Set<string>();
-      const queue = [startId];
-      const reachable: string[] = [];
-      while (queue.length) {
-        const cur = queue.shift()!;
-        if (seen.has(cur)) continue;
-        seen.add(cur);
-        reachable.push(cur);
-        for (const nxt of outgoing.get(cur) ?? []) {
-          if (!seen.has(nxt)) queue.push(nxt);
-        }
-      }
-
-      const runIds = reachable.filter((nid) => {
-        const n = byId.get(nid);
-        return n?.type === "adAsset" && isRunnableWorkflowAdAssetKind((n.data as AdAssetNodeData).kind);
-      });
-      if (!runIds.length) {
-        toast.message("Nothing runnable downstream", {
-          description: "No runnable generator nodes were found from this point.",
+      const { orderedRunIds } = planWorkflowRunFromHere(startId, snapNodes, snapEdges);
+      if (!orderedRunIds.length) {
+        toast.message("Nothing runnable in this chain", {
+          description: "No runnable assistant or generator modules were found from this point.",
         });
         return;
-      }
-
-      // Run downstream modules in dependency order (topological),
-      // so each step gets inputs from earlier upstream runnable nodes.
-      const runSet = new Set(runIds);
-      const indegree = new Map<string, number>();
-      const children = new Map<string, string[]>();
-      const reachOrder = new Map<string, number>(reachable.map((nid, idx) => [nid, idx]));
-      for (const rid of runIds) {
-        indegree.set(rid, 0);
-        children.set(rid, []);
-      }
-      for (const e of edges) {
-        if (!runSet.has(e.source) || !runSet.has(e.target)) continue;
-        children.get(e.source)!.push(e.target);
-        indegree.set(e.target, (indegree.get(e.target) ?? 0) + 1);
-      }
-      const ready: string[] = runIds.filter((rid) => (indegree.get(rid) ?? 0) === 0);
-      ready.sort((a, b) => (reachOrder.get(a) ?? 0) - (reachOrder.get(b) ?? 0));
-      const orderedRunIds: string[] = [];
-      while (ready.length) {
-        const cur = ready.shift()!;
-        orderedRunIds.push(cur);
-        for (const nxt of children.get(cur) ?? []) {
-          const nextDeg = (indegree.get(nxt) ?? 0) - 1;
-          indegree.set(nxt, nextDeg);
-          if (nextDeg === 0) {
-            ready.push(nxt);
-            ready.sort((a, b) => (reachOrder.get(a) ?? 0) - (reachOrder.get(b) ?? 0));
-          }
-        }
-      }
-      // Fallback for any unexpected cycle: keep deterministic order and still run everything.
-      if (orderedRunIds.length !== runIds.length) {
-        for (const rid of runIds) {
-          if (!orderedRunIds.includes(rid)) orderedRunIds.push(rid);
-        }
       }
 
       void (async () => {
         setRunFromHereParamLock(true);
         try {
           const estimatedCredits = orderedRunIds.reduce((sum, nid) => {
-          const n = byId.get(nid);
-          if (!n || n.type !== "adAsset") return sum;
-          const d = n.data as AdAssetNodeData;
-          return sum + estimateWorkflowAdAssetRunCredits(d, nid, nodes, edges);
+            const n = byId.get(nid);
+            if (!n || n.type !== "adAsset") return sum;
+            const d = n.data as AdAssetNodeData;
+            return sum + estimateWorkflowAdAssetRunCredits(d, nid, snapNodes, snapEdges);
           }, 0);
           const creditsLabel =
             estimatedCredits > 0
@@ -3997,7 +3944,24 @@ function WorkflowFlowWorkspace({
           toast.message("Run from here", { description: creditsLabel });
           for (let i = 0; i < orderedRunIds.length; i++) {
             const nodeId = orderedRunIds[i]!;
-            window.dispatchEvent(new CustomEvent("workflow:run-node", { detail: { nodeId } }));
+            const live = nodesEdgesRef.current ?? { nodes: snapNodes, edges: snapEdges };
+            const liveNodes = live.nodes as WorkflowCanvasNode[];
+            const liveEdges = live.edges;
+            const runDetail: {
+              nodeId: string;
+              promptOverride?: string;
+            } = { nodeId };
+            const target = liveNodes.find((n) => n.id === nodeId);
+            if (target?.type === "adAsset") {
+              const kind = (target.data as AdAssetNodeData).kind;
+              if (kind === "image" || kind === "video" || kind === "motion") {
+                const assistantTexts = collectUpstreamAssistantTexts(liveNodes, liveEdges, nodeId);
+                if (assistantTexts.length) {
+                  runDetail.promptOverride = assistantTexts.join("\n\n");
+                }
+              }
+            }
+            window.dispatchEvent(new CustomEvent("workflow:run-node", { detail: runDetail }));
             const ok = await waitForNodeRun(nodeId);
             if (!ok) {
               toast.error("Run chain stopped", {
@@ -4106,7 +4070,7 @@ function WorkflowFlowWorkspace({
         ...nodes.map((n) => ({ ...n, selected: false })),
         ...nodesToAdd.map((n) => ({ ...n, selected: selectSet.has(n.id) })),
       ];
-      const nextEdges = migrateImageGeneratorOutEdgesToGenerated(nextNodes, [...edges, ...edgesToAdd]);
+      const nextEdges = migrateWorkflowEdges(nextNodes, [...edges, ...edgesToAdd]);
       setNodes(nextNodes);
       setEdges(nextEdges);
       toast.success("Duplicated");
@@ -4129,7 +4093,7 @@ function WorkflowFlowWorkspace({
         ...nodes.map((n) => ({ ...n, selected: false })),
         ...nodesToAdd.map((n) => ({ ...n, selected: selectSet.has(n.id) })),
       ];
-      const nextEdges = migrateImageGeneratorOutEdgesToGenerated(nextNodes, [...edges, ...edgesToAdd]);
+      const nextEdges = migrateWorkflowEdges(nextNodes, [...edges, ...edgesToAdd]);
       setNodes(nextNodes);
       setEdges(nextEdges);
       toast.success("Pasted");

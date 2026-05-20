@@ -82,7 +82,12 @@ import {
   collectLinkedVideoUrlsForHandles,
   collectLinkedPromptTexts,
   collectLinkedPromptTextsForHandles,
+  collectUpstreamAssistantTexts,
   composeWorkflowPrompt,
+  workflowTextInputTargetHandles,
+  WORKFLOW_ASSISTANT_TEXT_TARGET_HANDLES,
+  WORKFLOW_GENERATOR_TEXT_TARGET_HANDLES,
+  WORKFLOW_TEXT_INPUT_HANDLES,
   coerceWorkflowVideoDurationSec,
   resolveWorkflowVideoModelId,
   runWorkflowImageJob,
@@ -109,6 +114,10 @@ import type { PromptListNodeData } from "../workflowPromptListTypes";
 import { buildPromptListNode } from "../workflowNodeFactory";
 import { buildImageRefNode } from "../workflowNodeFactory";
 import { linkToAdProductPhotoPickerUrls, readUniverseFromExtracted, splitAllScriptOptions } from "@/lib/linkToAdUniverse";
+import {
+  planWorkflowRunFromHere,
+  workflowRunFromHereParentStepIndices,
+} from "../workflowRunFromHere";
 
 export type AdAssetNodeData = {
   label: string;
@@ -313,8 +322,6 @@ const WORKFLOW_ASSISTANT_CREDITS_BY_MODEL: Record<"claude-sonnet-4-5" | "gpt-5o"
   "gpt-5o": 0,
 };
 const WORKFLOW_ASSISTANT_VIDEO_TO_PROMPT_CREDITS = 2;
-/** Match Video Generator sidebar text ports only (legacy center `in` handle removed). */
-const WORKFLOW_TEXT_INPUT_HANDLES = ["text", "inText"] as const;
 const WORKFLOW_PENDING_MEDIA_PREFIX = "__workflow_pending_media__:";
 const WORKFLOW_ERROR_MEDIA_PREFIX = "__workflow_error_media__:";
 const WORKFLOW_PENDING_POLL_MS = 3500;
@@ -1206,7 +1213,7 @@ function AdAssetNodeBase({ id, data, selected }: NodeProps<AdAssetNodeType>) {
       [data.assistantVisionPreset, data.kind, id],
     ),
   );
-  /** Assistant: number of text wires connected to prompt handles (`text` / `inText`). */
+  /** Assistant: text wires on `text` / `inText` / legacy `in`. */
   const assistantTextInputWireCount = useStore(
     useCallback(
       (s) => {
@@ -1214,7 +1221,9 @@ function AdAssetNodeBase({ id, data, selected }: NodeProps<AdAssetNodeType>) {
         return s.edges.filter((e) => {
           if (e.target !== id) return false;
           const h = e.targetHandle ?? "";
-          return WORKFLOW_TEXT_INPUT_HANDLES.includes(h as (typeof WORKFLOW_TEXT_INPUT_HANDLES)[number]);
+          return WORKFLOW_ASSISTANT_TEXT_TARGET_HANDLES.includes(
+            h as (typeof WORKFLOW_ASSISTANT_TEXT_TARGET_HANDLES)[number],
+          );
         }).length;
       },
       [data.kind, id],
@@ -2117,76 +2126,30 @@ function AdAssetNodeBase({ id, data, selected }: NodeProps<AdAssetNodeType>) {
     useCallback(
       (s) => {
         const byId = new Map(s.nodes.map((n) => [n.id, n]));
-        if (!byId.has(id)) return { steps: [] as { id: string; label: string; kind: string; credits: number; parents: number[] }[], estimatedCredits: 0 };
-        const outgoing = new Map<string, string[]>();
-        for (const e of s.edges) {
-          if (!outgoing.has(e.source)) outgoing.set(e.source, []);
-          outgoing.get(e.source)!.push(e.target);
+        if (!byId.has(id)) {
+          return {
+            steps: [] as { id: string; label: string; kind: string; credits: number; parents: number[] }[],
+            estimatedCredits: 0,
+          };
         }
-        const seen = new Set<string>();
-        const queue = [id];
-        const reachable: string[] = [];
-        while (queue.length) {
-          const cur = queue.shift()!;
-          if (seen.has(cur)) continue;
-          seen.add(cur);
-          reachable.push(cur);
-          for (const nxt of outgoing.get(cur) ?? []) if (!seen.has(nxt)) queue.push(nxt);
+        const { orderedRunIds } = planWorkflowRunFromHere(id, s.nodes, s.edges);
+        if (!orderedRunIds.length) {
+          return {
+            steps: [] as { id: string; label: string; kind: string; credits: number; parents: number[] }[],
+            estimatedCredits: 0,
+          };
         }
-        const runIds = reachable.filter((nid) => {
-          const n = byId.get(nid);
-          if (!n || n.type !== "adAsset") return false;
-          const k = (n.data as AdAssetNodeData).kind;
-          return k === "image" || k === "video" || k === "motion" || k === "assistant" || k === "website";
-        });
-        if (!runIds.length) return { steps: [] as { id: string; label: string; kind: string; credits: number; parents: number[] }[], estimatedCredits: 0 };
-        const runSet = new Set(runIds);
-        const indegree = new Map<string, number>();
-        const children = new Map<string, string[]>();
-        const parentsById = new Map<string, string[]>();
-        const reachOrder = new Map<string, number>(reachable.map((nid, idx) => [nid, idx]));
-        for (const rid of runIds) {
-          indegree.set(rid, 0);
-          children.set(rid, []);
-          parentsById.set(rid, []);
-        }
-        for (const e of s.edges) {
-          if (!runSet.has(e.source) || !runSet.has(e.target)) continue;
-          children.get(e.source)!.push(e.target);
-          parentsById.get(e.target)!.push(e.source);
-          indegree.set(e.target, (indegree.get(e.target) ?? 0) + 1);
-        }
-        const ready = runIds.filter((rid) => (indegree.get(rid) ?? 0) === 0);
-        ready.sort((a, b) => (reachOrder.get(a) ?? 0) - (reachOrder.get(b) ?? 0));
-        const orderedRunIds: string[] = [];
-        while (ready.length) {
-          const cur = ready.shift()!;
-          orderedRunIds.push(cur);
-          for (const nxt of children.get(cur) ?? []) {
-            const nextDeg = (indegree.get(nxt) ?? 0) - 1;
-            indegree.set(nxt, nextDeg);
-            if (nextDeg === 0) {
-              ready.push(nxt);
-              ready.sort((a, b) => (reachOrder.get(a) ?? 0) - (reachOrder.get(b) ?? 0));
-            }
-          }
-        }
-        if (orderedRunIds.length !== runIds.length) {
-          for (const rid of runIds) if (!orderedRunIds.includes(rid)) orderedRunIds.push(rid);
-        }
-        const indexOf = new Map(orderedRunIds.map((rid, idx) => [rid, idx]));
+        const parentStepIndices = workflowRunFromHereParentStepIndices(orderedRunIds, s.edges);
         let estimatedCredits = 0;
         const steps = orderedRunIds.map((rid) => {
           const n = byId.get(rid);
           const d = (n?.data as AdAssetNodeData) ?? ({ kind: "image" } as AdAssetNodeData);
-          const credits = n?.type === "adAsset" ? estimateWorkflowAdAssetRunCredits(d, rid, s.nodes, s.edges) : 0;
+          const credits =
+            n?.type === "adAsset" ? estimateWorkflowAdAssetRunCredits(d, rid, s.nodes, s.edges) : 0;
           estimatedCredits += credits;
           const label = (d.label ?? "").trim() || d.kind || "module";
           const kind = d.kind || "module";
-          const parents = (parentsById.get(rid) ?? [])
-            .map((pid) => indexOf.get(pid))
-            .filter((v): v is number => typeof v === "number")
-            .sort((a, b) => a - b);
+          const parents = parentStepIndices.get(rid) ?? [];
           return { id: rid, label, kind, credits, parents };
         });
         return { steps, estimatedCredits: Math.max(0, Math.round(estimatedCredits)) };
@@ -2214,7 +2177,9 @@ function AdAssetNodeBase({ id, data, selected }: NodeProps<AdAssetNodeType>) {
         return s.edges.filter((e) => {
           if (e.target !== id) return false;
           const h = e.targetHandle ?? "";
-          return WORKFLOW_TEXT_INPUT_HANDLES.includes(h as (typeof WORKFLOW_TEXT_INPUT_HANDLES)[number]);
+          return WORKFLOW_GENERATOR_TEXT_TARGET_HANDLES.includes(
+            h as (typeof WORKFLOW_GENERATOR_TEXT_TARGET_HANDLES)[number],
+          );
         }).length;
       },
       [id, isGeneratorNode],
@@ -2228,7 +2193,13 @@ function AdAssetNodeBase({ id, data, selected }: NodeProps<AdAssetNodeType>) {
         return s.edges.some((e) => {
           if (e.target !== id) return false;
           const h = e.targetHandle ?? "";
-          if (!WORKFLOW_TEXT_INPUT_HANDLES.includes(h as (typeof WORKFLOW_TEXT_INPUT_HANDLES)[number])) return false;
+          if (
+            !WORKFLOW_GENERATOR_TEXT_TARGET_HANDLES.includes(
+              h as (typeof WORKFLOW_GENERATOR_TEXT_TARGET_HANDLES)[number],
+            )
+          ) {
+            return false;
+          }
           const src = s.nodes.find((n) => n.id === e.source);
           if (!src || src.type !== "promptList") return false;
           const srcHandle = e.sourceHandle ?? "out";
@@ -2262,7 +2233,9 @@ function AdAssetNodeBase({ id, data, selected }: NodeProps<AdAssetNodeType>) {
       }
       const nodes = getNodes();
       const edges = getEdges();
-      const linked = collectLinkedPromptTextsForHandles(nodes, edges, id, [...WORKFLOW_TEXT_INPUT_HANDLES]);
+      const linked = collectLinkedPromptTextsForHandles(nodes, edges, id, [
+        ...workflowTextInputTargetHandles(nodes.find((n) => n.id === id)),
+      ]);
       return composeWorkflowPrompt(prompt, linked);
     })();
     const seed = (data.lastRunPrompt ?? composedSeed ?? prompt).trim() || prompt;
@@ -2338,13 +2311,20 @@ function AdAssetNodeBase({ id, data, selected }: NodeProps<AdAssetNodeType>) {
           ? Math.max(0, Math.floor(opts.resultListSlotIndex))
           : null;
     const promptForRunBase = data.kind === "assistant" ? assistantPromptDraft : prompt;
+    const selfNode = nodes.find((n) => n.id === id);
+    const textInputHandles = [...workflowTextInputTargetHandles(selfNode)];
     const profile360Preset = data.kind === "image" && data.imageWorkflowPreset === "profile_360";
-    const linkedPrompts =
+    const linkedPromptsRaw =
       profile360Preset
         ? ([] as string[])
         : data.kind === "image" || data.kind === "video" || data.kind === "motion" || data.kind === "assistant"
-          ? collectLinkedPromptTextsForHandles(nodes, edges, id, [...WORKFLOW_TEXT_INPUT_HANDLES])
+          ? collectLinkedPromptTextsForHandles(nodes, edges, id, textInputHandles)
           : collectLinkedPromptTexts(nodes, edges, id);
+    const linkedAssistantTexts =
+      data.kind === "image" || data.kind === "video" || data.kind === "motion"
+        ? collectUpstreamAssistantTexts(nodes, edges, id)
+        : [];
+    const linkedPrompts = [...linkedPromptsRaw, ...linkedAssistantTexts];
     const linkedAssistantImageRefs =
       data.kind === "assistant"
         ? collectLinkedImageUrlsForHandles(
@@ -2367,7 +2347,7 @@ function AdAssetNodeBase({ id, data, selected }: NodeProps<AdAssetNodeType>) {
       data.kind === "image" || data.kind === "video" || data.kind === "motion"
         ? profile360Preset
           ? { batch: null, composedSingle: WORKFLOW_AVATAR_360_PROFILE_PROMPT, fromPromptList: false }
-          : collectWorkflowBatchPrompts(nodes, edges, id, [...WORKFLOW_TEXT_INPUT_HANDLES], promptForRunBase)
+          : collectWorkflowBatchPrompts(nodes, edges, id, textInputHandles, promptForRunBase)
         : { batch: null, composedSingle: effectivePrompt, fromPromptList: false };
       const batchPrompts =
         forceSingleRun
@@ -2378,11 +2358,59 @@ function AdAssetNodeBase({ id, data, selected }: NodeProps<AdAssetNodeType>) {
       const singlePrompt = forcedPrompt || (batchContext.composedSingle || effectivePrompt).trim();
       const fromPromptList = forceSingleRun || forcedPrompt ? false : batchContext.fromPromptList;
     const requiresPrompt = data.kind !== "motion" && !profile360Preset;
-    if (requiresPrompt && !(batchPrompts?.length || singlePrompt)) {
+    if (
+      requiresPrompt &&
+      !(batchPrompts?.length || singlePrompt) &&
+      (data.kind === "image" || data.kind === "video") &&
+      linkedAssistantTexts.length === 0
+    ) {
+      const byId = new Map(nodes.map((n) => [n.id, n]));
+      const wiredAssistantWithoutOutput = edges.some((e) => {
+        if (e.target !== id) return false;
+        const h = e.targetHandle ?? "";
+        if (!WORKFLOW_ASSISTANT_TEXT_TARGET_HANDLES.includes(
+          h as (typeof WORKFLOW_ASSISTANT_TEXT_TARGET_HANDLES)[number],
+        )) {
+          return false;
+        }
+        const src = byId.get(e.source);
+        if (!src || src.type !== "adAsset") return false;
+        const sd = src.data as AdAssetNodeData;
+        if (sd.kind !== "assistant") return false;
+        return !((sd.assistantOutput ?? "").trim() || (sd.prompt ?? "").trim());
+      });
+      if (wiredAssistantWithoutOutput) {
+        toast.error("Run the assistant first", {
+          description:
+            "This generator is wired to an Assistant output. Run the Assistant (text + image inputs) so it produces prompts, then run the generator.",
+        });
+        emitRunFinished(false);
+        emitRunLog("error", "Run blocked: upstream assistant has no output yet.");
+        return;
+      }
+    }
+    const assistantHttpsVisionUrls =
+      data.kind === "assistant"
+        ? linkedAssistantImageRefs
+            .map((u) => (typeof u === "string" ? u.trim() : ""))
+            .filter((u) => /^https:\/\//i.test(u))
+        : [];
+    const assistantAllowsEmptyPrompt =
+      data.kind === "assistant" &&
+      (data.assistantVisionPreset === "image_to_json"
+        ? assistantHttpsVisionUrls.length > 0
+        : false);
+    if (requiresPrompt && !(batchPrompts?.length || singlePrompt) && !assistantAllowsEmptyPrompt) {
+      const assistantTextWired = data.kind === "assistant" && assistantTextInputWireCount > 0;
       toast.error("Add a prompt", {
-        description: linkedPrompts.length
-          ? "Linked nodes had no usable text. Type a prompt in the module or put text in the connected canvas note."
-          : "Type the prompt inside the module, or connect the text prompt port to a canvas note whose text should be included.",
+        description:
+          data.kind === "assistant" && assistantTextWired
+            ? "Your connected prompt text module is empty. Type in the Prompt text node, or add instructions in the assistant Input tab."
+            : data.kind === "assistant" && linkedAssistantImageRefs.length > 0
+              ? "Connect a Prompt text module to the text port (top bubble), or type instructions in the assistant Input tab. The image port alone is not enough."
+              : linkedPrompts.length
+                ? "Linked nodes had no usable text. Type a prompt in the module or put text in the connected canvas note."
+                : "Type the prompt inside the module, or connect the text prompt port to a Prompt text node or canvas note.",
       });
       emitRunFinished(false);
       emitRunLog("error", "Run blocked: prompt is empty.");
@@ -2534,7 +2562,7 @@ function AdAssetNodeBase({ id, data, selected }: NodeProps<AdAssetNodeType>) {
               const listOffsetX = Math.max(560, cardWidthPx + 220);
               const listNode = buildPromptListNode(
                 { x: self.position.x + listOffsetX, y: self.position.y + 8 },
-                { label: assistantListLabel, lines: [], mode: "prompts" },
+                { label: assistantListLabel, lines, mode: "prompts" },
               );
               setNodes((prev) => [...prev, listNode]);
               setEdges((prev) => [
@@ -2548,16 +2576,6 @@ function AdAssetNodeBase({ id, data, selected }: NodeProps<AdAssetNodeType>) {
                   style: { stroke: "rgba(167, 139, 250, 0.5)", strokeWidth: 2 },
                 },
               ]);
-              // Smooth "build" effect: reveal generated prompts one by one in the new list.
-              lines.forEach((_, idx) => {
-                window.setTimeout(() => {
-                  patch(listNode.id, {
-                    lines: lines.slice(0, idx + 1),
-                    mode: "prompts",
-                    contentKind: "text",
-                  });
-                }, 90 + idx * 70);
-              });
             }
             toast.success(`Assistant ready — ${lines.length} prompt${lines.length > 1 ? "s" : ""} in list`);
           } else {
