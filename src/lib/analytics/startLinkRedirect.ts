@@ -17,10 +17,19 @@ const cookieOptions = {
   secure: process.env.NODE_ENV === "production",
 };
 
-function marketingStartRedirectUrl(searchParams: URLSearchParams): string {
+/** Default UTMs for youry.io/start (Instagram bio link). Incoming query params override these. */
+export const START_LINK_DEFAULT_UTM = {
+  utm_source: "instagram",
+  utm_medium: "social",
+} as const;
+
+export function marketingStartRedirectUrl(searchParams: URLSearchParams): string {
   const target = new URL(`${marketingOrigin()}/`);
+  for (const [key, value] of Object.entries(START_LINK_DEFAULT_UTM)) {
+    target.searchParams.set(key, value);
+  }
   searchParams.forEach((value, key) => {
-    if (!target.searchParams.has(key)) target.searchParams.set(key, value);
+    target.searchParams.set(key, value);
   });
   return target.toString();
 }
