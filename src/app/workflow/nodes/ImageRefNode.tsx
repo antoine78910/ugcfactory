@@ -12,6 +12,7 @@ import { cloneWorkflowSelection } from "../workflowClone";
 import type { WorkflowCanvasNode } from "../workflowFlowTypes";
 import { isVideoFile, measureImageAspectFromObjectUrl, measureVideoAspectFromObjectUrl } from "../workflowMediaAspect";
 import { WorkflowMediaTrimDialog } from "../WorkflowMediaTrimDialog";
+import { workflowDisableSpellcheck } from "../workflowDisableSpellcheck";
 import { useWorkflowNodePatch } from "../workflowNodePatchContext";
 import { WorkflowNodeContextToolbar } from "./WorkflowNodeContextToolbar";
 
@@ -432,6 +433,7 @@ function ImageRefNodeBase({ id, data }: NodeProps<ImageRefNodeType>) {
           </div>
           {titleEditing ? (
             <input
+              {...workflowDisableSpellcheck}
               ref={titleInputRef}
               value={titleDraft}
               onChange={(e) => setTitleDraft(e.target.value)}

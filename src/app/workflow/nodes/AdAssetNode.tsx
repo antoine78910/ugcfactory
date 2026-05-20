@@ -74,6 +74,7 @@ import {
   WORKFLOW_AVATAR_360_PROFILE_PROMPT,
 } from "../workflowProfile360Preset";
 import { WORKFLOW_VIDEO_TO_PROMPT_USER_PROMPT } from "../workflowVideoToPromptPreset";
+import { workflowDisableSpellcheck } from "../workflowDisableSpellcheck";
 import { keepWheelInsideScrollable } from "../workflowWheelScroll";
 import type { WorkflowCanvasNode } from "../workflowFlowTypes";
 import {
@@ -3823,6 +3824,7 @@ function AdAssetNodeBase({ id, data, selected }: NodeProps<AdAssetNodeType>) {
                 <div>
                   <p className="mb-1 text-[11px] font-medium text-white/60">Website URL</p>
                   <input
+                    {...workflowDisableSpellcheck}
                     value={websiteUrl}
                     onChange={(e) => patch(id, { websiteUrl: e.target.value })}
                     placeholder="https://your-store.com/product-page"
@@ -3997,6 +3999,7 @@ function AdAssetNodeBase({ id, data, selected }: NodeProps<AdAssetNodeType>) {
             <Icon className="h-4 w-4 shrink-0 text-white/75" strokeWidth={2} aria-hidden />
             {titleEditing ? (
               <input
+                {...workflowDisableSpellcheck}
                 value={titleDraft}
                 onChange={(e) => setTitleDraft(e.target.value)}
                 onBlur={commitTitle}
@@ -4205,6 +4208,7 @@ function AdAssetNodeBase({ id, data, selected }: NodeProps<AdAssetNodeType>) {
                 </p>
               ) : null}
             <textarea
+              {...workflowDisableSpellcheck}
               value={assistantPromptDraft}
               onChange={(e) => setAssistantPromptDraft(e.target.value)}
               placeholder={
@@ -4231,6 +4235,7 @@ function AdAssetNodeBase({ id, data, selected }: NodeProps<AdAssetNodeType>) {
             </>
           ) : (
             <textarea
+              {...workflowDisableSpellcheck}
               value={assistantOutput}
               onChange={(e) => patch(id, { assistantOutput: e.target.value })}
               placeholder="No result yet. Switch to Input and run the assistant."
@@ -4748,6 +4753,7 @@ function AdAssetNodeBase({ id, data, selected }: NodeProps<AdAssetNodeType>) {
           <Icon className="h-4 w-4 shrink-0 text-white/75" strokeWidth={2} aria-hidden />
           {titleEditing ? (
             <input
+              {...workflowDisableSpellcheck}
               value={titleDraft}
               onChange={(e) => setTitleDraft(e.target.value)}
               onBlur={commitTitle}
@@ -5325,6 +5331,7 @@ function AdAssetNodeBase({ id, data, selected }: NodeProps<AdAssetNodeType>) {
                 </p>
               ) : !hasPreviewMedia || !isGeneratorNode || !hasLinkedGeneratorTextInput ? (
                 <textarea
+              {...workflowDisableSpellcheck}
                   ref={compactPromptTextareaRef}
                   value={prompt}
                   onChange={(e) => {
@@ -5736,6 +5743,7 @@ function AdAssetNodeBase({ id, data, selected }: NodeProps<AdAssetNodeType>) {
                 </button>
               </div>
               <textarea
+              {...workflowDisableSpellcheck}
                 ref={promptEditorTextareaRef}
                 value={promptEditorDraft}
                 onChange={(e) => setPromptEditorDraft(e.target.value)}
@@ -5779,6 +5787,7 @@ function AdAssetNodeBase({ id, data, selected }: NodeProps<AdAssetNodeType>) {
                 What you want
               </label>
               <textarea
+              {...workflowDisableSpellcheck}
                 value={assistantDescribe}
                 onChange={(e) => setAssistantDescribe(e.target.value)}
                 placeholder="e.g. A creator in a bright kitchen showing the product, natural light, authentic UGC vibe…"
@@ -5812,6 +5821,7 @@ function AdAssetNodeBase({ id, data, selected }: NodeProps<AdAssetNodeType>) {
                     Suggested prompt
                   </label>
                   <textarea
+              {...workflowDisableSpellcheck}
                     value={assistantResult}
                     onChange={(e) => setAssistantResult(e.target.value)}
                     rows={5}

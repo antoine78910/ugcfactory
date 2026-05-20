@@ -143,6 +143,7 @@ import {
   screenMarqueeRectToFlowRect,
   type WorkflowMarqueeRect,
 } from "./workflowMarqueeSelection";
+import { workflowDisableSpellcheck } from "./workflowDisableSpellcheck";
 import {
   buildWorkflowClipboardPayload,
   parseWorkflowClipboardText,
@@ -786,6 +787,7 @@ function WorkflowPagesPanel({
               <li key={p.id} className="group relative">
                 {renamingId === p.id ? (
                   <input
+                    {...workflowDisableSpellcheck}
                     autoFocus
                     value={renameDraft}
                     onChange={(e) => setRenameDraft(e.target.value)}
@@ -2198,6 +2200,7 @@ function WorkflowReactFlowChrome({
               <label className="grid gap-1">
                 <span className="text-[11px] text-white/45">Message</span>
                 <textarea
+                  {...workflowDisableSpellcheck}
                   value={feedbackMessage}
                   onChange={(e) => setFeedbackMessage(e.target.value)}
                   placeholder="Describe your idea or issue…"
@@ -6179,6 +6182,7 @@ export function WorkflowEditor({
               <label className="block">
                 <span className="mb-1 block text-[12px] font-semibold text-white/70">Template name</span>
                 <input
+                  {...workflowDisableSpellcheck}
                   value={publishTemplateName}
                   onChange={(e) => setPublishTemplateName(e.target.value)}
                   className="h-10 w-full rounded-lg border border-white/12 bg-white/[0.04] px-3 text-[13px] text-white outline-none placeholder:text-white/35 focus:border-violet-400/45"
@@ -6189,6 +6193,7 @@ export function WorkflowEditor({
               <label className="block">
                 <span className="mb-1 block text-[12px] font-semibold text-white/70">Short description</span>
                 <textarea
+                  {...workflowDisableSpellcheck}
                   value={publishTemplateBlurb}
                   onChange={(e) => setPublishTemplateBlurb(e.target.value)}
                   className="min-h-[84px] w-full resize-y rounded-lg border border-white/12 bg-white/[0.04] px-3 py-2 text-[13px] text-white outline-none placeholder:text-white/35 focus:border-violet-400/45"

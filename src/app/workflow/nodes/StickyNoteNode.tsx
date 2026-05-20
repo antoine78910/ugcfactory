@@ -9,6 +9,7 @@ import { cn } from "@/lib/utils";
 
 import type { WorkflowCanvasNode } from "../workflowFlowTypes";
 import { useWorkflowNodePatch } from "../workflowNodePatchContext";
+import { workflowDisableSpellcheck } from "../workflowDisableSpellcheck";
 import { keepWheelInsideScrollable } from "../workflowWheelScroll";
 import { STICKY_NOTE_DEFAULT_DATA, type StickyNoteNodeData, type StickyNoteNodeType } from "../workflowStickyNoteTypes";
 import { StickyNoteNodeToolbar } from "./StickyNoteNodeToolbar";
@@ -148,6 +149,7 @@ function StickyNoteNodeBase({ id, data: rawData, selected }: NodeProps<StickyNot
               "[&_p]:text-inherit [&_span]:text-inherit",
             )}
             contentEditable
+            spellCheck={workflowDisableSpellcheck.spellCheck}
             suppressContentEditableWarning
             onFocus={() => {
               editingRef.current = true;

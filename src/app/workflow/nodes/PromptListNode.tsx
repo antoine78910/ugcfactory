@@ -9,6 +9,7 @@ import { cn } from "@/lib/utils";
 
 import { primeRemoteMediaForDisplay, splitIntoPromptLines } from "../workflowNodeRun";
 import { useWorkflowNodePatch } from "../workflowNodePatchContext";
+import { workflowDisableSpellcheck } from "../workflowDisableSpellcheck";
 import { keepWheelInsideScrollable } from "../workflowWheelScroll";
 import { WorkflowNodeContextToolbar } from "./WorkflowNodeContextToolbar";
 import {
@@ -451,6 +452,7 @@ function PromptListNodeBase({ id, data: rawData, selected }: NodeProps<PromptLis
             <ListOrdered className="h-4 w-4 shrink-0 text-violet-300/90" strokeWidth={2} aria-hidden />
             {titleEditing ? (
               <input
+                {...workflowDisableSpellcheck}
                 value={titleDraft}
                 onChange={(e) => setTitleDraft(e.target.value)}
                 onBlur={commitTitle}
@@ -573,6 +575,7 @@ function PromptListNodeBase({ id, data: rawData, selected }: NodeProps<PromptLis
               </div>
               <div className="absolute inset-2.5 flex min-h-0 flex-col rounded-xl border border-violet-400/45 bg-[#15151a]/96 p-3 shadow-[0_18px_40px_rgba(0,0,0,0.45)] backdrop-blur-sm">
                 <textarea
+                  {...workflowDisableSpellcheck}
                   value={text}
                   onChange={(e) => setText(e.target.value)}
                   onWheelCapture={keepWheelInsideScrollable}

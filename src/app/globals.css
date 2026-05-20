@@ -510,6 +510,14 @@
   overflow: visible;
 }
 
+/* Hide native spelling underlines on canvas prompts (brands, JSON, multilingual copy). */
+.workflow-flow textarea::spelling-error,
+.workflow-flow input::spelling-error,
+.workflow-flow [contenteditable="true"]::spelling-error {
+  text-decoration: none !important;
+  background: transparent !important;
+}
+
 /* Workflow selects: keep option text readable on hover/focus/highlight. */
 .workflow-flow [data-slot="select-content"] [data-slot="select-item"] {
   color: rgba(255, 255, 255, 0.92);

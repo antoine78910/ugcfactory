@@ -7,6 +7,7 @@ import { toast } from "sonner";
 
 import { cn } from "@/lib/utils";
 
+import { workflowDisableSpellcheck } from "../workflowDisableSpellcheck";
 import { useWorkflowNodePatch } from "../workflowNodePatchContext";
 import { WorkflowNodeContextToolbar } from "./WorkflowNodeContextToolbar";
 
@@ -251,6 +252,7 @@ function WorkflowGroupNodeBase({ id, data, selected, width, height }: NodeProps<
           <div className="min-w-0 flex-1 self-start">
             {editing ? (
               <input
+                {...workflowDisableSpellcheck}
                 ref={inputRef}
                 value={draft}
                 onChange={(e) => setDraft(e.target.value)}

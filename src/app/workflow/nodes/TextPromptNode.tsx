@@ -8,6 +8,7 @@ import { PromptEnhanceCornerButton } from "@/app/_components/PromptEnhanceCorner
 import { cn } from "@/lib/utils";
 
 import { useWorkflowNodePatch } from "../workflowNodePatchContext";
+import { workflowDisableSpellcheck } from "../workflowDisableSpellcheck";
 import { keepWheelInsideScrollable } from "../workflowWheelScroll";
 import { WorkflowNodeContextToolbar } from "./WorkflowNodeContextToolbar";
 
@@ -59,6 +60,7 @@ function TextPromptNodeBase({ id, data: rawData, selected }: NodeProps<TextPromp
           <div className="relative p-2.5">
             <div className="relative">
               <textarea
+                {...workflowDisableSpellcheck}
                 value={draft}
                 onChange={(e) => {
                   const next = e.target.value;
