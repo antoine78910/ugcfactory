@@ -1,8 +1,7 @@
-Careers page hero image
+Careers + Manifesto hero image (founders / YOURY on CRT)
 
-  File served at:
+  Served at:
     /careers/hero.png  →  public/careers/hero.png
 
-  Replace this PNG any time (same path and filename) to update the image on
-  `/careers` without code changes. After swapping the file in production, do a
-  hard refresh if a CDN still serves an older copy.
+  Used on `/careers` and `/manifesto`. Replace this PNG (same path) to update
+  both pages. After deploying, hard-refresh if a CDN caches the old asset.

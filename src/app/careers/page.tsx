@@ -1,19 +1,14 @@
 import type { Metadata } from "next";
 import Image from "next/image";
 import Link from "next/link";
-import { Instrument_Serif } from "next/font/google";
 import { ArrowLeft, ArrowUpRight, MapPin } from "lucide-react";
 import { CareersLandingTracker } from "./_components/CareersLandingTracker";
 
-const instrumentSerif = Instrument_Serif({
-  weight: "400",
-  style: ["normal", "italic"],
-  subsets: ["latin"],
-  display: "swap",
-});
-
 export const dynamic = "force-static";
 export const revalidate = 3600;
+
+/** Founders hero — YOURY on CRT (`public/careers/hero.png`). */
+const CAREERS_HERO_SRC = "/careers/hero.png";
 
 export const metadata: Metadata = {
   title: "Careers — Youry",
@@ -35,8 +30,7 @@ type JobOpening = {
 };
 
 /**
- * Replace with Ashby (or other) URLs when your board is live. Default is a
- * mailto so listings still work before ATS setup.
+ * In-app listings link to job pages under `/careers/...`.
  */
 const JOBS: JobOpening[] = [
   {
@@ -48,15 +42,6 @@ const JOBS: JobOpening[] = [
       "Ship features daily across the stack. Work with LLMs and production pipelines so teams turn products into ad-ready UGC — studio workflows, generation, reliability, and the glue that makes it feel magic for ecommerce, SaaS, and app marketers.",
   },
   {
-    href:
-      "mailto:careers@youry.io?subject=Application%20%E2%80%94%20Founding%20Design%20Engineer",
-    discipline: "Design",
-    location: "Remote · EU-friendly hours",
-    title: "Founding Design Engineer",
-    description:
-      "Design and ship interfaces that make complex creative workflows feel obvious. Own UX, UI, and code end-to-end — flows, IA, microcopy, motion, and a visual system that earns trust when budgets and brand reputation are on the line.",
-  },
-  {
     href: "/careers/founding-creative",
     discipline: "Creative",
     location: "Remote · EU-friendly hours",
@@ -64,55 +49,56 @@ const JOBS: JobOpening[] = [
     description:
       "Own how Youry looks in motion — launch films, social-first cuts, and a visual language for an AI UGC brand. Shoot, edit, animate, and ship; AI-augmented, taste-first.",
   },
-  {
-    href:
-      "mailto:careers@youry.io?subject=Application%20%E2%80%94%20AI%20Builder%20in%20Residence",
-    discipline: "Residency",
-    location: "Remote · EU-friendly hours",
-    title: "AI Builder in Residence",
-    description:
-      "The best teams shape roles around people, not templates. If you obsess over details others miss and want to build something only you can articulate, apply — we will scope the work around your strengths and the problems worth solving next.",
-  },
 ];
 
 export default function CareersPage() {
   return (
-    <div className="min-h-screen bg-background text-foreground">
+    <div className="min-h-screen overflow-x-clip bg-[#050507] font-sans text-white selection:bg-violet-500/30">
       <CareersLandingTracker />
-      <header className="mx-auto max-w-5xl px-4 pt-8 sm:px-6">
-        <Link
-          href="/"
-          aria-label="Back to home"
-          className="inline-flex items-center gap-2 text-sm text-muted-foreground transition-colors hover:text-foreground"
-        >
-          <ArrowLeft className="size-4 shrink-0" aria-hidden />
-          <span>Back</span>
-        </Link>
+      <header className="sticky top-0 z-20 border-b border-white/[0.08] bg-[#050507]/90 backdrop-blur-md supports-[backdrop-filter]:bg-[#050507]/75">
+        <div className="mx-auto flex max-w-5xl items-center justify-between gap-3 px-4 py-3 sm:px-6">
+          <Link href="/" className="flex shrink-0 items-center">
+            <Image
+              src="/youry-logo.png"
+              alt="Youry"
+              width={174}
+              height={52}
+              className="h-7 w-auto opacity-95 sm:h-8"
+              priority
+            />
+          </Link>
+          <Link
+            href="/"
+            aria-label="Back to home"
+            className="inline-flex items-center gap-2 text-sm text-white/50 transition-colors hover:text-white"
+          >
+            <ArrowLeft className="size-4 shrink-0" aria-hidden />
+            <span>Back</span>
+          </Link>
+        </div>
       </header>
 
-      <div className="mx-auto max-w-5xl px-4 pb-12 pt-24 sm:px-6 md:pb-24 md:pt-32">
+      <div className="mx-auto max-w-5xl px-4 pb-12 pt-16 sm:px-6 md:pb-24 md:pt-24">
         <div className="mb-6 text-center sm:mb-12">
-          <h1
-            className={`mb-4 text-4xl font-bold text-foreground sm:text-5xl md:text-6xl ${instrumentSerif.className}`}
-          >
-            Join Us
+          <h1 className="mb-4 text-4xl font-extrabold leading-tight tracking-tight text-white sm:text-5xl md:text-6xl">
+            Join us
           </h1>
-          <p className="mx-auto mb-6 max-w-2xl text-lg text-muted-foreground sm:text-xl">
+          <p className="mx-auto mb-6 max-w-2xl text-lg text-white/60 sm:text-xl">
             We are building the infrastructure for teams who ship AI UGC at the
             speed of performance marketing — for ecommerce, SaaS, and apps that
             need to test creative without a traditional production crew.
           </p>
-          <p className="text-sm text-muted-foreground/70">
+          <p className="text-sm text-white/45">
             No degree required. No credentials asked. We only care about what
             you have built.
           </p>
         </div>
 
         <div className="mx-auto mb-10 max-w-4xl sm:mb-14">
-          <div className="relative aspect-[16/10] w-full overflow-hidden rounded-2xl border border-border bg-muted shadow-lg">
+          <div className="relative aspect-[16/10] w-full overflow-hidden rounded-2xl border border-white/10 bg-white/[0.02] shadow-[0_0_0_1px_rgba(255,255,255,0.04)]">
             <Image
-              src="/careers/hero.png"
-              alt="Founders at work in a retro studio: CRT glow, server lights, and the YOURY name on screen"
+              src={CAREERS_HERO_SRC}
+              alt="Founders at work in a retro studio: CRT glow, server lights, and YOURY on screen"
               fill
               className="object-cover object-center"
               sizes="(max-width: 896px) 100vw, 896px"
@@ -124,30 +110,28 @@ export default function CareersPage() {
         <div className="space-y-4">
           {JOBS.map((job) => {
             const cardClassName =
-              "group flex flex-col justify-between gap-4 rounded-2xl border border-border bg-card p-6 shadow-sm transition-all duration-300 hover:shadow-lg sm:flex-row sm:items-center sm:p-8";
+              "group flex flex-col justify-between gap-4 rounded-2xl border border-white/10 bg-white/[0.03] p-6 shadow-sm transition-all duration-300 hover:border-violet-500/35 hover:bg-white/[0.06] hover:shadow-[0_0_40px_-12px_rgba(139,92,246,0.35)] sm:flex-row sm:items-center sm:p-8";
             const inner = (
               <>
                 <div className="min-w-0 flex-1">
                   <div className="mb-2 flex flex-wrap items-center gap-3">
-                    <span className="inline-flex items-center rounded-full bg-secondary px-3 py-1 text-xs font-medium text-secondary-foreground">
+                    <span className="inline-flex items-center rounded-full border border-violet-400/35 bg-violet-500/15 px-3 py-1 text-xs font-semibold text-violet-200">
                       {job.discipline}
                     </span>
-                    <span className="flex items-center gap-1 text-sm text-muted-foreground">
+                    <span className="flex items-center gap-1 text-sm text-white/45">
                       <MapPin className="size-3.5 shrink-0" aria-hidden />
                       {job.location}
                     </span>
                   </div>
-                  <h2
-                    className={`mb-2 text-xl font-bold text-foreground sm:text-2xl ${instrumentSerif.className}`}
-                  >
+                  <h2 className="mb-2 text-xl font-bold leading-snug tracking-tight text-white sm:text-2xl">
                     {job.title}
                   </h2>
-                  <p className="text-sm text-muted-foreground sm:text-base">
+                  <p className="text-sm text-white/55 sm:text-base">
                     {job.description}
                   </p>
                 </div>
                 <ArrowUpRight
-                  className="size-5 shrink-0 text-muted-foreground transition-all group-hover:-translate-y-0.5 group-hover:translate-x-0.5 group-hover:text-foreground"
+                  className="size-5 shrink-0 text-white/40 transition-all group-hover:-translate-y-0.5 group-hover:translate-x-0.5 group-hover:text-violet-300"
                   aria-hidden="true"
                 />
               </>
@@ -173,6 +157,16 @@ export default function CareersPage() {
             );
           })}
         </div>
+
+        <p className="mt-12 text-center text-xs text-white/40">
+          © {new Date().getFullYear()} Youry ·{" "}
+          <Link
+            href="/manifesto"
+            className="text-violet-300/90 underline underline-offset-4 hover:text-violet-200"
+          >
+            Manifesto
+          </Link>
+        </p>
       </div>
     </div>
   );
