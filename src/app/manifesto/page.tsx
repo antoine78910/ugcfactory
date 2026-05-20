@@ -7,7 +7,7 @@ export const dynamic = "force-static";
 export const revalidate = 3600;
 
 /** Same hero as `/careers`: founders scene with YOURY on CRT (`public/careers/hero.png`). */
-const MANIFESTO_HERO_SRC = "/careers/hero.png?v=3";
+const MANIFESTO_HERO_SRC = "/careers/hero.png";
 
 const MANIFESTO_SECTION_TITLE_CLASS =
   "mb-8 mt-20 text-center text-3xl font-extrabold leading-tight tracking-tight text-white sm:text-4xl";

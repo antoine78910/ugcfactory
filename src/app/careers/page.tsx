@@ -9,7 +9,7 @@ export const dynamic = "force-static";
 export const revalidate = 3600;
 
 /** Founders hero — YOURY on CRT (`public/careers/hero.png`). Bump `v` after replacing the file. */
-const CAREERS_HERO_SRC = "/careers/hero.png?v=3";
+const CAREERS_HERO_SRC = "/careers/hero.png";
 
 export const metadata: Metadata = {
   title: "Careers — Youry",
