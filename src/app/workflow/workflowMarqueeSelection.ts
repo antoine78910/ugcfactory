@@ -1,6 +1,4 @@
-import type { Transform } from "@xyflow/react";
-
-import type { WorkflowCanvasNode } from "./workflowFlowTypes";
+import { getNodesInside, type NodeLookup, type Transform } from "@xyflow/system";
 
 export type WorkflowMarqueeRect = {
   x: number;
@@ -9,68 +7,93 @@ export type WorkflowMarqueeRect = {
   height: number;
 };
 
-type WorkflowInternalNode = {
-  measured?: { width?: number | null; height?: number | null };
-  internals: {
-    positionAbsolute: { x: number; y: number };
-    handleBounds?: unknown;
-  };
-};
+/** Canvas cards that box-select should target (not prompt/list/sticky/group). */
+export const WORKFLOW_MARQUEE_MODULE_TYPES = new Set(["adAsset", "imageRef"]);
 
-/** Screen-space marquee rect (pane coords) → flow coordinates. */
-export function screenMarqueeRectToFlowRect(
-  rect: WorkflowMarqueeRect,
+/**
+ * Module ids inside the pane-space marquee, using the same geometry as React Flow.
+ * `excludeNonSelectableNodes` is off so upload cards (`imageRef`) still match even when
+ * their `selectable` flag is false.
+ */
+export function getMarqueeModuleIdsInRect(
+  nodeLookup: NodeLookup,
+  paneRect: WorkflowMarqueeRect,
   transform: Transform,
-): WorkflowMarqueeRect {
-  const [tx, ty, scale] = transform;
-  return {
-    x: (rect.x - tx) / scale,
-    y: (rect.y - ty) / scale,
-    width: rect.width / scale,
-    height: rect.height / scale,
-  };
+  partial: boolean,
+): string[] {
+  const inside = getNodesInside(nodeLookup, paneRect, transform, partial, false);
+  return inside
+    .filter(
+      (node): node is (typeof inside)[number] =>
+        !node.hidden && typeof node.type === "string" && WORKFLOW_MARQUEE_MODULE_TYPES.has(node.type),
+    )
+    .map((node) => node.id);
 }
 
-function rectOverlapArea(a: WorkflowMarqueeRect, b: WorkflowMarqueeRect): number {
-  const overlapX = Math.min(a.x + a.width, b.x + b.width) - Math.max(a.x, b.x);
-  const overlapY = Math.min(a.y + a.height, b.y + b.height) - Math.max(a.y, b.y);
-  if (overlapX <= 0 || overlapY <= 0) return 0;
-  return overlapX * overlapY;
+/** Pane-space rect fields used by React Flow's `getNodesInside`. */
+export function normalizeMarqueePaneRect(rect: WorkflowMarqueeRect): WorkflowMarqueeRect {
+  return {
+    x: rect.x,
+    y: rect.y,
+    width: rect.width,
+    height: rect.height,
+  };
 }
 
 /**
- * adAsset module ids whose bounds intersect the marquee in flow space.
- * Ignores graph edges; uses measured dimensions only (not handleBounds).
+ * Module ids for a finished marquee: geometry first, then React Flow's own pick
+ * (same rect math, but may include nodes our lookup pass missed mid-frame).
  */
-export function getAdAssetIdsInMarqueeRect(
-  nodes: WorkflowCanvasNode[],
-  flowRect: WorkflowMarqueeRect,
-  getInternalNode: (id: string) => WorkflowInternalNode | null | undefined,
-  partial: boolean,
-): string[] {
-  const ids: string[] = [];
-  for (const node of nodes) {
-    if (node.type !== "adAsset" || node.hidden) continue;
-    if (node.selectable === false) continue;
+const MARQUEE_RECT_PAD_PX = 6;
 
-    const internal = getInternalNode(node.id);
-    const width =
-      internal?.measured?.width ?? node.width ?? node.measured?.width ?? null;
-    const height =
-      internal?.measured?.height ?? node.height ?? node.measured?.height ?? null;
-    if (width == null || height == null || width <= 0 || height <= 0) continue;
-
-    const abs = internal?.internals?.positionAbsolute ?? node.position;
-    const nodeRect: WorkflowMarqueeRect = {
-      x: abs.x,
-      y: abs.y,
-      width,
-      height,
-    };
-    const overlap = rectOverlapArea(flowRect, nodeRect);
-    const nodeArea = width * height;
-    const matches = partial ? overlap > 0 : overlap >= nodeArea - 0.5;
-    if (matches) ids.push(node.id);
-  }
-  return ids;
+function inflateMarqueePaneRect(rect: WorkflowMarqueeRect): WorkflowMarqueeRect {
+  const pad = MARQUEE_RECT_PAD_PX;
+  return {
+    x: rect.x - pad,
+    y: rect.y - pad,
+    width: rect.width + pad * 2,
+    height: rect.height + pad * 2,
+  };
 }
+
+export function pickMarqueeModuleIds(
+  paneRect: WorkflowMarqueeRect,
+  nodeLookup: NodeLookup,
+  transform: Transform,
+  rfSelected: ReadonlyArray<{ id: string; type?: string | null; hidden?: boolean | null }>,
+  partial = true,
+): string[] {
+  const normalized = normalizeMarqueePaneRect(paneRect);
+  const geometric = getMarqueeModuleIdsInRect(nodeLookup, normalized, transform, partial);
+  if (geometric.length > 0) return geometric;
+
+  const inflated = getMarqueeModuleIdsInRect(
+    nodeLookup,
+    inflateMarqueePaneRect(normalized),
+    transform,
+    partial,
+  );
+  if (inflated.length > 0) return inflated;
+
+  const rfModules = rfSelected
+    .filter(
+      (node) =>
+        !node.hidden &&
+        typeof node.type === "string" &&
+        WORKFLOW_MARQUEE_MODULE_TYPES.has(node.type),
+    )
+    .map((node) => node.id);
+  if (rfModules.length > 0) return rfModules;
+
+  // Same hit-test React Flow uses during drag (selectable nodes only), then module filter.
+  const rfGeometry = getNodesInside(nodeLookup, normalized, transform, partial, true)
+    .filter(
+      (node) =>
+        !node.hidden && typeof node.type === "string" && WORKFLOW_MARQUEE_MODULE_TYPES.has(node.type),
+    )
+    .map((node) => node.id);
+  return rfGeometry;
+}
+
+/** @deprecated Use getMarqueeModuleIdsInRect — kept for any external imports. */
+export const getAdAssetIdsInMarqueeRect = getMarqueeModuleIdsInRect;

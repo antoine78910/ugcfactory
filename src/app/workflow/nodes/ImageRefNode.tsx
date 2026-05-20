@@ -422,7 +422,7 @@ function ImageRefNodeBase({ id, data }: NodeProps<ImageRefNodeType>) {
         />
       ) : null}
 
-      <div className="relative flex items-end gap-1">
+      <div className="relative flex items-end gap-1" spellCheck={false}>
         <div className="absolute left-0 -top-6 z-[6] flex min-w-0 items-center gap-2.5 pr-2">
           <div className="flex h-6 w-6 items-center justify-center rounded-md border border-violet-500/45 bg-violet-950/65">
             {isVideo ? (

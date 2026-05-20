@@ -215,7 +215,6 @@ export function buildImageRefNode(position: XYPosition, options: BuildImageRefNo
     id: crypto.randomUUID(),
     type: "imageRef",
     position,
-    selectable: false,
     data,
   };
 }
