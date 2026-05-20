@@ -1812,8 +1812,12 @@ function AdAssetNodeBase({ id, data, selected }: NodeProps<AdAssetNodeType>) {
    */
   useEffect(() => {
     const validTargets = new Set<string>();
-    validTargets.add("text");
-    validTargets.add("inText");
+    const websiteProfile360 = data.kind === "website" && data.websiteOutputMode === "profile_360";
+    // Website 360° preset only exposes `references`; other kinds use text bubbles (when shown).
+    if (!websiteProfile360) {
+      validTargets.add("text");
+      validTargets.add("inText");
+    }
 
     if (data.kind === "motion") {
       validTargets.add("startImage");
@@ -1837,11 +1841,25 @@ function AdAssetNodeBase({ id, data, selected }: NodeProps<AdAssetNodeType>) {
       }
     }
 
+    if (websiteProfile360) {
+      validTargets.add("references");
+    }
+
     if (data.kind === "image" || data.kind === "variation" || data.kind === "assistant" || data.kind === "upscale") {
       validTargets.add("references");
       validTargets.add("inImage");
-      if (data.kind === "assistant" && data.assistantVisionPreset === "video_to_prompt") {
-        validTargets.add("inVideo");
+      // Variation / upscale: primary image bubble uses `startImage` (must match rendered Handles or edges drop on reload).
+      if (data.kind === "variation" || data.kind === "upscale") {
+        validTargets.add("startImage");
+      }
+      // Assistant: `startImage` is shown unless image→JSON or video→prompt presets (see assistant port column JSX).
+      if (data.kind === "assistant") {
+        const preset = data.assistantVisionPreset;
+        if (preset === "video_to_prompt") {
+          validTargets.add("inVideo");
+        } else if (preset !== "image_to_json") {
+          validTargets.add("startImage");
+        }
       }
     }
 
@@ -1857,6 +1875,7 @@ function AdAssetNodeBase({ id, data, selected }: NodeProps<AdAssetNodeType>) {
     data.kind,
     id,
     data.assistantVisionPreset,
+    data.websiteOutputMode,
     seedance2ProLike,
     setEdges,
     videoModelHasEndFrame,
