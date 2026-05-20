@@ -134,7 +134,7 @@ function frameDimensions(intrinsicAspect?: number): { width: number; height: num
 
 const noop = () => {};
 
-function ImageRefNodeBase({ id, data }: NodeProps<ImageRefNodeType>) {
+function ImageRefNodeBase({ id, data, selected }: NodeProps<ImageRefNodeType>) {
   const { getNodes, getEdges, setNodes, setEdges } = useReactFlow();
   /**
    * Cross-page-safe data patch (works even if user navigates pages mid-upload).
@@ -476,6 +476,7 @@ function ImageRefNodeBase({ id, data }: NodeProps<ImageRefNodeType>) {
           className={cn(
             "group relative overflow-hidden rounded-2xl border bg-[#121212]/98 transition-shadow duration-200",
             "border-white/10 hover:border-white/20",
+            selected && "ring-2 ring-violet-500/85 ring-offset-2 ring-offset-[#06070d]",
           )}
           style={{ width: cardWidth }}
           onMouseEnter={onEnter}

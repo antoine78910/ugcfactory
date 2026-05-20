@@ -7,8 +7,21 @@ export type WorkflowMarqueeRect = {
   height: number;
 };
 
-/** Canvas cards that box-select should target (not prompt/list/sticky/group). */
-export const WORKFLOW_MARQUEE_MODULE_TYPES = new Set(["adAsset", "imageRef"]);
+/** Group frames are layout chrome — not box-select targets. */
+export const WORKFLOW_MARQUEE_EXCLUDED_TYPES = new Set(["workflowGroup"]);
+
+export function isWorkflowMarqueeNodeType(type: string | null | undefined): boolean {
+  return typeof type === "string" && !WORKFLOW_MARQUEE_EXCLUDED_TYPES.has(type);
+}
+
+/** @deprecated Use isWorkflowMarqueeNodeType — all canvas nodes except group frames. */
+export const WORKFLOW_MARQUEE_MODULE_TYPES = new Set([
+  "adAsset",
+  "imageRef",
+  "textPrompt",
+  "promptList",
+  "stickyNote",
+]);
 
 /**
  * Module ids inside the pane-space marquee, using the same geometry as React Flow.
@@ -25,7 +38,7 @@ export function getMarqueeModuleIdsInRect(
   return inside
     .filter(
       (node): node is (typeof inside)[number] =>
-        !node.hidden && typeof node.type === "string" && WORKFLOW_MARQUEE_MODULE_TYPES.has(node.type),
+        !node.hidden && isWorkflowMarqueeNodeType(node.type),
     )
     .map((node) => node.id);
 }
@@ -80,7 +93,7 @@ export function pickMarqueeModuleIds(
       (node) =>
         !node.hidden &&
         typeof node.type === "string" &&
-        WORKFLOW_MARQUEE_MODULE_TYPES.has(node.type),
+        isWorkflowMarqueeNodeType(node.type),
     )
     .map((node) => node.id);
   if (rfModules.length > 0) return rfModules;
@@ -89,7 +102,7 @@ export function pickMarqueeModuleIds(
   const rfGeometry = getNodesInside(nodeLookup, normalized, transform, partial, true)
     .filter(
       (node) =>
-        !node.hidden && typeof node.type === "string" && WORKFLOW_MARQUEE_MODULE_TYPES.has(node.type),
+        !node.hidden && isWorkflowMarqueeNodeType(node.type),
     )
     .map((node) => node.id);
   return rfGeometry;

@@ -157,7 +157,6 @@ export function buildStickyNoteNode(position: XYPosition): StickyNoteNodeType {
     type: "stickyNote",
     position,
     zIndex: 2,
-    selectable: false,
     data: { ...STICKY_NOTE_DEFAULT_DATA },
   };
 }
@@ -168,7 +167,6 @@ export function buildTextPromptNode(position: XYPosition): TextPromptNodeType {
     type: "textPrompt",
     position,
     zIndex: 1,
-    selectable: false,
     data: { prompt: "" },
   };
 }
@@ -185,7 +183,6 @@ export function buildPromptListNode(position: XYPosition, options?: BuildPromptL
     type: "promptList",
     position,
     zIndex: 1,
-    selectable: false,
     data: {
       ...PROMPT_LIST_DEFAULT_DATA,
       label: options?.label ?? PROMPT_LIST_DEFAULT_DATA.label,

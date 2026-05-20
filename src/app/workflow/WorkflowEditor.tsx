@@ -19,7 +19,6 @@ import {
   useNodesState,
   useReactFlow,
   useStore,
-  useStoreApi,
   type XYPosition,
 } from "@xyflow/react";
 import {
@@ -138,7 +137,6 @@ import {
   WORKFLOW_CONNECTION_RADIUS,
 } from "./workflowAutoConnect";
 import { canCloneWorkflowSelection, cloneWorkflowSelection } from "./workflowClone";
-import { normalizeMarqueePaneRect, pickMarqueeModuleIds, type WorkflowMarqueeRect } from "./workflowMarqueeSelection";
 import { workflowDisableSpellcheck } from "./workflowDisableSpellcheck";
 import {
   buildWorkflowClipboardPayload,
@@ -418,11 +416,6 @@ function sourceKindFromNodeHandle(
     return null;
   }
   return null;
-}
-
-/** Generator / upload cards — not prompt text, lists, sticky notes, or group frames. */
-function isMarqueeModuleNode(node: WorkflowCanvasNode): boolean {
-  return node.type === "adAsset" || node.type === "imageRef";
 }
 
 /** Top-level adAsset modules that can be placed inside a new group frame. */
@@ -2701,8 +2694,6 @@ function WorkflowFlowWorkspace({
 }: FlowWorkspaceProps) {
   const { screenToFlowPosition, flowToScreenPosition, getInternalNode, getNodes, getEdges, getViewport } =
     useReactFlow();
-  const storeApi = useStoreApi();
-  const lastMarqueeRectRef = useRef<WorkflowMarqueeRect | null>(null);
   const marqueeGestureRef = useRef(false);
   const activePage = useMemo(
     () => project.pages.find((p) => p.id === project.activePageId) ?? project.pages[0],
@@ -2726,78 +2717,20 @@ function WorkflowFlowWorkspace({
   const lastEdgePointerRef = useRef<{ x: number; y: number } | null>(null);
   /** Derive from node `selected` flags, matches React Flow's controlled state (onSelectionChange can lag). */
   const selectedNodes = useMemo(() => nodes.filter((n) => n.selected), [nodes]);
-  const applyModuleMarqueeSelection = useCallback(
-    (keepIds: Set<string>) => {
-      setNodes((prev) => {
-        let changed = false;
-        const next = prev.map((n) => {
-          const shouldSelect = keepIds.has(n.id);
-          if ((n.selected ?? false) !== shouldSelect) {
-            changed = true;
-            return { ...n, selected: shouldSelect };
-          }
-          return n;
-        });
-        return changed ? next : prev;
-      });
-      setEdges((prev) => {
-        let changed = false;
-        const next = prev.map((e) => {
-          if (!e.selected) return e;
-          changed = true;
-          return { ...e, selected: false };
-        });
-        return changed ? next : prev;
-      });
-    },
-    [setNodes, setEdges],
-  );
-
-  const commitMarqueeModuleSelection = useCallback(
-    (paneRect: WorkflowMarqueeRect) => {
-      const { nodeLookup, transform, nodes: storeNodes } = storeApi.getState();
-      const rfSelected = storeNodes.filter((n) => n.selected) as WorkflowCanvasNode[];
-      const ids = pickMarqueeModuleIds(
-        normalizeMarqueePaneRect(paneRect),
-        nodeLookup,
-        transform,
-        rfSelected,
-        true,
-      );
-      applyModuleMarqueeSelection(new Set(ids));
-    },
-    [applyModuleMarqueeSelection, storeApi],
-  );
-
-  useEffect(() => {
-    if (readOnly) return;
-    return storeApi.subscribe((state) => {
-      const rect = state.userSelectionRect;
-      if (!rect) return;
-      lastMarqueeRectRef.current = normalizeMarqueePaneRect(rect);
-    });
-  }, [readOnly, storeApi]);
-
   const onSelectionStart = useCallback(() => {
     if (readOnly) return;
     marqueeGestureRef.current = true;
-    const rect = storeApi.getState().userSelectionRect;
-    if (rect) lastMarqueeRectRef.current = normalizeMarqueePaneRect(rect);
-  }, [readOnly, storeApi]);
+  }, [readOnly]);
 
   const onSelectionEnd = useCallback(() => {
     if (readOnly || !marqueeGestureRef.current) return;
     marqueeGestureRef.current = false;
-    const screenRect = lastMarqueeRectRef.current;
-    lastMarqueeRectRef.current = null;
-    if (!screenRect || screenRect.width < 2 || screenRect.height < 2) return;
-    // Wait for React Flow to commit its final selection pass, then keep modules only.
-    requestAnimationFrame(() => {
-      requestAnimationFrame(() => {
-        commitMarqueeModuleSelection(screenRect);
-      });
+    // Keep React Flow's node selection; only drop edge highlights after box-select.
+    setEdges((prev) => {
+      if (!prev.some((e) => e.selected)) return prev;
+      return prev.map((e) => (e.selected ? { ...e, selected: false } : e));
     });
-  }, [commitMarqueeModuleSelection, readOnly]);
+  }, [readOnly, setEdges]);
   const [placementPicker, setPlacementPicker] = useState<WorkflowPlacementPickerState | null>(null);
   const placementRef = useRef<HTMLDivElement>(null);
   const [uploadTrimState, setUploadTrimState] = useState<{
