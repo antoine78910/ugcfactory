@@ -1067,7 +1067,7 @@ function WorkflowReactFlowChrome({
     flowToScreenPosition,
     getNodes,
     getNodesBounds,
-    groupEligibleIdsKey,
+    selectionChromeIdsKey,
     layoutRev,
     viewport,
   ]);
