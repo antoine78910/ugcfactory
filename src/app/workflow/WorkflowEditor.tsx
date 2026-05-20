@@ -19,6 +19,7 @@ import {
   useNodesState,
   useReactFlow,
   useStore,
+  useStoreApi,
   type XYPosition,
 } from "@xyflow/react";
 import {
@@ -137,6 +138,11 @@ import {
   WORKFLOW_CONNECTION_RADIUS,
 } from "./workflowAutoConnect";
 import { canCloneWorkflowSelection, cloneWorkflowSelection } from "./workflowClone";
+import {
+  getAdAssetIdsInMarqueeRect,
+  screenMarqueeRectToFlowRect,
+  type WorkflowMarqueeRect,
+} from "./workflowMarqueeSelection";
 import {
   buildWorkflowClipboardPayload,
   parseWorkflowClipboardText,
@@ -1964,7 +1970,7 @@ function WorkflowReactFlowChrome({
 
           <button
             type="button"
-            title="Select (V) — drag on empty canvas to box-select; Ctrl/Cmd+click to add to selection"
+            title="Select (V) — drag on empty canvas to box-select modules (fully inside the box); Ctrl/Cmd+click to add"
             onClick={() => setTool("select")}
             className={cn(
               "flex h-9 w-9 items-center justify-center rounded-full transition-colors",
@@ -2696,6 +2702,8 @@ function WorkflowFlowWorkspace({
 }: FlowWorkspaceProps) {
   const { screenToFlowPosition, flowToScreenPosition, getInternalNode, getNodes, getEdges, getViewport } =
     useReactFlow();
+  const storeApi = useStoreApi();
+  const lastMarqueeRectRef = useRef<WorkflowMarqueeRect | null>(null);
   const activePage = useMemo(
     () => project.pages.find((p) => p.id === project.activePageId) ?? project.pages[0],
     [project.pages, project.activePageId],
@@ -2718,13 +2726,8 @@ function WorkflowFlowWorkspace({
   const lastEdgePointerRef = useRef<{ x: number; y: number } | null>(null);
   /** Derive from node `selected` flags, matches React Flow's controlled state (onSelectionChange can lag). */
   const selectedNodes = useMemo(() => nodes.filter((n) => n.selected), [nodes]);
-  const onSelectionChange = useCallback(
-    ({ nodes: selNodes }: { nodes: WorkflowCanvasNode[]; edges: Edge[] }) => {
-      if (readOnly || tool !== "select") return;
-      // Marquee multi-select: adAsset modules only (not prompt text / lists / uploads on wires).
-      // Single-click selection is unchanged (notes, prompt text, groups still editable).
-      if ((selNodes?.length ?? 0) <= 1) return;
-      const keepIds = new Set(selNodes.filter((n) => isMarqueeModuleNode(n)).map((n) => n.id));
+  const applyModuleMarqueeSelection = useCallback(
+    (keepIds: Set<string>) => {
       setNodes((prev) => {
         let changed = false;
         const next = prev.map((n) => {
@@ -2737,7 +2740,6 @@ function WorkflowFlowWorkspace({
         });
         return changed ? next : prev;
       });
-      // Avoid edge selection noise when box-selecting modules.
       setEdges((prev) => {
         let changed = false;
         const next = prev.map((e) => {
@@ -2748,8 +2750,55 @@ function WorkflowFlowWorkspace({
         return changed ? next : prev;
       });
     },
-    [readOnly, tool, setNodes, setEdges],
+    [setNodes, setEdges],
   );
+
+  const resolveMarqueeModuleIds = useCallback(
+    (screenRect: WorkflowMarqueeRect) => {
+      const { transform } = storeApi.getState();
+      const flowRect = screenMarqueeRectToFlowRect(screenRect, transform);
+      return getAdAssetIdsInMarqueeRect(
+        getNodes() as WorkflowCanvasNode[],
+        flowRect,
+        getInternalNode,
+        false,
+      );
+    },
+    [getInternalNode, getNodes, storeApi],
+  );
+
+  const onSelectionChange = useCallback(
+    ({ nodes: selNodes }: { nodes: WorkflowCanvasNode[]; edges: Edge[] }) => {
+      if (readOnly || tool !== "select") return;
+
+      const { userSelectionRect, userSelectionActive } = storeApi.getState();
+      if (userSelectionRect) {
+        lastMarqueeRectRef.current = { ...userSelectionRect };
+      }
+
+      // Box-select: geometry only (adAsset cards inside the marquee), never graph neighbors.
+      if (userSelectionRect && (userSelectionActive || (selNodes?.length ?? 0) > 1)) {
+        const keepIds = new Set(resolveMarqueeModuleIds(userSelectionRect));
+        applyModuleMarqueeSelection(keepIds);
+        return;
+      }
+
+      // Ctrl/Cmd+click multi-select: keep only generator/assistant modules from React Flow's pick.
+      if ((selNodes?.length ?? 0) <= 1) return;
+      const keepIds = new Set(selNodes.filter((n) => isMarqueeModuleNode(n)).map((n) => n.id));
+      applyModuleMarqueeSelection(keepIds);
+    },
+    [applyModuleMarqueeSelection, readOnly, resolveMarqueeModuleIds, storeApi, tool],
+  );
+
+  const onSelectionEnd = useCallback(() => {
+    if (readOnly || tool !== "select") return;
+    const screenRect = lastMarqueeRectRef.current;
+    lastMarqueeRectRef.current = null;
+    if (!screenRect) return;
+    const keepIds = new Set(resolveMarqueeModuleIds(screenRect));
+    applyModuleMarqueeSelection(keepIds);
+  }, [applyModuleMarqueeSelection, readOnly, resolveMarqueeModuleIds, tool]);
   const [placementPicker, setPlacementPicker] = useState<WorkflowPlacementPickerState | null>(null);
   const placementRef = useRef<HTMLDivElement>(null);
   const [uploadTrimState, setUploadTrimState] = useState<{
@@ -4430,6 +4479,7 @@ function WorkflowFlowWorkspace({
 
   const defaultEdgeOptions = useMemo(
     () => ({
+      selectable: false,
       style: { stroke: "rgba(167, 139, 250, 0.42)", strokeWidth: 2 },
       ...(!readOnly && tool === "cutTarget"
         ? { interactionWidth: 44 }
@@ -4552,8 +4602,9 @@ function WorkflowFlowWorkspace({
           minZoom={0.05}
           panOnDrag={readOnly ? true : tool === "pan"}
           selectionOnDrag={readOnly ? false : tool === "select"}
-          selectionMode={SelectionMode.Partial}
+          selectionMode={SelectionMode.Full}
           onSelectionChange={onSelectionChange}
+          onSelectionEnd={onSelectionEnd}
           onEdgeClick={(event, edge) => {
             if (readOnly || tool !== "cutTarget") return;
             event.preventDefault();
