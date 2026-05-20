@@ -7,7 +7,7 @@ export const dynamic = "force-static";
 export const revalidate = 3600;
 
 /** Same hero as `/careers` — founders scene with YOURY on CRT (`public/careers/hero.png`). */
-const MANIFESTO_HERO_SRC = "/careers/hero.png";
+const MANIFESTO_HERO_SRC = "/careers/hero.png?v=2";
 
 export const metadata: Metadata = {
   title: "Manifesto — Youry",

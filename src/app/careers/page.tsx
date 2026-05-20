@@ -7,8 +7,8 @@ import { CareersLandingTracker } from "./_components/CareersLandingTracker";
 export const dynamic = "force-static";
 export const revalidate = 3600;
 
-/** Founders hero — YOURY on CRT (`public/careers/hero.png`). */
-const CAREERS_HERO_SRC = "/careers/hero.png";
+/** Founders hero — YOURY on CRT (`public/careers/hero.png`). Bump `v` after replacing the file. */
+const CAREERS_HERO_SRC = "/careers/hero.png?v=2";
 
 export const metadata: Metadata = {
   title: "Careers — Youry",
