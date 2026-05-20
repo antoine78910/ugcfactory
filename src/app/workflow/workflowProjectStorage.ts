@@ -118,8 +118,8 @@ export function shouldShowWorkflowOnboarding(project: WorkflowProjectStateV1): b
 export { newPage };
 
 // ---- LocalStorage safety ----------------------------------------------------
-// Workflow state is stored in localStorage. Some node fields (video frames, data URLs, blob URLs,
-// assistant outputs) can easily exceed quota and cause silent save failures → users "lose" nodes/edges
+// Workflow state is stored in localStorage. Some node fields (video frames, data URLs, blob URLs)
+// can easily exceed quota and cause silent save failures → users "lose" nodes/edges
 // after navigating away and back. We strip those heavy fields before persisting.
 //
 // IMPORTANT: do NOT strip stable fields that participate in node-level invariants
@@ -128,13 +128,15 @@ export { newPage };
 // cloud sync would look like a "reference change" → the effect would auto-clear
 // the user's generated preview (`outputPreviewUrl`).
 //
+// Assistant text output (`assistantOutput`) is kept so a reload does not wipe the
+// module result; it is plain text (not a data URL). Very large outputs should still
+// pass the generic string-length / quota limits for the whole project JSON.
+//
 // The blanket secondary pass (`isHeavyDataUrl` / `isBlobUrl`) below still removes
 // any data:/blob: payload from any field, so the quota safety net stays in place
 // even when we keep these fields in the explicit allow list.
 
 const LOCALSTORAGE_EPHEMERAL_FIELDS = new Set([
-  // Long markdown/JSON assistant output — can be huge; rerun is cheap.
-  "assistantOutput",
   // Heavy frame extracts (always data URLs).
   "videoExtractedFirstFrameUrl",
   "videoExtractedLastFrameUrl",
