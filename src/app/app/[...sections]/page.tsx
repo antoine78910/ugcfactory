@@ -59,7 +59,6 @@ import {
   upsertTranslatePendingJob,
 } from "@/lib/translatePendingSession";
 import { registerStudioGenerationClient } from "@/lib/registerStudioGenerationClient";
-import { pollKlingVideo } from "@/lib/studioKlingClientPoll";
 import {
   completeStudioTask,
   pickFirstWaveTranslateVideoUrl,
@@ -1542,6 +1541,13 @@ export default function AppBrandWizard() {
             for (const item of serverList) {
               if ((item.status === "ready" || item.status === "failed") && item.externalTaskId?.trim()) {
                 removeTranslatePendingJob(item.externalTaskId.trim());
+              }
+            }
+          }
+          if (historyKindsKey === "motion_control") {
+            for (const item of serverList) {
+              if ((item.status === "ready" || item.status === "failed") && item.externalTaskId?.trim()) {
+                removeMotionPendingJob(item.externalTaskId.trim());
               }
             }
           }
@@ -4578,7 +4584,10 @@ export default function AppBrandWizard() {
                           (appSection === "ad_clone" &&
                             !adCloneOutputLanguage.trim())
                         }
-                        className="h-14 w-full rounded-2xl border border-violet-300/40 bg-violet-500 text-lg font-semibold text-white shadow-[0_6px_0_0_rgba(76,29,149,0.85)] transition-all hover:-translate-y-px hover:bg-violet-400 hover:shadow-[0_8px_0_0_rgba(76,29,149,0.85)] active:translate-y-1 active:shadow-none disabled:opacity-50"
+                        className={cn(
+                          "h-14 w-full rounded-2xl border border-violet-300/40 bg-violet-500 text-lg font-semibold text-white shadow-[0_6px_0_0_rgba(76,29,149,0.85)] transition-all hover:-translate-y-px hover:bg-violet-400 hover:shadow-[0_8px_0_0_rgba(76,29,149,0.85)] active:translate-y-1 active:shadow-none disabled:opacity-50",
+                          motionBusy && "disabled:cursor-wait disabled:opacity-100",
+                        )}
                         onClick={() => {
                           const mcGate = motionControlUpgradeMessage(planId);
                           const motionPersonal = isPersonalApiActive();
@@ -5041,35 +5050,8 @@ export default function AppBrandWizard() {
                                 toast.success("Translation ready");
                               } else {
                                 toast.message("Motion control started", {
-                                  description: "Polling provider…",
+                                  description: "Track progress in your history. You can start another anytime.",
                                 });
-                                const pKey = getPersonalApiKey() ?? undefined;
-                                const url = await pollKlingVideo(providerTaskId, pKey);
-                                void completeStudioTask(providerTaskId, url);
-                                removeMotionPendingJob(providerTaskId);
-                                setMotionControlHistoryItems((prev) =>
-                                  prev.map((i) => {
-                                    const match =
-                                      (rowId != null &&
-                                        (i.id === rowId || i.studioGenerationId === rowId)) ||
-                                      (motionHistoryEntryId != null && i.id === motionHistoryEntryId) ||
-                                      (motionPendingTaskId != null &&
-                                        i.externalTaskId === motionPendingTaskId);
-                                    if (!match || i.status !== "generating") return i;
-                                    return {
-                                      ...i,
-                                      id: rowId ?? i.id,
-                                      studioGenerationId: rowId ?? i.studioGenerationId,
-                                      studioGenerationKind: generationKind,
-                                      status: "ready",
-                                      mediaUrl: url,
-                                      model,
-                                      inputUrls:
-                                        motionInputUrls.length > 0 ? motionInputUrls : i.inputUrls,
-                                    };
-                                  }),
-                                );
-                                toast.success("Motion control ready");
                               }
                             } catch (err) {
                               if (motionPendingTaskId) removeMotionPendingJob(motionPendingTaskId);
@@ -5113,12 +5095,22 @@ export default function AppBrandWizard() {
                         }}
                       >
                         <span className="inline-flex items-center gap-2">
+                          {motionBusy ? (
+                            <Loader2 className="h-5 w-5 animate-spin" aria-hidden />
+                          ) : (
+                            <Sparkles className="h-5 w-5" aria-hidden />
+                          )}
                           {appSection === "voice"
-                            ? "Change voice"
+                            ? motionBusy
+                              ? "Preparing…"
+                              : "Change voice"
                             : appSection === "ad_clone"
-                              ? "Translate"
-                              : "Generate"}
-                          <Sparkles className="h-5 w-5" />
+                              ? motionBusy
+                                ? "Starting…"
+                                : "Translate"
+                              : motionBusy
+                                ? "Starting…"
+                                : "Generate"}
                           {appSection === "voice" ? (
                             <>
                               <span className="rounded-md bg-white/15 px-2 py-0.5 text-base tabular-nums">
