@@ -417,13 +417,14 @@ function sourceKindFromNodeHandle(
   return null;
 }
 
+/** Generator / assistant cards only — not prompt text, lists, or uploads wired nearby. */
 function isMarqueeModuleNode(node: WorkflowCanvasNode): boolean {
-  return (
-    node.type === "adAsset" ||
-    node.type === "imageRef" ||
-    node.type === "textPrompt" ||
-    node.type === "promptList"
-  );
+  return node.type === "adAsset";
+}
+
+/** Top-level adAsset modules that can be placed inside a new group frame. */
+function isWorkflowGroupableModuleNode(node: WorkflowCanvasNode): boolean {
+  return node.type === "adAsset" && !node.parentId;
 }
 
 function targetKindFromNodeHandle(
@@ -954,7 +955,7 @@ function WorkflowReactFlowChrome({
   const [groupColorDraft, setGroupColorDraft] = useState<string>(GROUP_COLOR_PRESETS[0].value);
 
   const eligibleForGroup = useMemo(
-    () => selectedNodes.filter((n): n is WorkflowCanvasNode => n.type !== "workflowGroup" && !n.parentId),
+    () => selectedNodes.filter((n): n is WorkflowCanvasNode => isWorkflowGroupableModuleNode(n)),
     [selectedNodes],
   );
   const canGroup = eligibleForGroup.length >= 2;
@@ -1099,7 +1100,7 @@ function WorkflowReactFlowChrome({
 
   const createGroup = useCallback((colorOverride?: string) => {
     if (!canGroup) {
-      toast.error("Select at least two top-level nodes to group.");
+      toast.error("Select at least two modules to group.");
       return;
     }
     const HEADER = 40;
@@ -1139,9 +1140,10 @@ function WorkflowReactFlowChrome({
         position: { x: abs.x - gx, y: abs.y - gy },
         selected: false,
       }));
-      return [...rest, groupNode, ...updatedChildren].map((n) =>
-        n.id === groupId ? { ...n, selected: true } : n,
-      );
+      return [...rest, groupNode, ...updatedChildren].map((n) => ({
+        ...n,
+        selected: n.id === groupId,
+      }));
     });
     setFrameOpen(false);
     setSelectionBarExpanded(false);
@@ -2019,7 +2021,7 @@ function WorkflowReactFlowChrome({
               title={
                 canGroup
                   ? "Group selection, name and color"
-                  : "Select tool: drag on the canvas to box-select two or more nodes, then set name and color"
+                  : "Select tool: drag on the canvas to box-select two or more modules, then set name and color"
               }
               disabled={!canGroup}
               onClick={() => {
@@ -2719,8 +2721,8 @@ function WorkflowFlowWorkspace({
   const onSelectionChange = useCallback(
     ({ nodes: selNodes }: { nodes: WorkflowCanvasNode[]; edges: Edge[] }) => {
       if (readOnly || tool !== "select") return;
-      // Apply strict "touched modules only" behavior on marquee multi-select.
-      // Single-click selection remains unchanged (notes/groups still editable).
+      // Marquee multi-select: adAsset modules only (not prompt text / lists / uploads on wires).
+      // Single-click selection is unchanged (notes, prompt text, groups still editable).
       if ((selNodes?.length ?? 0) <= 1) return;
       const keepIds = new Set(selNodes.filter((n) => isMarqueeModuleNode(n)).map((n) => n.id));
       setNodes((prev) => {
