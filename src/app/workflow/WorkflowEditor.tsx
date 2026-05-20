@@ -19,6 +19,7 @@ import {
   useNodesState,
   useReactFlow,
   useStore,
+  useStoreApi,
   type XYPosition,
 } from "@xyflow/react";
 import {
@@ -137,6 +138,12 @@ import {
   WORKFLOW_CONNECTION_RADIUS,
 } from "./workflowAutoConnect";
 import { canCloneWorkflowSelection, cloneWorkflowSelection } from "./workflowClone";
+import {
+  normalizeMarqueePaneRect,
+  pickMarqueeModuleIds,
+  type WorkflowMarqueeRect,
+} from "./workflowMarqueeSelection";
+import { ensureWorkflowNodesSelectable } from "./workflowNodeSelectable";
 import { workflowDisableSpellcheck } from "./workflowDisableSpellcheck";
 import {
   buildWorkflowClipboardPayload,
@@ -2694,13 +2701,17 @@ function WorkflowFlowWorkspace({
 }: FlowWorkspaceProps) {
   const { screenToFlowPosition, flowToScreenPosition, getInternalNode, getNodes, getEdges, getViewport } =
     useReactFlow();
+  const storeApi = useStoreApi();
   const marqueeGestureRef = useRef(false);
+  const lastMarqueeRectRef = useRef<WorkflowMarqueeRect | null>(null);
   const activePage = useMemo(
     () => project.pages.find((p) => p.id === project.activePageId) ?? project.pages[0],
     [project.pages, project.activePageId],
   );
 
-  const [nodes, setNodes, onNodesChange] = useNodesState<WorkflowCanvasNode>(activePage?.nodes ?? []);
+  const [nodes, setNodes, onNodesChange] = useNodesState<WorkflowCanvasNode>(
+    ensureWorkflowNodesSelectable(activePage?.nodes ?? []),
+  );
   const [edges, setEdges, onEdgesChange] = useEdgesState<Edge>(activePage?.edges ?? []);
   const [alignGuides, setAlignGuides] = useState<{ x: number | null; y: number | null }>({ x: null, y: null });
   const alignHoldCandidateRef = useRef<{ nodeId: string; guideX: number | null; guideY: number | null; sinceMs: number } | null>(null);
@@ -2717,20 +2728,62 @@ function WorkflowFlowWorkspace({
   const lastEdgePointerRef = useRef<{ x: number; y: number } | null>(null);
   /** Derive from node `selected` flags, matches React Flow's controlled state (onSelectionChange can lag). */
   const selectedNodes = useMemo(() => nodes.filter((n) => n.selected), [nodes]);
+  useEffect(() => {
+    if (readOnly) return;
+    return storeApi.subscribe((state) => {
+      const rect = state.userSelectionRect;
+      if (!rect) return;
+      lastMarqueeRectRef.current = normalizeMarqueePaneRect(rect);
+    });
+  }, [readOnly, storeApi]);
+
+  const applyMarqueeSelection = useCallback(
+    (paneRect: WorkflowMarqueeRect) => {
+      const { nodeLookup, transform } = storeApi.getState();
+      const keepIds = new Set(
+        pickMarqueeModuleIds(normalizeMarqueePaneRect(paneRect), nodeLookup, transform, [], true),
+      );
+      setNodes((prev) => {
+        let changed = false;
+        const next = prev.map((n) => {
+          const shouldSelect = keepIds.has(n.id);
+          if ((n.selected ?? false) !== shouldSelect) {
+            changed = true;
+            return { ...n, selected: shouldSelect };
+          }
+          return n;
+        });
+        return changed ? next : prev;
+      });
+      setEdges((prev) => {
+        if (!prev.some((e) => e.selected)) return prev;
+        return prev.map((e) => (e.selected ? { ...e, selected: false } : e));
+      });
+    },
+    [setEdges, setNodes, storeApi],
+  );
+
   const onSelectionStart = useCallback(() => {
     if (readOnly) return;
     marqueeGestureRef.current = true;
-  }, [readOnly]);
+    const rect = storeApi.getState().userSelectionRect;
+    if (rect) lastMarqueeRectRef.current = normalizeMarqueePaneRect(rect);
+  }, [readOnly, storeApi]);
 
   const onSelectionEnd = useCallback(() => {
     if (readOnly || !marqueeGestureRef.current) return;
     marqueeGestureRef.current = false;
-    // Keep React Flow's node selection; only drop edge highlights after box-select.
-    setEdges((prev) => {
-      if (!prev.some((e) => e.selected)) return prev;
-      return prev.map((e) => (e.selected ? { ...e, selected: false } : e));
+    const screenRect = lastMarqueeRectRef.current;
+    lastMarqueeRectRef.current = null;
+    if (!screenRect || screenRect.width < 2 || screenRect.height < 2) return;
+    requestAnimationFrame(() => {
+      applyMarqueeSelection(screenRect);
     });
-  }, [readOnly, setEdges]);
+  }, [applyMarqueeSelection, readOnly]);
+
+  useLayoutEffect(() => {
+    setNodes((prev) => ensureWorkflowNodesSelectable(prev));
+  }, [project.activePageId, setNodes]);
   const [placementPicker, setPlacementPicker] = useState<WorkflowPlacementPickerState | null>(null);
   const placementRef = useRef<HTMLDivElement>(null);
   const [uploadTrimState, setUploadTrimState] = useState<{
@@ -2923,11 +2976,13 @@ function WorkflowFlowWorkspace({
       undoStackRef.current = [];
       redoStackRef.current = [];
       lastSnapshotRef.current = cloneWorkflowCanvasSnapshot(p.nodes, p.edges);
-      setNodes(p.nodes.map((n) => ({ ...n, selected: false })));
+      setNodes(
+        ensureWorkflowNodesSelectable(p.nodes.map((n) => ({ ...n, selected: false }))),
+      );
       setEdges(migrateWorkflowEdges(p.nodes as WorkflowCanvasNode[], p.edges));
       setFrameOpen(false);
       setPlacementPicker(null);
-      setTool("pan");
+      setTool("select");
       bumpHistoryUi();
     }
   }, [project.activePageId, project.pages, setNodes, setEdges, bumpHistoryUi, setTool]);
@@ -2957,7 +3012,7 @@ function WorkflowFlowWorkspace({
     skipHistoryCommitRef.current = true;
     const migrated = migrateWorkflowEdges(snap.nodes as WorkflowCanvasNode[], snap.edges);
     lastSnapshotRef.current = cloneWorkflowCanvasSnapshot(snap.nodes, migrated);
-    setNodes(snap.nodes);
+    setNodes(ensureWorkflowNodesSelectable(snap.nodes));
     setEdges(migrated);
     bumpHistoryUi();
   }, [setNodes, setEdges, bumpHistoryUi]);
