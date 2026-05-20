@@ -8,6 +8,7 @@ import type { StickyNoteNodeType } from "./workflowStickyNoteTypes";
 import type { WorkflowGroupNodeType } from "./nodes/WorkflowGroupNode";
 import type { WorkflowCanvasNode } from "./workflowFlowTypes";
 import {
+  buildClonedWorkflowEdges,
   clonePortableImageRefData,
   collectWorkflowSelectionNodeRefs,
   type CloneWorkflowResult,
@@ -83,8 +84,12 @@ export function removeWorkflowNodesById(
 
 /**
  * Turn clipboard payload into new graph fragments (new ids, optional nudge like duplicate).
+ * When `liveEdges` is the current canvas edge list, upstream wires to pasted clones are restored.
  */
-export function remapPastedWorkflowPayload(payload: WorkflowClipboardPayloadV1): CloneWorkflowResult | null {
+export function remapPastedWorkflowPayload(
+  payload: WorkflowClipboardPayloadV1,
+  liveEdges?: Edge[],
+): CloneWorkflowResult | null {
   const { nodes: srcNodes, edges: srcEdges } = payload;
   if (!srcNodes.length) return null;
 
@@ -216,17 +221,16 @@ export function remapPastedWorkflowPayload(payload: WorkflowClipboardPayloadV1):
     selectIds.push(nodesToAdd[0].id);
   }
 
-  const edgesToAdd: Edge[] = [];
-  for (const e of srcEdges) {
-    const ns = idMap.get(e.source);
-    const nt = idMap.get(e.target);
-    if (ns && nt) {
-      edgesToAdd.push({
-        ...e,
-        id: `e-${ns}-${nt}-${crypto.randomUUID().slice(0, 8)}`,
-        source: ns,
-        target: nt,
-      });
+  const edgesToAdd = buildClonedWorkflowEdges(srcEdges, idMap);
+  if (liveEdges?.length) {
+    const seen = new Set(
+      edgesToAdd.map((e) => `${e.source}\0${e.target}\0${e.sourceHandle ?? ""}\0${e.targetHandle ?? ""}`),
+    );
+    for (const e of buildClonedWorkflowEdges(liveEdges, idMap)) {
+      const key = `${e.source}\0${e.target}\0${e.sourceHandle ?? ""}\0${e.targetHandle ?? ""}`;
+      if (seen.has(key)) continue;
+      seen.add(key);
+      edgesToAdd.push(e);
     }
   }
 

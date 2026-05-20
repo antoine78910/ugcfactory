@@ -129,9 +129,60 @@ export function collectWorkflowSelectionNodeRefs(
   return out.length ? out : null;
 }
 
+function workflowEdgeCloneKey(
+  source: string,
+  target: string,
+  sourceHandle: string | null | undefined,
+  targetHandle: string | null | undefined,
+): string {
+  return `${source}\0${target}\0${sourceHandle ?? ""}\0${targetHandle ?? ""}`;
+}
+
+/**
+ * Clone edges for a duplicate/paste batch:
+ * - both endpoints cloned → wire clone to clone (internal subgraph)
+ * - only target cloned → keep original source, wire to new target (shared inputs for variants)
+ */
+export function buildClonedWorkflowEdges(allEdges: Edge[], idMap: Map<string, string>): Edge[] {
+  const edgesToAdd: Edge[] = [];
+  const seen = new Set<string>();
+
+  for (const e of allEdges) {
+    const ns = idMap.get(e.source);
+    const nt = idMap.get(e.target);
+
+    if (ns && nt) {
+      const key = workflowEdgeCloneKey(ns, nt, e.sourceHandle, e.targetHandle);
+      if (seen.has(key)) continue;
+      seen.add(key);
+      edgesToAdd.push({
+        ...e,
+        id: `e-${ns}-${nt}-${crypto.randomUUID().slice(0, 8)}`,
+        source: ns,
+        target: nt,
+      });
+      continue;
+    }
+
+    if (nt && !idMap.has(e.source)) {
+      const key = workflowEdgeCloneKey(e.source, nt, e.sourceHandle, e.targetHandle);
+      if (seen.has(key)) continue;
+      seen.add(key);
+      edgesToAdd.push({
+        ...e,
+        id: `e-${e.source}-${nt}-${crypto.randomUUID().slice(0, 8)}`,
+        source: e.source,
+        target: nt,
+      });
+    }
+  }
+
+  return edgesToAdd;
+}
+
 /**
  * Clone selected workflow groups (with all child generators) and/or selected generator nodes.
- * Remaps edges whose both endpoints are part of the same clone batch.
+ * Preserves internal wiring and reconnects upstream inputs from nodes left on the canvas.
  */
 export function cloneWorkflowSelection(
   allNodes: WorkflowCanvasNode[],
@@ -335,19 +386,7 @@ export function cloneWorkflowSelection(
 
   if (nodesToAdd.length === 0) return null;
 
-  const edgesToAdd: Edge[] = [];
-  for (const e of allEdges) {
-    const ns = idMap.get(e.source);
-    const nt = idMap.get(e.target);
-    if (ns && nt) {
-      edgesToAdd.push({
-        ...e,
-        id: `e-${ns}-${nt}-${crypto.randomUUID().slice(0, 8)}`,
-        source: ns,
-        target: nt,
-      });
-    }
-  }
+  const edgesToAdd = buildClonedWorkflowEdges(allEdges, idMap);
 
   return { nodesToAdd, edgesToAdd, selectIds };
 }

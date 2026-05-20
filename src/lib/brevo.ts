@@ -113,3 +113,60 @@ export async function brevoTrackEvent(
     });
   }
 }
+
+/**
+ * Send a transactional email via Brevo SMTP API.
+ * Returns whether the HTTP call succeeded (2xx).
+ */
+export async function brevoSendTransactionalEmail(opts: {
+  to: Array<{ email: string; name?: string }>;
+  subject: string;
+  htmlContent: string;
+  replyTo?: { email: string; name?: string };
+  senderEmail?: string;
+  senderName?: string;
+}): Promise<boolean> {
+  const apiKey = BREVO_API_KEY();
+  if (!apiKey || !opts.to.length) return false;
+
+  const fromEmail =
+    opts.senderEmail?.trim() ||
+    process.env.BREVO_SENDER_EMAIL?.trim() ||
+    process.env.BREVO_FEEDBACK_FROM_EMAIL?.trim() ||
+    "";
+  if (!fromEmail) {
+    serverLog("brevo_send_tx_no_sender", {});
+    return false;
+  }
+
+  try {
+    const res = await fetch(`${BREVO_BASE}/smtp/email`, {
+      method: "POST",
+      headers: {
+        "api-key": apiKey,
+        "content-type": "application/json",
+        accept: "application/json",
+      },
+      body: JSON.stringify({
+        sender: { email: fromEmail, name: opts.senderName ?? "Youry" },
+        to: opts.to.map((t) => ({ email: t.email, name: t.name })),
+        ...(opts.replyTo ? { replyTo: opts.replyTo } : {}),
+        subject: opts.subject,
+        htmlContent: opts.htmlContent,
+      }),
+    });
+    if (!res.ok) {
+      let detail: unknown = null;
+      try {
+        detail = await res.json();
+      } catch {
+        /* ignore */
+      }
+      serverLog("brevo_send_tx_fail", { status: res.status, detail });
+    }
+    return res.ok;
+  } catch (e) {
+    serverLog("brevo_send_tx_error", { error: e instanceof Error ? e.message : "unknown" });
+    return false;
+  }
+}

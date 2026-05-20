@@ -4121,7 +4121,7 @@ function WorkflowFlowWorkspace({
 
   const applyWorkflowPaste = useCallback(
     (payload: WorkflowClipboardPayloadV1) => {
-      const res = remapPastedWorkflowPayload(payload);
+      const res = remapPastedWorkflowPayload(payload, edges);
       if (!res) return;
       const { nodesToAdd, edgesToAdd, selectIds } = res;
       const selectSet = new Set(selectIds);
