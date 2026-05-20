@@ -2396,7 +2396,7 @@ function WorkflowReactFlowChrome({
             transform: "translate(-50%, -100%)",
           }}
           role="toolbar"
-          aria-label="Group selection"
+          aria-label="Multi-selection actions"
         >
           {selectionBarExpanded ? (
             <div className="flex max-w-[calc(100vw-24px)] items-center gap-0.5 rounded-full border border-white/14 bg-[#121212]/95 py-1 pl-1 pr-1 shadow-[0_8px_32px_rgba(0,0,0,0.45)] backdrop-blur-md">
@@ -2569,17 +2569,37 @@ function WorkflowReactFlowChrome({
               </button>
             </div>
           ) : (
-            <button
-              type="button"
-              title="Group selection, click to show actions"
-              onClick={() => {
-                setSelectionBarExpanded(true);
-                setAddOpen(false);
-              }}
-              className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full border border-white/14 bg-[#121212]/95 text-violet-300/90 shadow-[0_8px_32px_rgba(0,0,0,0.45)] backdrop-blur-md transition hover:border-violet-500/40 hover:bg-[#1a1a1c] hover:text-violet-200"
-            >
-              <SquareStack className="h-[18px] w-[18px]" strokeWidth={2} aria-hidden />
-            </button>
+            <div className="flex items-center gap-0.5 rounded-full border border-white/14 bg-[#121212]/95 py-1 pl-1 pr-1 shadow-[0_8px_32px_rgba(0,0,0,0.45)] backdrop-blur-md">
+              {canClone ? (
+                <button
+                  type="button"
+                  title="Duplicate selection (Ctrl+D)"
+                  onClick={() => {
+                    setAddOpen(false);
+                    setFrameOpen(false);
+                    if (tool === "cutTarget") setTool("pan");
+                    onCloneSelection();
+                  }}
+                  className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg text-white/90 transition hover:bg-white/[0.08]"
+                >
+                  <CopyPlus className="h-3.5 w-3.5" strokeWidth={2} aria-hidden />
+                </button>
+              ) : null}
+              <button
+                type="button"
+                title="More actions — group, align, cut, copy…"
+                onClick={() => {
+                  setSelectionBarExpanded(true);
+                  setAddOpen(false);
+                }}
+                className={cn(
+                  "flex h-8 w-8 shrink-0 items-center justify-center rounded-lg text-violet-300/90 transition hover:bg-white/[0.08] hover:text-violet-200",
+                  canClone && "border-l border-white/[0.12] pl-0.5",
+                )}
+              >
+                <SquareStack className="h-[18px] w-[18px]" strokeWidth={2} aria-hidden />
+              </button>
+            </div>
           )}
         </div>
       ) : null}
@@ -3562,15 +3582,7 @@ function WorkflowFlowWorkspace({
       let replaceSameHandle = false;
       if (targetNode?.type === "adAsset") {
         const kind = (targetNode.data as AdAssetNodeData).kind;
-        if (
-          handleId === "text" &&
-          (kind === "image" ||
-            kind === "video" ||
-            kind === "variation" ||
-            kind === "upscale" ||
-            kind === "assistant")
-        )
-          replaceSameHandle = true;
+        // Text ports (`text` / `inText`) accept multiple upstream text modules; do not replace.
         if (
           handleId === "startImage" &&
           (kind === "video" || kind === "variation" || kind === "upscale")
@@ -3578,11 +3590,9 @@ function WorkflowFlowWorkspace({
           replaceSameHandle = true;
         if (handleId === "startImage" && kind === "assistant") replaceSameHandle = true;
         if (handleId === "endImage" && kind === "video") replaceSameHandle = true;
-        if (handleId === "text" && kind === "motion") replaceSameHandle = true;
         if (handleId === "startImage" && kind === "motion") replaceSameHandle = true;
         if (handleId === "inVideo" && kind === "motion") replaceSameHandle = true;
         if (handleId === "references" && kind === "website") replaceSameHandle = true;
-        if (handleId === "text" && kind === "website") replaceSameHandle = true;
         if (handleId === "references" && kind === "assistant") replaceSameHandle = true;
       }
       const currentEdges = getEdges();
