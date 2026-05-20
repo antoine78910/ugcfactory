@@ -1,7 +1,8 @@
+import { marketingPageRootClassName } from "@/lib/youryFonts";
+
 /** Shared dark Youry branding for job pages and in-app application forms. */
 export const careersTheme = {
-  page:
-    "min-h-screen overflow-x-clip bg-[#050507] font-sans text-white selection:bg-violet-500/30",
+  page: marketingPageRootClassName,
   header:
     "sticky top-0 z-20 border-b border-white/[0.08] bg-[#050507]/90 backdrop-blur-md supports-[backdrop-filter]:bg-[#050507]/75",
   footer: "border-t border-white/[0.08]",

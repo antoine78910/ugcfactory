@@ -7,6 +7,7 @@ import { Input } from "@/components/ui/input";
 import { HeroVideoCarousel3D } from "./HeroVideoCarousel3D";
 import { LandingSeedanceTopButton } from "./LandingSeedanceTopButton";
 import { ArrowRight, Sparkles } from "lucide-react";
+import { marketingPageRootClassName } from "@/lib/youryFonts";
 
 /**
  * Below-the-fold sections; code-split off the LP initial JS bundle.
@@ -67,7 +68,7 @@ const HERO_STUDIO_VIDEOS = [
 
 export default function LandingPage() {
   return (
-    <div className="min-h-screen overflow-x-clip bg-[#050507] text-white selection:bg-violet-500/30">
+    <div className={marketingPageRootClassName}>
       {/*
         Sticky nav must be a direct child of the full-page column so it stays pinned for the whole
         scroll (not only the hero). Hero art stays in a sibling wrapper; overflow-x clip stays on the art layer.

@@ -40,8 +40,7 @@ function rectOverlapArea(a: WorkflowMarqueeRect, b: WorkflowMarqueeRect): number
 
 /**
  * adAsset module ids whose bounds intersect the marquee in flow space.
- * Ignores graph edges; skips nodes without measured bounds (xyflow otherwise
- * treats them as always inside the box).
+ * Ignores graph edges; uses measured dimensions only (not handleBounds).
  */
 export function getAdAssetIdsInMarqueeRect(
   nodes: WorkflowCanvasNode[],
@@ -55,15 +54,16 @@ export function getAdAssetIdsInMarqueeRect(
     if (node.selectable === false) continue;
 
     const internal = getInternalNode(node.id);
-    if (!internal?.internals?.handleBounds) continue;
-
-    const width = internal.measured?.width ?? node.width ?? null;
-    const height = internal.measured?.height ?? node.height ?? null;
+    const width =
+      internal?.measured?.width ?? node.width ?? node.measured?.width ?? null;
+    const height =
+      internal?.measured?.height ?? node.height ?? node.measured?.height ?? null;
     if (width == null || height == null || width <= 0 || height <= 0) continue;
 
+    const abs = internal?.internals?.positionAbsolute ?? node.position;
     const nodeRect: WorkflowMarqueeRect = {
-      x: internal.internals.positionAbsolute.x,
-      y: internal.internals.positionAbsolute.y,
+      x: abs.x,
+      y: abs.y,
       width,
       height,
     };

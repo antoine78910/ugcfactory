@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import Image from "next/image";
 import Link from "next/link";
 import { CareersPageHeader } from "../careers/_components/CareersPageHeader";
+import { marketingPageRootClassName } from "@/lib/youryFonts";
 
 export const dynamic = "force-static";
 export const revalidate = 3600;
@@ -25,7 +26,7 @@ export const metadata: Metadata = {
 
 export default function ManifestoPage() {
   return (
-    <article className="min-h-screen overflow-x-clip bg-[#050507] font-sans text-white selection:bg-violet-500/30">
+    <article className={marketingPageRootClassName}>
       <CareersPageHeader containerClassName="max-w-4xl sm:px-10" />
 
       <div className="mx-auto max-w-2xl px-4 pb-24 pt-10 sm:px-10 sm:pb-32 sm:pt-14">

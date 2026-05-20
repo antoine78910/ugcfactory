@@ -10,11 +10,11 @@ import { JobPostingViewTracker } from "../_components/JobPostingViewTracker";
 export const dynamic = "force-dynamic";
 
 export const metadata: Metadata = {
-  title: "Founding AI Full-Stack Engineer — Youry",
+  title: "Founding AI Full-Stack Engineer, Youry",
   description:
     "Ship full-stack features across our AI UGC platform: studio, workflows, generation, and the product layer that helps ecommerce, SaaS, and app teams market faster.",
   openGraph: {
-    title: "Founding AI Full-Stack Engineer — Youry",
+    title: "Founding AI Full-Stack Engineer, Youry",
     description:
       "Join a small team building the infrastructure for performance-ready AI UGC.",
   },
@@ -35,7 +35,7 @@ export default async function FoundingAiFullStackEngineerPage({
         <a href="https://youry.io" target="_blank" rel="noopener noreferrer">
           Youry
         </a>
-        , AI-powered UGC for teams who live in performance marketing — ecommerce
+        , AI-powered UGC for teams who live in performance marketing, ecommerce
         brands, SaaS companies, and apps that need to ship ad-ready video fast
         without a traditional production crew.
       </p>
@@ -49,11 +49,11 @@ export default async function FoundingAiFullStackEngineerPage({
         {[
           "Ship every single day.",
           "Build full-stack features end-to-end (frontend, backend, AI and media pipelines).",
-          "Work deeply with LLMs, tool-use, and AI-native UX — without leaving polish behind.",
+          "Work deeply with LLMs, tool-use, and AI-native UX, without leaving polish behind.",
           "Turn messy marketer workflows into clear, trustworthy product surfaces.",
           "Harden systems that move real customer assets: generations, projects, billing edges.",
-          "Fix bugs fast — and learn from them.",
-          "Work directly with founders and users — minimal hierarchy.",
+          "Fix bugs fast, and learn from them.",
+          "Work directly with founders and users, minimal hierarchy.",
           "Help define engineering culture and standards from the start.",
         ].map((item) => (
           <li key={item}>
@@ -66,11 +66,11 @@ export default async function FoundingAiFullStackEngineerPage({
       <ul>
         {[
           "Next.js (App Router) & TypeScript",
-          "React Server / client boundaries — ship what fits the problem",
+          "React Server / client boundaries, ship what fits the problem",
           "Supabase (auth, Postgres, storage) where it matters",
-          "LLMs and structured outputs — reliability, evals, guardrails",
+          "LLMs and structured outputs, reliability, evals, guardrails",
           "Vercel AI SDK and adjacent tooling where it speeds delivery",
-          "Cursor, Claude, or whatever makes you fastest — shipped wins",
+          "Cursor, Claude, or whatever makes you fastest, shipped wins",
           "Speed over perfection; clarity over cleverness",
         ].map((item) => (
           <li key={item}>
@@ -84,9 +84,9 @@ export default async function FoundingAiFullStackEngineerPage({
         {[
           "An end-to-end builder (frontend + backend + AI integrations).",
           "Someone who ships often and does not wait for perfect specs.",
-          "Deep into modern GenAI — you already use AI tools to design and implement.",
+          "Deep into modern GenAI, you already use AI tools to design and implement.",
           "Comfortable with ambiguity, fast feedback loops, and direct user contact.",
-          "Product-minded — you think in outcomes and learning, not ticket counts.",
+          "Product-minded, you think in outcomes and learning, not ticket counts.",
           "Builder over employee mindset.",
           "Speed over comfort when the tradeoff is honest.",
           "Impact over title.",
@@ -101,7 +101,7 @@ export default async function FoundingAiFullStackEngineerPage({
       <ul>
         {[
           "You use AI development tools daily (Cursor, Claude Code, Copilot, or equivalent).",
-          "You believe GenAI is materially changing how products are built — and you act on it.",
+          "You believe GenAI is materially changing how products are built, and you act on it.",
           "You can ship full-stack apps in TypeScript and Next.js.",
           "You have shipped work that touches LLMs or multi-step AI workflows.",
           "You can work primarily remote with strong overlap on EU-friendly hours.",
@@ -132,7 +132,7 @@ export default async function FoundingAiFullStackEngineerPage({
       <ul>
         {[
           "Competitive cash compensation for stage and role.",
-          "Meaningful equity — early team, real ownership.",
+          "Meaningful equity, early team, real ownership.",
           "High learning ceiling alongside a focused product surface area.",
           "Small team, direct access to decisions that move the roadmap.",
         ].map((item) => (
@@ -162,7 +162,7 @@ export default async function FoundingAiFullStackEngineerPage({
         today.
       </p>
       <p className="careers-job-prose--muted">
-        No fancy degree required. We care about work we can verify — not
+        No fancy degree required. We care about work we can verify, not
         credentials on paper.
       </p>
 
@@ -191,7 +191,7 @@ export default async function FoundingAiFullStackEngineerPage({
                 { title: "Location", value: "Remote · EU-friendly hours" },
                 { title: "Employment type", value: "Full time" },
                 { title: "Location type", value: "Remote-first" },
-                { title: "Department", value: "Youry — Engineering" },
+                { title: "Department", value: "Youry, Engineering" },
               ]}
             />
           </aside>

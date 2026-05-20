@@ -4,19 +4,20 @@ import Link from "next/link";
 import { ArrowUpRight, MapPin } from "lucide-react";
 import { CareersLandingTracker } from "./_components/CareersLandingTracker";
 import { CareersPageHeader } from "./_components/CareersPageHeader";
+import { marketingPageRootClassName } from "@/lib/youryFonts";
 
 export const dynamic = "force-static";
 export const revalidate = 3600;
 
-/** Founders hero — YOURY on CRT (`public/careers/hero.png`). Bump `v` after replacing the file. */
+/** Founders hero, YOURY on CRT (`public/careers/hero.png`). Bump `v` after replacing the file. */
 const CAREERS_HERO_SRC = "/careers/hero.png";
 
 export const metadata: Metadata = {
-  title: "Careers — Youry",
+  title: "Careers, Youry",
   description:
-    "Help us build AI UGC for ecommerce, SaaS, and apps — ship product, design, and growth systems that empower every team to market faster.",
+    "Help us build AI UGC for ecommerce, SaaS, and apps, ship product, design, and growth systems that empower every team to market faster.",
   openGraph: {
-    title: "Join Us — Youry",
+    title: "Join Us, Youry",
     description:
       "Build the future of performance creative with a small, ambitious team.",
   },
@@ -40,7 +41,7 @@ const JOBS: JobOpening[] = [
     location: "Remote · EU-friendly hours",
     title: "Founding AI Full-Stack Engineer",
     description:
-      "Ship features daily across the stack. Work with LLMs and production pipelines so teams turn products into ad-ready UGC — studio workflows, generation, reliability, and the glue that makes it feel magic for ecommerce, SaaS, and app marketers.",
+      "Ship features daily across the stack. Work with LLMs and production pipelines so teams turn products into ad-ready UGC, studio workflows, generation, reliability, and the glue that makes it feel magic for ecommerce, SaaS, and app marketers.",
   },
   {
     href: "/careers/founding-creative",
@@ -48,13 +49,13 @@ const JOBS: JobOpening[] = [
     location: "Remote · EU-friendly hours",
     title: "Founding Creative (content & video)",
     description:
-      "Own how Youry looks in motion — launch films, social-first cuts, and a visual language for an AI UGC brand. Shoot, edit, animate, and ship; AI-augmented, taste-first.",
+      "Own how Youry looks in motion, launch films, social-first cuts, and a visual language for an AI UGC brand. Shoot, edit, animate, and ship; AI-augmented, taste-first.",
   },
 ];
 
 export default function CareersPage() {
   return (
-    <div className="min-h-screen overflow-x-clip bg-[#050507] font-sans text-white selection:bg-violet-500/30">
+    <div className={marketingPageRootClassName}>
       <CareersLandingTracker />
       <CareersPageHeader />
 
@@ -65,7 +66,7 @@ export default function CareersPage() {
           </h1>
           <p className="mx-auto mb-6 max-w-2xl text-lg text-white/60 sm:text-xl">
             We are building the infrastructure for teams who ship AI UGC at the
-            speed of performance marketing — for ecommerce, SaaS, and apps that
+            speed of performance marketing, for ecommerce, SaaS, and apps that
             need to test creative without a traditional production crew.
           </p>
           <p className="text-sm text-white/45">

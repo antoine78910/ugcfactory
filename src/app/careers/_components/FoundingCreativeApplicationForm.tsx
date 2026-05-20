@@ -247,7 +247,7 @@ export function FoundingCreativeApplicationForm({ jobSlug }: Props) {
           What is the first thing you would be excited to create?
         </Label>
         <p className={cn("text-xs", careersTheme.hint)}>
-          Surprise us — a script, a teaser, stills from your favourite tool, a
+          Surprise us, a script, a teaser, stills from your favourite tool, a
           ten-second proof. Anything that genuinely excites you.
         </p>
         <Textarea
@@ -266,7 +266,7 @@ export function FoundingCreativeApplicationForm({ jobSlug }: Props) {
         </Label>
         <div className={cn("space-y-1 text-xs", careersTheme.hint)}>
           <p>
-            We do not use this to anchor an offer — we lead with the strongest
+            We do not use this to anchor an offer, we lead with the strongest
             package we can. If expectations are far beyond our range, we prefer
             to respect your time.
           </p>
@@ -308,7 +308,7 @@ export function FoundingCreativeApplicationForm({ jobSlug }: Props) {
           <p>Assume you love the problem, the team, and what we are building.</p>
           <p>
             We are remote-first today. If relocation is not an option, still
-            apply — we want to meet exceptional people first.
+            apply, we want to meet exceptional people first.
           </p>
         </div>
         <div className="flex flex-wrap gap-2">

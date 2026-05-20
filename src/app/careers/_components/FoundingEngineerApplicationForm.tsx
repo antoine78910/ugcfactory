@@ -131,7 +131,7 @@ export function FoundingEngineerApplicationForm({ jobSlug }: Props) {
             </h3>
             <p className={careersTheme.muted}>
               Upload your resume here to attach it to your application. You still
-              need to complete the fields below — we read every answer.
+              need to complete the fields below, we read every answer.
             </p>
             <input
               ref={autofillRef}
@@ -252,7 +252,7 @@ export function FoundingEngineerApplicationForm({ jobSlug }: Props) {
               </span>
             ) : (
               <span className="text-xs text-white/45">
-                or drag and drop is not available — use the button
+                or drag and drop is not available, use the button
               </span>
             )}
           </div>
@@ -307,7 +307,7 @@ export function FoundingEngineerApplicationForm({ jobSlug }: Props) {
           <Label htmlFor="built_created">What have you built and created?</Label>
           <div className="space-y-1 text-xs text-white/45">
             <p>We prioritise real agency over credentials.</p>
-            <p>Tell us anything you are proud of — multiple things welcome.</p>
+            <p>Tell us anything you are proud of, multiple things welcome.</p>
             <p>
               A problem you solved, a site you shipped, infra you ran, events you
               hosted. If it does not fit a bucket, even better.
@@ -364,7 +364,7 @@ export function FoundingEngineerApplicationForm({ jobSlug }: Props) {
           </Label>
           <div className="space-y-1 text-xs text-white/45">
             <p>
-              We do not use this to anchor an offer — we always lead with the best
+              We do not use this to anchor an offer, we always lead with the best
               package we can. If expectations are far beyond our range, we prefer to
               save your time.
             </p>
@@ -384,7 +384,7 @@ export function FoundingEngineerApplicationForm({ jobSlug }: Props) {
             What is a workflow you have built for yourself?
           </Label>
           <p className="text-xs text-white/45">
-            Everyone prompts agents — what did you wire up to improve how you work?
+            Everyone prompts agents, what did you wire up to improve how you work?
             Orchestration, automation, a personal assistant pattern. Be specific.
           </p>
           <Textarea
@@ -405,8 +405,7 @@ export function FoundingEngineerApplicationForm({ jobSlug }: Props) {
           <div className="space-y-1 text-xs text-white/45">
             <p>Assume you love the problem, the team, and the trajectory.</p>
             <p>
-              We are remote-first today. If relocation is not an option, still apply
-              — we hire for exceptional people first.
+              We are remote-first today. If relocation is not an option, still apply, we hire for exceptional people first.
             </p>
           </div>
           <div className="flex flex-wrap gap-2">

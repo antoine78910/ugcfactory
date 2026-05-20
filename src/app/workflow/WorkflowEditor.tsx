@@ -2754,15 +2754,17 @@ function WorkflowFlowWorkspace({
   );
 
   const resolveMarqueeModuleIds = useCallback(
-    (screenRect: WorkflowMarqueeRect) => {
+    (screenRect: WorkflowMarqueeRect, selNodes: WorkflowCanvasNode[]) => {
       const { transform } = storeApi.getState();
       const flowRect = screenMarqueeRectToFlowRect(screenRect, transform);
-      return getAdAssetIdsInMarqueeRect(
+      const geometric = getAdAssetIdsInMarqueeRect(
         getNodes() as WorkflowCanvasNode[],
         flowRect,
         getInternalNode,
-        false,
+        true,
       );
+      if (geometric.length > 0) return geometric;
+      return selNodes.filter((n) => isMarqueeModuleNode(n)).map((n) => n.id);
     },
     [getInternalNode, getNodes, storeApi],
   );
@@ -2776,9 +2778,9 @@ function WorkflowFlowWorkspace({
         lastMarqueeRectRef.current = { ...userSelectionRect };
       }
 
-      // Box-select: geometry only (adAsset cards inside the marquee), never graph neighbors.
+      // Box-select: geometry only (adAsset inside marquee), never graph neighbors.
       if (userSelectionRect && (userSelectionActive || (selNodes?.length ?? 0) > 1)) {
-        const keepIds = new Set(resolveMarqueeModuleIds(userSelectionRect));
+        const keepIds = new Set(resolveMarqueeModuleIds(userSelectionRect, selNodes));
         applyModuleMarqueeSelection(keepIds);
         return;
       }
@@ -2796,9 +2798,10 @@ function WorkflowFlowWorkspace({
     const screenRect = lastMarqueeRectRef.current;
     lastMarqueeRectRef.current = null;
     if (!screenRect) return;
-    const keepIds = new Set(resolveMarqueeModuleIds(screenRect));
+    const currentSel = (getNodes() as WorkflowCanvasNode[]).filter((n) => n.selected);
+    const keepIds = new Set(resolveMarqueeModuleIds(screenRect, currentSel));
     applyModuleMarqueeSelection(keepIds);
-  }, [applyModuleMarqueeSelection, readOnly, resolveMarqueeModuleIds, tool]);
+  }, [applyModuleMarqueeSelection, getNodes, readOnly, resolveMarqueeModuleIds, tool]);
   const [placementPicker, setPlacementPicker] = useState<WorkflowPlacementPickerState | null>(null);
   const placementRef = useRef<HTMLDivElement>(null);
   const [uploadTrimState, setUploadTrimState] = useState<{
@@ -4602,7 +4605,7 @@ function WorkflowFlowWorkspace({
           minZoom={0.05}
           panOnDrag={readOnly ? true : tool === "pan"}
           selectionOnDrag={readOnly ? false : tool === "select"}
-          selectionMode={SelectionMode.Full}
+          selectionMode={SelectionMode.Partial}
           onSelectionChange={onSelectionChange}
           onSelectionEnd={onSelectionEnd}
           onEdgeClick={(event, edge) => {
