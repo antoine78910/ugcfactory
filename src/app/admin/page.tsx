@@ -864,6 +864,12 @@ export default function AdminPage() {
             </div>
           </div>
           <div className="flex items-center gap-2">
+            <Link
+              href="/admin/careers"
+              className="rounded-lg border border-violet-500/40 bg-violet-500/15 px-3 py-1.5 text-xs font-semibold text-violet-200 transition hover:bg-violet-500/25"
+            >
+              Careers
+            </Link>
             <button
               type="button"
               onClick={() => { setTab("generations"); setGenPage(1); }}

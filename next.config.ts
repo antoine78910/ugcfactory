@@ -53,6 +53,13 @@ const nextConfig: NextConfig = {
   images: {
     formats: ["image/avif", "image/webp"],
     minimumCacheTTL: 31536000,
+    remotePatterns: [
+      {
+        protocol: "https",
+        hostname: "images.unsplash.com",
+        pathname: "/**",
+      },
+    ],
   },
   async headers() {
     /**
@@ -139,6 +146,13 @@ const nextConfig: NextConfig = {
       // LP-only assets; filename stays fixed so avoid immutable (users replace the file in place).
       {
         source: "/landing/:path*",
+        headers: [
+          ...PUBLIC_ASSET_CORS,
+          { key: "Cache-Control", value: "public, max-age=3600, stale-while-revalidate=86400" },
+        ],
+      },
+      {
+        source: "/careers/:path*",
         headers: [
           ...PUBLIC_ASSET_CORS,
           { key: "Cache-Control", value: "public, max-age=3600, stale-while-revalidate=86400" },

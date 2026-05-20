@@ -337,9 +337,25 @@ export default function LandingPage() {
               className="h-8 w-auto opacity-90"
             />
           </Link>
-          <p className="text-xs text-white/25">
-            &copy; {new Date().getFullYear()} All rights reserved.
-          </p>
+          <div className="flex flex-col gap-2 sm:items-end">
+            <div className="flex flex-wrap gap-x-4 gap-y-1 sm:justify-end">
+              <Link
+                href="/manifesto"
+                className="text-xs text-white/40 transition-colors hover:text-white/70"
+              >
+                Manifesto
+              </Link>
+              <Link
+                href="/careers"
+                className="text-xs text-white/40 transition-colors hover:text-white/70"
+              >
+                Careers
+              </Link>
+            </div>
+            <p className="text-xs text-white/25">
+              &copy; {new Date().getFullYear()} All rights reserved.
+            </p>
+          </div>
         </div>
       </footer>
     </div>
