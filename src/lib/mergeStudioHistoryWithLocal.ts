@@ -97,8 +97,16 @@ export function mergeStudioHistoryWithServer(
     }
     return false;
   });
-  if (!kept.length) return serverFilteredWithAspect;
-  return [...kept, ...serverFilteredWithAspect].sort((a, b) => b.createdAt - a.createdAt);
+  const seenExternalTasks = new Set<string>();
+  const keptDeduped = kept.filter((i) => {
+    const et = i.externalTaskId?.trim();
+    if (!et) return true;
+    if (seenExternalTasks.has(et)) return false;
+    seenExternalTasks.add(et);
+    return true;
+  });
+  if (!keptDeduped.length) return serverFilteredWithAspect;
+  return [...keptDeduped, ...serverFilteredWithAspect].sort((a, b) => b.createdAt - a.createdAt);
 }
 
 /**

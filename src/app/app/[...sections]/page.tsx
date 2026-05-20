@@ -4644,6 +4644,7 @@ export default function AppBrandWizard() {
                             return;
                           }
                           const jobId = crypto.randomUUID();
+                          const isMotionControlGenerate = appSection === "motion_control";
                           const poster =
                             isVoiceChange
                               ? undefined
@@ -4662,17 +4663,20 @@ export default function AppBrandWizard() {
                             : isTranslate
                               ? setTranslateHistoryItems
                               : setMotionControlHistoryItems;
-                          setHistoryTarget((prev) => [
-                            {
-                              id: jobId,
-                              kind: isVoiceChange ? "audio" : isTranslate ? "video" : "motion",
-                              status: "generating",
-                              label: historyLabel,
-                              posterUrl: poster,
-                              createdAt: startedAt,
-                            },
-                            ...prev,
-                          ]);
+                          /** Motion: one history row only after provider accepts the job (avoids upload + poll duplicate cards). */
+                          if (!isMotionControlGenerate) {
+                            setHistoryTarget((prev) => [
+                              {
+                                id: jobId,
+                                kind: isVoiceChange ? "audio" : isTranslate ? "video" : "motion",
+                                status: "generating",
+                                label: historyLabel,
+                                posterUrl: poster,
+                                createdAt: startedAt,
+                              },
+                              ...prev,
+                            ]);
+                          }
                           const voiceChangeCredits = VOICE_CHANGE_CREDITS_FLAT;
                           const platformChargeMotion = motionCreditBypass
                             ? 0
@@ -4688,6 +4692,7 @@ export default function AppBrandWizard() {
                           setMotionBusy(true);
                           void (async () => {
                             let motionPendingTaskId: string | null = null;
+                            let motionHistoryEntryId: string | null = null;
                             let translatePendingTaskId: string | null = null;
                             try {
                               if (isVoiceChange) {
@@ -4840,20 +4845,6 @@ export default function AppBrandWizard() {
                                     )
                                   : [videoHttps].filter(Boolean);
 
-                              if (appSection === "motion_control") {
-                                setMotionControlHistoryItems((prev) =>
-                                  prev.map((i) =>
-                                    i.id === jobId
-                                      ? {
-                                          ...i,
-                                          inputUrls:
-                                            motionInputUrls.length > 0 ? motionInputUrls : undefined,
-                                        }
-                                      : i,
-                                  ),
-                                );
-                              }
-
                               const { blocked: motionBlocked, response: res } =
                                 appSection === "ad_clone"
                                   ? await guardedFetch("/api/wavespeed/video-translate", {
@@ -4923,6 +4914,7 @@ export default function AppBrandWizard() {
                                 );
                               } else if (appSection === "motion_control") {
                                 motionPendingTaskId = providerTaskId;
+                                motionHistoryEntryId = `pending-motion:${providerTaskId}`;
                                 upsertMotionPendingJob({
                                   taskId: providerTaskId,
                                   label: historyLabel,
@@ -4931,13 +4923,31 @@ export default function AppBrandWizard() {
                                   provider,
                                   inputUrls: motionInputUrls.length > 0 ? motionInputUrls : undefined,
                                   creditsCharged: platformChargeMotion,
-                                  startedAt: Date.now(),
+                                  startedAt,
                                 });
-                                setMotionControlHistoryItems((prev) =>
-                                  prev.map((i) =>
-                                    i.id === jobId ? { ...i, externalTaskId: providerTaskId } : i,
-                                  ),
-                                );
+                                setMotionControlHistoryItems((prev) => {
+                                  const withoutDupes = prev.filter(
+                                    (i) =>
+                                      i.externalTaskId !== providerTaskId &&
+                                      i.id !== motionHistoryEntryId,
+                                  );
+                                  return [
+                                    {
+                                      id: motionHistoryEntryId!,
+                                      kind: "motion",
+                                      status: "generating",
+                                      label: historyLabel,
+                                      posterUrl: poster,
+                                      createdAt: startedAt,
+                                      externalTaskId: providerTaskId,
+                                      studioGenerationKind: generationKind,
+                                      inputUrls:
+                                        motionInputUrls.length > 0 ? motionInputUrls : undefined,
+                                      model,
+                                    },
+                                    ...withoutDupes,
+                                  ];
+                                });
                               }
                               const rowId = await registerStudioGenerationClient({
                                 kind: generationKind,
@@ -4967,19 +4977,39 @@ export default function AppBrandWizard() {
                               if (rowId) {
                                 if (!isTranslate && appSection === "motion_control") {
                                   patchMotionPendingJob(providerTaskId, { rowId });
+                                  motionHistoryEntryId = rowId;
                                 }
-                                (isTranslate ? setTranslateHistoryItems : setMotionControlHistoryItems)((prev) =>
-                                  prev.map((i) =>
-                                    i.id === jobId
-                                      ? {
-                                          ...i,
-                                          id: rowId,
-                                          studioGenerationId: rowId,
-                                          studioGenerationKind: generationKind,
-                                        }
-                                      : i,
-                                  ),
-                                );
+                                if (isTranslate) {
+                                  setTranslateHistoryItems((prev) =>
+                                    prev.map((i) =>
+                                      i.id === jobId
+                                        ? {
+                                            ...i,
+                                            id: rowId,
+                                            studioGenerationId: rowId,
+                                            studioGenerationKind: generationKind,
+                                          }
+                                        : i,
+                                    ),
+                                  );
+                                } else if (appSection === "motion_control") {
+                                  setMotionControlHistoryItems((prev) =>
+                                    prev.map((i) => {
+                                      const match =
+                                        i.id === rowId ||
+                                        i.studioGenerationId === rowId ||
+                                        (motionHistoryEntryId != null && i.id === motionHistoryEntryId) ||
+                                        i.externalTaskId === providerTaskId;
+                                      if (!match) return i;
+                                      return {
+                                        ...i,
+                                        id: rowId,
+                                        studioGenerationId: rowId,
+                                        studioGenerationKind: generationKind,
+                                      };
+                                    }),
+                                  );
+                                }
                               }
                               if (appSection === "ad_clone") {
                                 toast.message("Translation started", { description: "Polling provider…" });
@@ -5022,7 +5052,9 @@ export default function AppBrandWizard() {
                                     const match =
                                       (rowId != null &&
                                         (i.id === rowId || i.studioGenerationId === rowId)) ||
-                                      (rowId == null && i.id === jobId);
+                                      (motionHistoryEntryId != null && i.id === motionHistoryEntryId) ||
+                                      (motionPendingTaskId != null &&
+                                        i.externalTaskId === motionPendingTaskId);
                                     if (!match || i.status !== "generating") return i;
                                     return {
                                       ...i,
@@ -5055,16 +5087,23 @@ export default function AppBrandWizard() {
                                 : isTranslate
                                   ? setTranslateHistoryItems
                                   : setMotionControlHistoryItems)((prev) =>
-                                prev.map((i) =>
-                                  i.id === jobId && i.status === "generating"
-                                    ? {
-                                        ...i,
-                                        status: "failed",
-                                        errorMessage: msg,
-                                        creditsRefunded: platformChargeMotion > 0,
-                                      }
-                                    : i,
-                                ),
+                                prev.map((i) => {
+                                  const match = isVoiceChange
+                                    ? i.id === jobId
+                                    : isTranslate
+                                      ? i.id === jobId
+                                      : (motionHistoryEntryId != null &&
+                                          (i.id === motionHistoryEntryId ||
+                                            i.externalTaskId === motionPendingTaskId)) ||
+                                        i.id === jobId;
+                                  if (!match || i.status !== "generating") return i;
+                                  return {
+                                    ...i,
+                                    status: "failed",
+                                    errorMessage: msg,
+                                    creditsRefunded: platformChargeMotion > 0,
+                                  };
+                                }),
                               );
                             } finally {
                               setVoiceChangePreparing(false);
