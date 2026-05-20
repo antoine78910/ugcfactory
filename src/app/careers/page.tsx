@@ -1,14 +1,15 @@
 import type { Metadata } from "next";
 import Image from "next/image";
 import Link from "next/link";
-import { ArrowLeft, ArrowUpRight, MapPin } from "lucide-react";
+import { ArrowUpRight, MapPin } from "lucide-react";
 import { CareersLandingTracker } from "./_components/CareersLandingTracker";
+import { CareersPageHeader } from "./_components/CareersPageHeader";
 
 export const dynamic = "force-static";
 export const revalidate = 3600;
 
 /** Founders hero — YOURY on CRT (`public/careers/hero.png`). Bump `v` after replacing the file. */
-const CAREERS_HERO_SRC = "/careers/hero.png?v=2";
+const CAREERS_HERO_SRC = "/careers/hero.png?v=3";
 
 export const metadata: Metadata = {
   title: "Careers — Youry",
@@ -55,28 +56,7 @@ export default function CareersPage() {
   return (
     <div className="min-h-screen overflow-x-clip bg-[#050507] font-sans text-white selection:bg-violet-500/30">
       <CareersLandingTracker />
-      <header className="sticky top-0 z-20 border-b border-white/[0.08] bg-[#050507]/90 backdrop-blur-md supports-[backdrop-filter]:bg-[#050507]/75">
-        <div className="mx-auto flex max-w-5xl items-center justify-between gap-3 px-4 py-3 sm:px-6">
-          <Link href="/" className="flex shrink-0 items-center">
-            <Image
-              src="/youry-logo.png"
-              alt="Youry"
-              width={174}
-              height={52}
-              className="h-7 w-auto opacity-95 sm:h-8"
-              priority
-            />
-          </Link>
-          <Link
-            href="/"
-            aria-label="Back to home"
-            className="inline-flex items-center gap-2 text-sm text-white/50 transition-colors hover:text-white"
-          >
-            <ArrowLeft className="size-4 shrink-0" aria-hidden />
-            <span>Back</span>
-          </Link>
-        </div>
-      </header>
+      <CareersPageHeader />
 
       <div className="mx-auto max-w-5xl px-4 pb-12 pt-16 sm:px-6 md:pb-24 md:pt-24">
         <div className="mb-6 text-center sm:mb-12">

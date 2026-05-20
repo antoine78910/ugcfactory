@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useState, type ReactNode } from "react";
 import { cn } from "@/lib/utils";
+import { careersTheme } from "./careersTheme";
 import {
   careersSessionMarkOnce,
   trackCareersEvent,
@@ -44,7 +45,7 @@ export function JobPostingTabs({
   return (
     <div>
       <div
-        className="mb-8 flex gap-0 overflow-x-auto border-b border-border"
+        className={careersTheme.tabBar}
         role="tablist"
         aria-label="Job posting sections"
       >
@@ -60,8 +61,8 @@ export function JobPostingTabs({
           className={cn(
             "-mb-px shrink-0 border-b-2 px-4 py-3 text-sm font-medium transition-colors",
             tab === "overview"
-              ? "border-foreground text-foreground"
-              : "border-transparent text-muted-foreground hover:text-foreground",
+              ? careersTheme.tabActive
+              : careersTheme.tabIdle,
           )}
         >
           Overview
@@ -78,8 +79,8 @@ export function JobPostingTabs({
           className={cn(
             "-mb-px shrink-0 border-b-2 px-4 py-3 text-sm font-medium transition-colors",
             tab === "application"
-              ? "border-foreground text-foreground"
-              : "border-transparent text-muted-foreground hover:text-foreground",
+              ? careersTheme.tabActive
+              : careersTheme.tabIdle,
           )}
         >
           Application

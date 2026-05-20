@@ -7,6 +7,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { cn } from "@/lib/utils";
+import { careersFormFieldClass, careersTheme } from "./careersTheme";
 import {
   careersSessionMarkOnce,
   getCareersVisitorId,
@@ -15,13 +16,9 @@ import {
 
 type Props = {
   jobSlug: string;
-  headingClassName?: string;
 };
 
-export function FoundingEngineerApplicationForm({
-  jobSlug,
-  headingClassName,
-}: Props) {
+export function FoundingEngineerApplicationForm({ jobSlug }: Props) {
   const startedRef = useRef(false);
   const autofillRef = useRef<HTMLInputElement>(null);
   const resumeRef = useRef<HTMLInputElement>(null);
@@ -109,11 +106,11 @@ export function FoundingEngineerApplicationForm({
 
   if (success) {
     return (
-      <div className="rounded-2xl border border-border bg-card p-6 text-sm sm:p-8">
-        <p className="text-base font-semibold text-foreground">
+      <div className={cn(careersTheme.card, "p-6 text-sm sm:p-8")}>
+        <p className={cn("text-base font-semibold", careersTheme.heading)}>
           Application received
         </p>
-        <p className="mt-2 text-muted-foreground">
+        <p className={cn("mt-2", careersTheme.muted)}>
           Thank you. We will review your answers and follow up by email if there
           is a fit.
         </p>
@@ -122,15 +119,17 @@ export function FoundingEngineerApplicationForm({
   }
 
   return (
-    <div className="space-y-8 text-sm text-foreground">
-      <div className="rounded-2xl border border-dashed border-border bg-muted/30 p-4 sm:p-6">
+    <div className="space-y-8 text-sm text-white/80">
+      <div className={cn(careersTheme.cardDashed, "p-4 sm:p-6")}>
         <div className="flex flex-col gap-3 sm:flex-row sm:items-start">
-          <div className="flex size-10 shrink-0 items-center justify-center rounded-xl bg-background shadow-sm">
-            <Wand2 className="size-5 text-muted-foreground" aria-hidden />
+          <div className="flex size-10 shrink-0 items-center justify-center rounded-xl border border-white/10 bg-white/[0.04]">
+            <Wand2 className="size-5 text-violet-300/80" aria-hidden />
           </div>
           <div className="min-w-0 flex-1 space-y-2">
-            <h3 className="text-base font-semibold">Autofill from resume</h3>
-            <p className="text-muted-foreground">
+            <h3 className={cn("text-base font-semibold", careersTheme.heading)}>
+              Autofill from resume
+            </h3>
+            <p className={careersTheme.muted}>
               Upload your resume here to attach it to your application. You still
               need to complete the fields below — we read every answer.
             </p>
@@ -150,7 +149,7 @@ export function FoundingEngineerApplicationForm({
               type="button"
               variant="secondary"
               size="sm"
-              className="w-full sm:w-auto"
+              className={cn("w-full sm:w-auto", careersTheme.btnSecondary)}
               onClick={() => autofillRef.current?.click()}
             >
               <Upload className="mr-2 size-4" aria-hidden />
@@ -160,14 +159,9 @@ export function FoundingEngineerApplicationForm({
         </div>
       </div>
 
-      <form className="space-y-6" onSubmit={onSubmit}>
+      <form className={careersTheme.formRoot} onSubmit={onSubmit}>
         <div>
-          <h2
-            className={cn(
-              "text-lg font-semibold text-foreground",
-              headingClassName,
-            )}
-          >
+          <h2 className={cn("text-lg font-semibold", careersTheme.heading)}>
             Founding member
           </h2>
         </div>
@@ -177,7 +171,7 @@ export function FoundingEngineerApplicationForm({
             <Label htmlFor="first_name" className="after:ml-0.5 after:text-red-500 after:content-['*']">
               First name
             </Label>
-            <p className="text-xs text-muted-foreground">
+            <p className={cn("text-xs", careersTheme.hint)}>
               Include any middle name if you have it.
             </p>
             <Input
@@ -186,7 +180,7 @@ export function FoundingEngineerApplicationForm({
               required
               autoComplete="given-name"
               placeholder="Type here…"
-              className="w-full min-h-11"
+              className={cn("w-full min-h-11", careersFormFieldClass)}
               onFocus={markStarted}
             />
           </div>
@@ -200,7 +194,7 @@ export function FoundingEngineerApplicationForm({
               required
               autoComplete="family-name"
               placeholder="Type here…"
-              className="w-full min-h-11"
+              className={cn("w-full min-h-11", careersFormFieldClass)}
               onFocus={markStarted}
             />
           </div>
@@ -217,14 +211,14 @@ export function FoundingEngineerApplicationForm({
             required
             autoComplete="email"
             placeholder="hello@example.com"
-            className="w-full min-h-11"
+            className={cn("w-full min-h-11", careersFormFieldClass)}
             onFocus={markStarted}
           />
         </div>
 
         <div className="space-y-2">
           <Label htmlFor="resume_file">Resume</Label>
-          <p className="text-xs text-muted-foreground">
+          <p className="text-xs text-white/45">
             Optional file attachment. You will still showcase your best work in the
             questions below.
           </p>
@@ -246,18 +240,18 @@ export function FoundingEngineerApplicationForm({
               type="button"
               variant="secondary"
               size="sm"
-              className="w-full sm:w-auto"
+              className={cn("w-full sm:w-auto", careersTheme.btnSecondary)}
               onClick={() => resumeRef.current?.click()}
             >
               <Upload className="mr-2 size-4" aria-hidden />
               Upload file
             </Button>
             {resumeLabel ? (
-              <span className="truncate text-xs text-muted-foreground">
+              <span className="truncate text-xs text-white/45">
                 {resumeLabel}
               </span>
             ) : (
-              <span className="text-xs text-muted-foreground">
+              <span className="text-xs text-white/45">
                 or drag and drop is not available — use the button
               </span>
             )}
@@ -272,7 +266,7 @@ export function FoundingEngineerApplicationForm({
             type="url"
             inputMode="url"
             placeholder="https://…"
-            className="w-full min-h-11"
+            className={cn("w-full min-h-11", careersFormFieldClass)}
             onFocus={markStarted}
           />
         </div>
@@ -288,7 +282,7 @@ export function FoundingEngineerApplicationForm({
             required
             inputMode="url"
             placeholder="https://…"
-            className="w-full min-h-11"
+            className={cn("w-full min-h-11", careersFormFieldClass)}
             onFocus={markStarted}
           />
         </div>
@@ -304,14 +298,14 @@ export function FoundingEngineerApplicationForm({
             required
             inputMode="url"
             placeholder="https://…"
-            className="w-full min-h-11"
+            className={cn("w-full min-h-11", careersFormFieldClass)}
             onFocus={markStarted}
           />
         </div>
 
         <div className="space-y-2">
           <Label htmlFor="built_created">What have you built and created?</Label>
-          <div className="space-y-1 text-xs text-muted-foreground">
+          <div className="space-y-1 text-xs text-white/45">
             <p>We prioritise real agency over credentials.</p>
             <p>Tell us anything you are proud of — multiple things welcome.</p>
             <p>
@@ -324,14 +318,14 @@ export function FoundingEngineerApplicationForm({
             name="built_created"
             rows={4}
             placeholder="Type here…"
-            className="min-h-[100px] w-full resize-y"
+            className={cn("min-h-[100px] w-full resize-y", careersFormFieldClass)}
             onFocus={markStarted}
           />
         </div>
 
         <div className="space-y-2">
           <Label htmlFor="portfolio">Portfolio / personal website / projects</Label>
-          <p className="text-xs text-muted-foreground">
+          <p className="text-xs text-white/45">
             Add as many links as you wish. Screenshots or short demos help us see
             what you did.
           </p>
@@ -340,7 +334,7 @@ export function FoundingEngineerApplicationForm({
             name="portfolio"
             rows={4}
             placeholder="Type here…"
-            className="min-h-[100px] w-full resize-y"
+            className={cn("min-h-[100px] w-full resize-y", careersFormFieldClass)}
             onFocus={markStarted}
           />
         </div>
@@ -349,7 +343,7 @@ export function FoundingEngineerApplicationForm({
           <Label htmlFor="first_month_build">
             What would you be excited to build in the first month of work?
           </Label>
-          <p className="text-xs text-muted-foreground">
+          <p className="text-xs text-white/45">
             Our vision is to make AI UGC the default way ecommerce, SaaS, and app
             teams ship performance creative. What would you ship in month one that
             moves us closest? Be specific.
@@ -359,7 +353,7 @@ export function FoundingEngineerApplicationForm({
             name="first_month_build"
             rows={4}
             placeholder="Type here…"
-            className="min-h-[100px] w-full resize-y"
+            className={cn("min-h-[100px] w-full resize-y", careersFormFieldClass)}
             onFocus={markStarted}
           />
         </div>
@@ -368,7 +362,7 @@ export function FoundingEngineerApplicationForm({
           <Label htmlFor="salary_expectation_eur">
             What are your annual gross salary expectations?
           </Label>
-          <div className="space-y-1 text-xs text-muted-foreground">
+          <div className="space-y-1 text-xs text-white/45">
             <p>
               We do not use this to anchor an offer — we always lead with the best
               package we can. If expectations are far beyond our range, we prefer to
@@ -380,7 +374,7 @@ export function FoundingEngineerApplicationForm({
             id="salary_expectation_eur"
             name="salary_expectation_eur"
             placeholder="e.g. 85000"
-            className="w-full min-h-11"
+            className={cn("w-full min-h-11", careersFormFieldClass)}
             onFocus={markStarted}
           />
         </div>
@@ -389,7 +383,7 @@ export function FoundingEngineerApplicationForm({
           <Label htmlFor="ai_workflow">
             What is a workflow you have built for yourself?
           </Label>
-          <p className="text-xs text-muted-foreground">
+          <p className="text-xs text-white/45">
             Everyone prompts agents — what did you wire up to improve how you work?
             Orchestration, automation, a personal assistant pattern. Be specific.
           </p>
@@ -398,7 +392,7 @@ export function FoundingEngineerApplicationForm({
             name="ai_workflow"
             rows={4}
             placeholder="Type here…"
-            className="min-h-[100px] w-full resize-y"
+            className={cn("min-h-[100px] w-full resize-y", careersFormFieldClass)}
             onFocus={markStarted}
           />
         </div>
@@ -408,7 +402,7 @@ export function FoundingEngineerApplicationForm({
             Are you open to relocating or regular on-site collaboration in Europe
             if the role is a mutual fit?
           </Label>
-          <div className="space-y-1 text-xs text-muted-foreground">
+          <div className="space-y-1 text-xs text-white/45">
             <p>Assume you love the problem, the team, and the trajectory.</p>
             <p>
               We are remote-first today. If relocation is not an option, still apply
@@ -425,8 +419,8 @@ export function FoundingEngineerApplicationForm({
               className={cn(
                 "min-h-11 min-w-[88px] rounded-xl border px-4 text-sm font-medium transition-colors",
                 relocate === "yes"
-                  ? "border-foreground bg-foreground text-background"
-                  : "border-border bg-background hover:bg-muted",
+                  ? careersTheme.choiceSelected
+                  : careersTheme.choiceIdle,
               )}
             >
               Yes
@@ -440,8 +434,8 @@ export function FoundingEngineerApplicationForm({
               className={cn(
                 "min-h-11 min-w-[88px] rounded-xl border px-4 text-sm font-medium transition-colors",
                 relocate === "no"
-                  ? "border-foreground bg-foreground text-background"
-                  : "border-border bg-background hover:bg-muted",
+                  ? careersTheme.choiceSelected
+                  : careersTheme.choiceIdle,
               )}
             >
               No
@@ -456,22 +450,22 @@ export function FoundingEngineerApplicationForm({
             name="anything_else"
             rows={4}
             placeholder="Type here…"
-            className="min-h-[100px] w-full resize-y"
+            className={cn("min-h-[100px] w-full resize-y", careersFormFieldClass)}
             onFocus={markStarted}
           />
         </div>
 
-        <fieldset className="space-y-3 rounded-xl border border-border bg-muted/20 p-4">
+        <fieldset className={cn("space-y-3", careersTheme.privacyFieldset)}>
           <legend className="text-sm font-semibold after:ml-0.5 after:text-red-500 after:content-['*']">
             Privacy
           </legend>
-          <p className="text-xs text-muted-foreground">
+          <p className="text-xs text-white/45">
             I have read and understood the notice above. I consent to Youry
             collecting and processing my personal data to evaluate this job
             application. I can withdraw consent by contacting{" "}
             <a
               href="mailto:careers@youry.io"
-              className="font-medium text-foreground underline underline-offset-4"
+              className={careersTheme.link}
             >
               careers@youry.io
             </a>
@@ -485,14 +479,14 @@ export function FoundingEngineerApplicationForm({
                 setPrivacy(e.target.checked);
                 markStarted();
               }}
-              className="mt-1 size-4 rounded border border-input"
+              className="mt-1 size-4 rounded border border-white/20 bg-white/[0.04] accent-violet-500"
             />
             <span>Yes, I understand.</span>
           </label>
         </fieldset>
 
         {error ? (
-          <p className="text-sm text-destructive" role="alert">
+          <p className={cn("text-sm", careersTheme.error)} role="alert">
             {error}
           </p>
         ) : null}
@@ -501,7 +495,7 @@ export function FoundingEngineerApplicationForm({
           type="submit"
           size="lg"
           disabled={submitting}
-          className="w-full rounded-xl sm:w-auto"
+          className={cn("w-full rounded-xl sm:w-auto", careersTheme.btnPrimary)}
         >
           {submitting ? (
             <>

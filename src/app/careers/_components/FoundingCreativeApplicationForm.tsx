@@ -7,6 +7,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { cn } from "@/lib/utils";
+import { careersFormFieldClass, careersTheme } from "./careersTheme";
 import {
   careersSessionMarkOnce,
   getCareersVisitorId,
@@ -15,13 +16,9 @@ import {
 
 type Props = {
   jobSlug: string;
-  headingClassName?: string;
 };
 
-export function FoundingCreativeApplicationForm({
-  jobSlug,
-  headingClassName,
-}: Props) {
+export function FoundingCreativeApplicationForm({ jobSlug }: Props) {
   const startedRef = useRef(false);
   const [relocate, setRelocate] = useState<"" | "yes" | "no">("");
   const [privacy, setPrivacy] = useState(false);
@@ -83,11 +80,11 @@ export function FoundingCreativeApplicationForm({
 
   if (success) {
     return (
-      <div className="rounded-2xl border border-border bg-card p-6 text-sm sm:p-8">
-        <p className="text-base font-semibold text-foreground">
+      <div className={cn(careersTheme.card, "p-6 text-sm sm:p-8")}>
+        <p className={cn("text-base font-semibold", careersTheme.heading)}>
           Application received
         </p>
-        <p className="mt-2 text-muted-foreground">
+        <p className={cn("mt-2", careersTheme.muted)}>
           Thank you. We will review your answers and follow up by email if there
           is a fit.
         </p>
@@ -96,14 +93,9 @@ export function FoundingCreativeApplicationForm({
   }
 
   return (
-    <form className="space-y-6 text-sm text-foreground" onSubmit={onSubmit}>
+    <form className={careersTheme.formRoot} onSubmit={onSubmit}>
       <div>
-        <h2
-          className={cn(
-            "text-lg font-semibold text-foreground",
-            headingClassName,
-          )}
-        >
+        <h2 className={cn("text-lg font-semibold", careersTheme.heading)}>
           Founding member
         </h2>
       </div>
@@ -116,7 +108,7 @@ export function FoundingCreativeApplicationForm({
           >
             First name
           </Label>
-          <p className="text-xs text-muted-foreground">
+          <p className={cn("text-xs", careersTheme.hint)}>
             Include any middle name if you have it.
           </p>
           <Input
@@ -125,7 +117,7 @@ export function FoundingCreativeApplicationForm({
             required
             autoComplete="given-name"
             placeholder="Type here…"
-            className="min-h-11 w-full"
+            className={cn("min-h-11 w-full", careersFormFieldClass)}
             onFocus={markStarted}
           />
         </div>
@@ -142,7 +134,7 @@ export function FoundingCreativeApplicationForm({
             required
             autoComplete="family-name"
             placeholder="Type here…"
-            className="min-h-11 w-full"
+            className={cn("min-h-11 w-full", careersFormFieldClass)}
             onFocus={markStarted}
           />
         </div>
@@ -162,7 +154,7 @@ export function FoundingCreativeApplicationForm({
           required
           autoComplete="email"
           placeholder="hello@example.com"
-          className="min-h-11 w-full"
+          className={cn("min-h-11 w-full", careersFormFieldClass)}
           onFocus={markStarted}
         />
       </div>
@@ -175,7 +167,7 @@ export function FoundingCreativeApplicationForm({
           type="url"
           inputMode="url"
           placeholder="https://…"
-          className="min-h-11 w-full"
+          className={cn("min-h-11 w-full", careersFormFieldClass)}
           onFocus={markStarted}
         />
       </div>
@@ -188,7 +180,7 @@ export function FoundingCreativeApplicationForm({
           type="url"
           inputMode="url"
           placeholder="https://…"
-          className="min-h-11 w-full"
+          className={cn("min-h-11 w-full", careersFormFieldClass)}
           onFocus={markStarted}
         />
       </div>
@@ -201,42 +193,42 @@ export function FoundingCreativeApplicationForm({
           type="url"
           inputMode="url"
           placeholder="https://…"
-          className="min-h-11 w-full"
+          className={cn("min-h-11 w-full", careersFormFieldClass)}
           onFocus={markStarted}
         />
       </div>
 
       <div className="space-y-2">
         <Label htmlFor="cc_instagram">Instagram URL</Label>
-        <p className="text-xs text-muted-foreground">Only if relevant.</p>
+        <p className={cn("text-xs", careersTheme.hint)}>Only if relevant.</p>
         <Input
           id="cc_instagram"
           name="instagram_url"
           type="url"
           inputMode="url"
           placeholder="https://…"
-          className="min-h-11 w-full"
+          className={cn("min-h-11 w-full", careersFormFieldClass)}
           onFocus={markStarted}
         />
       </div>
 
       <div className="space-y-2">
         <Label htmlFor="cc_tiktok">TikTok URL</Label>
-        <p className="text-xs text-muted-foreground">Only if relevant.</p>
+        <p className={cn("text-xs", careersTheme.hint)}>Only if relevant.</p>
         <Input
           id="cc_tiktok"
           name="tiktok_url"
           type="url"
           inputMode="url"
           placeholder="https://…"
-          className="min-h-11 w-full"
+          className={cn("min-h-11 w-full", careersFormFieldClass)}
           onFocus={markStarted}
         />
       </div>
 
       <div className="space-y-2">
         <Label htmlFor="cc_portfolio">Portfolio / personal website / projects</Label>
-        <p className="text-xs text-muted-foreground">
+        <p className={cn("text-xs", careersTheme.hint)}>
           Add as many links as you wish. Screenshots or short clips help us see
           what you did.
         </p>
@@ -245,7 +237,7 @@ export function FoundingCreativeApplicationForm({
           name="portfolio"
           rows={4}
           placeholder="Type here…"
-          className="min-h-[100px] w-full resize-y"
+            className={cn("min-h-[100px] w-full resize-y", careersFormFieldClass)}
           onFocus={markStarted}
         />
       </div>
@@ -254,7 +246,7 @@ export function FoundingCreativeApplicationForm({
         <Label htmlFor="cc_first_create">
           What is the first thing you would be excited to create?
         </Label>
-        <p className="text-xs text-muted-foreground">
+        <p className={cn("text-xs", careersTheme.hint)}>
           Surprise us — a script, a teaser, stills from your favourite tool, a
           ten-second proof. Anything that genuinely excites you.
         </p>
@@ -263,7 +255,7 @@ export function FoundingCreativeApplicationForm({
           name="creative_first_create"
           rows={4}
           placeholder="Type here…"
-          className="min-h-[100px] w-full resize-y"
+            className={cn("min-h-[100px] w-full resize-y", careersFormFieldClass)}
           onFocus={markStarted}
         />
       </div>
@@ -272,7 +264,7 @@ export function FoundingCreativeApplicationForm({
         <Label htmlFor="cc_salary">
           What are your annual gross salary expectations?
         </Label>
-        <div className="space-y-1 text-xs text-muted-foreground">
+        <div className={cn("space-y-1 text-xs", careersTheme.hint)}>
           <p>
             We do not use this to anchor an offer — we lead with the strongest
             package we can. If expectations are far beyond our range, we prefer
@@ -284,7 +276,7 @@ export function FoundingCreativeApplicationForm({
           id="cc_salary"
           name="salary_expectation_eur"
           placeholder="e.g. 65000"
-          className="min-h-11 w-full"
+          className={cn("min-h-11 w-full", careersFormFieldClass)}
           onFocus={markStarted}
         />
       </div>
@@ -294,7 +286,7 @@ export function FoundingCreativeApplicationForm({
           Give us a few examples of creative work you are inspired by or find
           beautiful.
         </Label>
-        <p className="text-xs text-muted-foreground">
+        <p className={cn("text-xs", careersTheme.hint)}>
           Add as many as you want. Does not need to be startup-related.
         </p>
         <Textarea
@@ -302,7 +294,7 @@ export function FoundingCreativeApplicationForm({
           name="creative_inspiration"
           rows={4}
           placeholder="Type here…"
-          className="min-h-[100px] w-full resize-y"
+            className={cn("min-h-[100px] w-full resize-y", careersFormFieldClass)}
           onFocus={markStarted}
         />
       </div>
@@ -312,7 +304,7 @@ export function FoundingCreativeApplicationForm({
           Are you open to relocating or regular on-site collaboration in Europe
           if the role is a mutual fit?
         </Label>
-        <div className="space-y-1 text-xs text-muted-foreground">
+        <div className={cn("space-y-1 text-xs", careersTheme.hint)}>
           <p>Assume you love the problem, the team, and what we are building.</p>
           <p>
             We are remote-first today. If relocation is not an option, still
@@ -328,9 +320,9 @@ export function FoundingCreativeApplicationForm({
             }}
             className={cn(
               "min-h-11 min-w-[88px] rounded-xl border px-4 text-sm font-medium transition-colors",
-              relocate === "yes"
-                ? "border-foreground bg-foreground text-background"
-                : "border-border bg-background hover:bg-muted",
+                relocate === "yes"
+                  ? careersTheme.choiceSelected
+                  : careersTheme.choiceIdle,
             )}
           >
             Yes
@@ -343,9 +335,9 @@ export function FoundingCreativeApplicationForm({
             }}
             className={cn(
               "min-h-11 min-w-[88px] rounded-xl border px-4 text-sm font-medium transition-colors",
-              relocate === "no"
-                ? "border-foreground bg-foreground text-background"
-                : "border-border bg-background hover:bg-muted",
+                relocate === "no"
+                  ? careersTheme.choiceSelected
+                  : careersTheme.choiceIdle,
             )}
           >
             No
@@ -360,22 +352,22 @@ export function FoundingCreativeApplicationForm({
           name="anything_else"
           rows={4}
           placeholder="Type here…"
-          className="min-h-[100px] w-full resize-y"
+            className={cn("min-h-[100px] w-full resize-y", careersFormFieldClass)}
           onFocus={markStarted}
         />
       </div>
 
-      <fieldset className="space-y-3 rounded-xl border border-border bg-muted/20 p-4">
+      <fieldset className={cn("space-y-3", careersTheme.privacyFieldset)}>
         <legend className="text-sm font-semibold after:ml-0.5 after:text-red-500 after:content-['*']">
           Privacy
         </legend>
-        <p className="text-xs text-muted-foreground">
+        <p className={cn("text-xs", careersTheme.hint)}>
           I have read and understood the notice above. I consent to Youry
           collecting and processing my personal data to evaluate this job
           application. I can withdraw consent by contacting{" "}
           <a
             href="mailto:careers@youry.io"
-            className="font-medium text-foreground underline underline-offset-4"
+            className={careersTheme.link}
           >
             careers@youry.io
           </a>
@@ -389,14 +381,14 @@ export function FoundingCreativeApplicationForm({
               setPrivacy(e.target.checked);
               markStarted();
             }}
-            className="mt-1 size-4 rounded border border-input"
+              className="mt-1 size-4 rounded border border-white/20 bg-white/[0.04] accent-violet-500"
           />
           <span>Yes, I understand.</span>
         </label>
       </fieldset>
 
       {error ? (
-        <p className="text-sm text-destructive" role="alert">
+        <p className={cn("text-sm", careersTheme.error)} role="alert">
           {error}
         </p>
       ) : null}
@@ -405,7 +397,7 @@ export function FoundingCreativeApplicationForm({
         type="submit"
         size="lg"
         disabled={submitting}
-        className="w-full rounded-xl sm:w-auto"
+        className={cn("w-full rounded-xl sm:w-auto", careersTheme.btnPrimary)}
       >
         {submitting ? (
           <>

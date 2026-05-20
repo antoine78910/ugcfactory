@@ -168,6 +168,37 @@
   animation: marquee-track 38s linear infinite;
 }
 
+/* Careers job posting overview copy (dark Youry pages) */
+@layer components {
+  .careers-job-prose {
+    @apply space-y-2 text-sm leading-relaxed text-white/75 sm:text-base;
+  }
+  .careers-job-prose h3 {
+    @apply mt-10 text-lg font-bold tracking-tight text-white;
+  }
+  .careers-job-prose h3:first-child {
+    @apply mt-0;
+  }
+  .careers-job-prose p {
+    @apply min-h-[1.5em];
+  }
+  .careers-job-prose a {
+    @apply font-medium text-violet-300 underline decoration-white/25 underline-offset-4 transition-colors hover:text-violet-200 hover:decoration-violet-300/60;
+  }
+  .careers-job-prose ul {
+    @apply mt-3 list-disc space-y-2 pl-5;
+  }
+  .careers-job-prose li p {
+    @apply min-h-[1.5em];
+  }
+  .careers-job-prose .careers-job-prose--emphasis {
+    @apply font-medium text-white;
+  }
+  .careers-job-prose .careers-job-prose--muted {
+    @apply text-white/55;
+  }
+}
+
 /* Link to Ad, loader scan site (barre + clip-path, branding violet) */
 @keyframes lta-website-scan-move {
   0% {
