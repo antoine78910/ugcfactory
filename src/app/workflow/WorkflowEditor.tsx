@@ -143,7 +143,10 @@ import {
   pickMarqueeModuleIds,
   type WorkflowMarqueeRect,
 } from "./workflowMarqueeSelection";
-import { ensureWorkflowNodesSelectable } from "./workflowNodeSelectable";
+import {
+  ensureWorkflowNodesSelectable,
+  isWorkflowGroupableModuleNode,
+} from "./workflowNodeSelectable";
 import { workflowDisableSpellcheck } from "./workflowDisableSpellcheck";
 import {
   buildWorkflowClipboardPayload,
@@ -423,11 +426,6 @@ function sourceKindFromNodeHandle(
     return null;
   }
   return null;
-}
-
-/** Top-level adAsset modules that can be placed inside a new group frame. */
-function isWorkflowGroupableModuleNode(node: WorkflowCanvasNode): boolean {
-  return node.type === "adAsset" && !node.parentId;
 }
 
 function targetKindFromNodeHandle(
@@ -964,6 +962,13 @@ function WorkflowReactFlowChrome({
   );
   const canGroup = eligibleForGroup.length >= 2;
   const canClone = useMemo(() => canCloneWorkflowSelection(selectedNodes), [selectedNodes]);
+  /** Bounds + floating toolbar for any multi-module selection (not only adAsset). */
+  const selectionChromeNodes = useMemo(() => {
+    if (eligibleForGroup.length >= 2) return eligibleForGroup;
+    if (selectedNodes.length < 2 || !canClone) return [];
+    return selectedNodes.filter((n) => n.type !== "workflowGroup");
+  }, [canClone, eligibleForGroup, selectedNodes]);
+  const canShowSelectionChrome = selectionChromeNodes.length >= 2;
 
   const [layoutRev, setLayoutRev] = useState(0);
   useEffect(() => {
@@ -972,17 +977,17 @@ function WorkflowReactFlowChrome({
     return () => window.removeEventListener("resize", onResize);
   }, []);
 
-  const groupEligibleIdsKey = useMemo(
+  const selectionChromeIdsKey = useMemo(
     () =>
-      eligibleForGroup
+      selectionChromeNodes
         .map((n) => n.id)
         .sort()
         .join(","),
-    [eligibleForGroup],
+    [selectionChromeNodes],
   );
 
   const eligiblePositionsSig = useStore((s) => {
-    const ids = groupEligibleIdsKey.split(",").filter(Boolean);
+    const ids = selectionChromeIdsKey.split(",").filter(Boolean);
     if (ids.length < 2) return "";
     let sig = "";
     for (const id of ids) {
@@ -996,14 +1001,14 @@ function WorkflowReactFlowChrome({
 
   /** Screen position (center-x, top of selection) for floating "New group" + panel anchor. */
   const groupSelectionAnchor = useMemo(() => {
-    if (!canGroup || eligibleForGroup.length < 2) return null;
+    if (!canShowSelectionChrome) return null;
     const vw = typeof window !== "undefined" ? window.innerWidth : 1200;
     const VIEW_MARGIN = 8;
     const PANEL_HALF_W = 140;
 
     try {
       const current = getNodes() as WorkflowCanvasNode[];
-      const fresh = eligibleForGroup.map((n) => current.find((x) => x.id === n.id) ?? n);
+      const fresh = selectionChromeNodes.map((n) => current.find((x) => x.id === n.id) ?? n);
       const b = getNodesBounds(fresh);
       if (!Number.isFinite(b.width) || !Number.isFinite(b.height)) return null;
 
@@ -1018,13 +1023,13 @@ function WorkflowReactFlowChrome({
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps -- recomputes when layoutRev / viewport / eligible sigs change
   }, [
-    canGroup,
-    eligibleForGroup,
+    canShowSelectionChrome,
+    selectionChromeNodes,
     eligiblePositionsSig,
     flowToScreenPosition,
     getNodes,
     getNodesBounds,
-    groupEligibleIdsKey,
+    selectionChromeIdsKey,
     layoutRev,
     viewport,
   ]);
@@ -1036,10 +1041,10 @@ function WorkflowReactFlowChrome({
    * "New group" CTA above it.
    */
   const groupSelectionRect = useMemo(() => {
-    if (!canGroup || eligibleForGroup.length < 2) return null;
+    if (!canShowSelectionChrome) return null;
     try {
       const current = getNodes() as WorkflowCanvasNode[];
-      const fresh = eligibleForGroup.map((n) => current.find((x) => x.id === n.id) ?? n);
+      const fresh = selectionChromeNodes.map((n) => current.find((x) => x.id === n.id) ?? n);
       const b = getNodesBounds(fresh);
       if (!Number.isFinite(b.width) || !Number.isFinite(b.height)) return null;
       const tl = flowToScreenPosition({ x: b.x, y: b.y });
@@ -1056,8 +1061,8 @@ function WorkflowReactFlowChrome({
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps -- recomputes when layoutRev / viewport / eligible sigs change
   }, [
-    canGroup,
-    eligibleForGroup,
+    canShowSelectionChrome,
+    selectionChromeNodes,
     eligiblePositionsSig,
     flowToScreenPosition,
     getNodes,
@@ -1091,10 +1096,10 @@ function WorkflowReactFlowChrome({
   }, [frameOpen, groupSelectionAnchor]);
 
   useEffect(() => {
-    if (!canGroup) {
+    if (!canShowSelectionChrome) {
       queueMicrotask(() => setSelectionBarExpanded(false));
     }
-  }, [canGroup, setSelectionBarExpanded]);
+  }, [canShowSelectionChrome, setSelectionBarExpanded]);
 
   useEffect(() => {
     if (tool === "pan" || tool === "stickyPlace" || tool === "cutTarget") {
@@ -2379,7 +2384,7 @@ function WorkflowReactFlowChrome({
        * floating "New group" CTA above. Pointer-events:none so it never
        * intercepts clicks on the underlying nodes.
        */}
-      {!readOnly && canGroup && !frameOpen && groupSelectionRect ? (
+      {!readOnly && canShowSelectionChrome && !frameOpen && groupSelectionRect ? (
         <div
           className="pointer-events-none fixed z-[195]"
           style={{
@@ -2396,7 +2401,7 @@ function WorkflowReactFlowChrome({
         </div>
       ) : null}
 
-      {!readOnly && canGroup && !frameOpen && groupSelectionAnchor ? (
+      {!readOnly && canShowSelectionChrome && !frameOpen && groupSelectionAnchor ? (
         <div
           className="pointer-events-auto fixed z-[199]"
           style={{

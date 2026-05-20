@@ -6,6 +6,18 @@ export function isWorkflowSelectableNodeType(type: string | undefined | null): b
   return typeof type === "string" && !WORKFLOW_MARQUEE_EXCLUDED_TYPES.has(type);
 }
 
+/** Top-level canvas modules that can be grouped (same families as duplicate). */
+export function isWorkflowGroupableModuleNode(node: WorkflowCanvasNode): boolean {
+  if (node.parentId) return false;
+  return (
+    node.type === "adAsset" ||
+    node.type === "imageRef" ||
+    node.type === "textPrompt" ||
+    node.type === "promptList" ||
+    node.type === "stickyNote"
+  );
+}
+
 export function ensureWorkflowNodesSelectable(nodes: WorkflowCanvasNode[]): WorkflowCanvasNode[] {
   let changed = false;
   const next = nodes.map((node) => {
