@@ -51,6 +51,14 @@ const JOBS: JobOpening[] = [
     description:
       "Own how Youry looks in motion, launch films, social-first cuts, and a visual language for an AI UGC brand. Shoot, edit, animate, and ship; AI-augmented, taste-first.",
   },
+  {
+    href: "/careers/smart-video-editor",
+    discipline: "Creative",
+    location: "Remote · EU-friendly hours",
+    title: "Smart Video Editor (TikTok & trends)",
+    description:
+      "Trend-native editor for youry.io: mass-produce SaaS/ecommerce TikTok edits (dropship.io / pinecode style), 3+ videos per day, hook-first and performance-driven.",
+  },
 ];
 
 export default function CareersPage() {

@@ -1,5 +1,11 @@
 import Link from "next/link";
 import { createSupabaseServiceClient } from "@/lib/supabase/admin";
+import type { SmartVideoEditorApplicationData } from "@/lib/careers/videoEditorApplication";
+import { SMART_VIDEO_EDITOR_JOB_SLUG } from "@/lib/careers/videoEditorApplication";
+import {
+  VideoEditorApplicationDetail,
+  isVideoEditorApplication,
+} from "./_components/VideoEditorApplicationDetail";
 
 type FunnelEvent = {
   id: string;
@@ -35,7 +41,15 @@ type Application = {
   tiktok_url: string | null;
   creative_first_create: string | null;
   creative_inspiration: string | null;
+  application_data: SmartVideoEditorApplicationData | null;
 };
+
+function videoEditorSummary(
+  data: SmartVideoEditorApplicationData | null,
+): string {
+  if (!data) return "—";
+  return `${data.videos_per_day}/day · ${data.discord_telegram}`;
+}
 
 function distinctVisitors(rows: FunnelEvent[], pred: (r: FunnelEvent) => boolean) {
   const s = new Set<string>();
@@ -146,7 +160,7 @@ export default async function AdminCareersPage() {
             </p>
             <p className="mt-1 text-2xl font-bold text-violet-300">{visitorsStarted}</p>
             <p className="mt-1 text-xs text-white/35">
-              First interaction on an application form (engineer or creative).
+              First interaction on an application form (any role).
             </p>
           </div>
           <div className="rounded-xl border border-white/10 bg-white/[0.03] p-4">
@@ -222,7 +236,11 @@ export default async function AdminCareersPage() {
                       {a.first_name} {a.last_name}
                     </td>
                     <td className="p-2 text-white/80">{a.email}</td>
-                    <td className="p-2 text-white/60">{a.relocate_open ?? "—"}</td>
+                    <td className="p-2 text-white/60">
+                      {a.job_slug === SMART_VIDEO_EDITOR_JOB_SLUG
+                        ? videoEditorSummary(a.application_data)
+                        : (a.relocate_open ?? "—")}
+                    </td>
                     <td className="p-2 text-white/60">{a.salary_expectation_eur ?? "—"}</td>
                     <td className="max-w-[160px] truncate p-2 text-white/50" title={a.resume_storage_path ?? ""}>
                       {a.resume_storage_path ?? "—"}
@@ -284,7 +302,9 @@ export default async function AdminCareersPage() {
                   <span className="text-xs text-violet-300">{a.job_slug}</span>
                 </header>
                 <dl className="mt-3 grid gap-3 sm:grid-cols-2">
-                  {a.job_slug === "founding-creative" ? (
+                  {isVideoEditorApplication(a.job_slug, a.application_data) ? (
+                    <VideoEditorApplicationDetail data={a.application_data} />
+                  ) : a.job_slug === "founding-creative" ? (
                     <>
                       <div className="sm:col-span-2">
                         <dt className="text-[10px] uppercase tracking-wide text-white/40">

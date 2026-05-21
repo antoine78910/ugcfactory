@@ -2,12 +2,14 @@ export const runtime = "nodejs";
 
 import { NextResponse } from "next/server";
 import { createSupabaseServiceClient } from "@/lib/supabase/admin";
+import { parseVideoEditorApplicationForm } from "@/lib/careers/parseVideoEditorForm";
 import { randomUUID } from "crypto";
 
 const MAX_RESUME_BYTES = 5 * 1024 * 1024;
 const JOB_SLUG_MAX = 120;
 
 const CREATIVE_JOB_SLUGS = new Set(["founding-creative"]);
+const VIDEO_EDITOR_JOB_SLUGS = new Set(["smart-video-editor"]);
 
 function sanitizeFilename(name: string): string {
   const base = name.replace(/[^a-zA-Z0-9._-]+/g, "_").slice(0, 120);
@@ -16,6 +18,10 @@ function sanitizeFilename(name: string): string {
 
 function isCreativeJob(slug: string): boolean {
   return CREATIVE_JOB_SLUGS.has(slug);
+}
+
+function isVideoEditorJob(slug: string): boolean {
+  return VIDEO_EDITOR_JOB_SLUGS.has(slug);
 }
 
 export async function POST(req: Request) {
@@ -60,6 +66,7 @@ export async function POST(req: Request) {
   const isResumeFile = resumeFile instanceof File && resumeFile.size > 0;
 
   const creative = isCreativeJob(jobSlug);
+  const videoEditor = isVideoEditorJob(jobSlug);
 
   if (!jobSlug) {
     return NextResponse.json({ error: "Missing job" }, { status: 400 });
@@ -71,7 +78,7 @@ export async function POST(req: Request) {
     return NextResponse.json({ error: "Valid email required" }, { status: 400 });
   }
 
-  if (!creative) {
+  if (!creative && !videoEditor) {
     if (!twitterUrlRaw) {
       return NextResponse.json({ error: "X (Twitter) URL required" }, { status: 400 });
     }
@@ -80,8 +87,17 @@ export async function POST(req: Request) {
     }
   }
 
-  if (!relocateOpen || !["yes", "no"].includes(relocateOpen)) {
+  if (!videoEditor && (!relocateOpen || !["yes", "no"].includes(relocateOpen))) {
     return NextResponse.json({ error: "Please answer the relocation question" }, { status: 400 });
+  }
+
+  let videoEditorData: Record<string, unknown> | null = null;
+  if (videoEditor) {
+    const parsed = parseVideoEditorApplicationForm(form);
+    if (!parsed.ok) {
+      return NextResponse.json({ error: parsed.error }, { status: 400 });
+    }
+    videoEditorData = parsed.data as unknown as Record<string, unknown>;
   }
 
   if (!privacyAccepted) {
@@ -125,18 +141,21 @@ export async function POST(req: Request) {
     twitter_url: twitterUrl,
     github_url: creative ? null : githubUrl,
     built_created: creative ? null : builtCreated,
-    portfolio: portfolio,
+    portfolio: videoEditor
+      ? String(videoEditorData?.portfolio_link ?? "").slice(0, 12000) || portfolio
+      : portfolio,
     first_month_build: creative ? null : firstMonthBuild,
     salary_expectation_eur: salaryExpectationEur ? salaryExpectationEur.slice(0, 200) : null,
     ai_workflow: creative ? null : aiWorkflow,
-    relocate_open: relocateOpen.slice(0, 20),
-    anything_else: anythingElse,
+    relocate_open: videoEditor ? null : relocateOpen ? relocateOpen.slice(0, 20) : null,
+    anything_else: videoEditor ? null : anythingElse,
     privacy_accepted: true,
     youtube_url: creative && youtubeUrl ? youtubeUrl.slice(0, 2000) : null,
     instagram_url: creative && instagramUrl ? instagramUrl.slice(0, 2000) : null,
     tiktok_url: creative && tiktokUrl ? tiktokUrl.slice(0, 2000) : null,
     creative_first_create: creative ? creativeFirstCreate : null,
     creative_inspiration: creative ? creativeInspiration : null,
+    application_data: videoEditor ? videoEditorData : null,
   };
 
   const { error: insErr } = await admin.from("careers_applications").insert(row);
