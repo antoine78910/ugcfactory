@@ -73,7 +73,6 @@ export function VideoEditorApplicationDetail({ data }: { data: LegacyApplication
         }
         pre
       />
-      <Field label="Avg monthly income (USD)" value={data.avg_monthly_income_usd} />
       <Field
         label="Short-form / hook priority"
         value={

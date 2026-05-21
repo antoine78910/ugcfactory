@@ -8,20 +8,21 @@ import { JobPostingViewTracker } from "../_components/JobPostingViewTracker";
 import { SmartShortFormVideoEditorApplicationForm } from "../_components/SmartShortFormVideoEditorApplicationForm";
 import {
   EXAMPLE_TIKTOK_ACCOUNTS,
-  REFERENCE_EDIT_QUALITY_DRIVE_URL,
   SMART_SHORT_FORM_VIDEO_EDITOR_JOB_SLUG,
 } from "@/lib/careers/videoEditorApplication";
+import { VIDEO_EDITOR_PERFORMANCE_PAY_META } from "@/lib/careers/videoEditorPerformancePay";
+import { VideoEditorPerformancePayBlock } from "../_components/VideoEditorPerformancePayBlock";
 
 export const dynamic = "force-dynamic";
 
 export const metadata: Metadata = {
-  title: "Smart Short-Form Video Editor (TikTok & trends), Youry",
+  title: "Smart Short Form Video Editor (TikTok & trends), Youry",
   description:
-    "Edit high-volume TikTok / Reels for youry.io — SaaS & ecommerce short-form, $500 per 500k views, unlimited posts, 3+ edits/day.",
+    "Smart short form editor for youry.io, performance pay $500/500k views (min $1, max $500 per video), unlimited posts, 3+ edits/day.",
   openGraph: {
-    title: "Smart Short-Form Video Editor, Youry",
+    title: "Smart Short Form Video Editor, Youry",
     description:
-      "Trend-native short-form editor on youry.io — performance pay with no volume cap.",
+      "Performance pay $500/500k views, min payout $1, max $500 per video. Unlimited posting volume.",
   },
 };
 
@@ -41,14 +42,14 @@ export default async function SmartVideoEditorPage({
         <a href="https://youry.io" target="_blank" rel="noopener noreferrer">
           Youry
         </a>
-        , AI-powered UGC for teams who ship creative at performance-marketing
-        speed — ecommerce and SaaS brands that test TikTok and Reels weekly.
+        , AI powered UGC for teams who ship creative at performance marketing
+        speed, ecommerce and SaaS brands that test TikTok and Reels weekly.
       </p>
 
       <h3>The role</h3>
       <p>
-        We are hiring a <strong>Smart Short-Form Video Editor</strong> — you
-        live on TikTok trends and mass-produce edits that feel native to SaaS and
+        We are hiring a <strong>Smart Short Form Video Editor</strong>, you
+        live on TikTok trends and mass produce edits that feel native to SaaS and
         ecommerce accounts. Study our reference style on{" "}
         {EXAMPLE_TIKTOK_ACCOUNTS.map((acc, i) => (
           <span key={acc.url}>
@@ -58,45 +59,25 @@ export default async function SmartVideoEditorPage({
             </a>
           </span>
         ))}{" "}
-        (BuildYourStore AI, Pinecode). Match the bar in our{" "}
-        <a
-          href={REFERENCE_EDIT_QUALITY_DRIVE_URL}
-          target="_blank"
-          rel="noopener noreferrer"
-        >
-          reference edit folder
-        </a>
-        .
+        (BuildYourStore AI, Pinecode).
       </p>
 
-      <h3>Compensation — high upside, no volume cap</h3>
-      <p className="careers-job-prose--emphasis">
-        <strong>$500 per 500,000 views</strong> on videos you edit. Post as often
-        as you want — <strong>no limit on how many shorts you can ship</strong>.
+      <h3>Compensation, high upside, no volume cap</h3>
+      <VideoEditorPerformancePayBlock
+        className="not-prose my-4"
+        showVolumeNote
+      />
+      <p>
         The faster and cleaner you edit, the more you can earn. This is a
-        high-upside role for editors who love volume + taste.
+        high upside role for editors who love volume and taste.
       </p>
-
-      <h3>What you get</h3>
-      <ul>
-        {[
-          "Editor Kickstart+ community access.",
-          "Coaching and full training from our team.",
-          "Real briefs — TikTok-first SaaS / ecommerce shorts.",
-          "Trial edit pathway via Discord.",
-        ].map((item) => (
-          <li key={item}>
-            <p>{item}</p>
-          </li>
-        ))}
-      </ul>
 
       <h3>What success looks like</h3>
       <ul>
         {[
-          "3+ TikTok-ready edits per day when briefs are clear.",
+          "3+ TikTok ready edits per day when briefs are clear.",
           "Hooks that stop the scroll in the first 3 seconds.",
-          "Trend-fluent cuts — not stale or generic corporate edits.",
+          "Trend fluent cuts, not stale or generic corporate edits.",
           "Flawless English in on-screen text.",
           "Fast Discord communication and turnaround.",
         ].map((item) => (
@@ -109,7 +90,7 @@ export default async function SmartVideoEditorPage({
       <h3>Hard requirements</h3>
       <ul>
         {[
-          "Portfolio of real short-form work (TikTok, Reels, or similar).",
+          "Portfolio of real short form work (TikTok, Reels, or similar).",
           "Strong written/spoken English.",
           "Honest answers on daily output and trend workflow.",
           "Adobe Premiere + After Effects preferred (CapCut OK if quality matches).",
@@ -140,16 +121,16 @@ export default async function SmartVideoEditorPage({
     <>
       <JobPostingViewTracker jobSlug={SMART_SHORT_FORM_VIDEO_EDITOR_JOB_SLUG} />
       <CareersJobShell
-        title="Smart Short-Form Video Editor"
+        title="Smart Short Form Video Editor"
         titleAside="(TikTok & trends)"
       >
         <div className="grid gap-10 lg:grid-cols-[minmax(0,220px)_1fr] lg:gap-16 xl:grid-cols-[minmax(0,260px)_1fr]">
           <aside className="lg:sticky lg:top-24 lg:self-start">
             <CareersJobMetaCard
               items={[
-                { title: "Location", value: "Remote · worldwide" },
+                { title: "Location", value: "Remote, worldwide" },
                 { title: "Employment type", value: "Contract / freelance" },
-                { title: "Pay model", value: "$500 / 500k views" },
+                { title: "Pay model", value: VIDEO_EDITOR_PERFORMANCE_PAY_META },
                 { title: "Output target", value: "3+ shorts / day" },
                 { title: "Department", value: "Youry, Creative" },
               ]}

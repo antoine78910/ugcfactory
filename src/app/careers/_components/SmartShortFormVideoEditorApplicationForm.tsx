@@ -13,10 +13,10 @@ import {
   EDITING_SOFTWARE_OPTIONS,
   ENGLISH_FLUENCY_LABELS,
   EXAMPLE_TIKTOK_ACCOUNTS,
-  REFERENCE_EDIT_QUALITY_DRIVE_URL,
   SMART_SHORT_FORM_VIDEO_EDITOR_JOB_SLUG,
 } from "@/lib/careers/videoEditorApplication";
-import { careersFormFieldClass, careersTheme } from "./careersTheme";
+import { careersFormFieldClass, careersSelectFieldClass, careersTheme } from "./careersTheme";
+import { VideoEditorPerformancePayBlock } from "./VideoEditorPerformancePayBlock";
 import {
   careersSessionMarkOnce,
   getCareersVisitorId,
@@ -54,7 +54,7 @@ export function SmartShortFormVideoEditorApplicationForm({
       return;
     }
     if (!englishFluency) {
-      setError("Please rate your English fluency (1–5).");
+      setError("Please rate your English fluency (1 to 5).");
       return;
     }
     if (!dailyOutput) {
@@ -103,79 +103,50 @@ export function SmartShortFormVideoEditorApplicationForm({
           Application received
         </p>
         <p className={cn("mt-2", careersTheme.muted)}>
-          Thank you. Stay active on Discord — we may contact you for a trial
-          short-form edit. We review applications daily.
+          Thank you. Stay active on Discord, we may contact you for a trial
+          short form edit. We review applications daily.
         </p>
       </div>
     );
   }
 
   return (
-    <form className={careersTheme.formRoot} onSubmit={onSubmit}>
+    <form
+      className={cn(careersTheme.formRoot, "[&_select]:[color-scheme:dark]")}
+      onSubmit={onSubmit}
+    >
       <div className={cn(careersTheme.card, "space-y-4 p-5 sm:p-6")}>
-        <h2 className={cn("text-xl font-bold tracking-tight", careersTheme.heading)}>
-          Smart Short-Form Video Editor Application
-        </h2>
-        <p className={cn("text-sm italic", careersTheme.muted)}>
-          This form takes around 2 minutes. TikTok / Reels / Shorts for SaaS and
-          ecommerce brands on youry.io.
-        </p>
         <div className={cn("space-y-3 text-sm", careersTheme.body)}>
-          <p className="font-semibold text-white/90">Notes</p>
-          <p>
-            Please <strong className="text-white">DO NOT apply</strong> if you
-            cannot edit short-form at a similar level to{" "}
-            <a
-              href={REFERENCE_EDIT_QUALITY_DRIVE_URL}
-              target="_blank"
-              rel="noopener noreferrer"
-              className={careersTheme.link}
-            >
-              this reference folder
-            </a>
-            .
-          </p>
           <p>
             DO NOT apply if you make multiple spelling mistakes in on-screen text
             on every video.
           </p>
           <ul className="list-disc space-y-1 pl-5 text-white/70">
-            <li>Sharp hooks in the first 3 seconds + trend-native pacing.</li>
-            <li>Target: 3+ TikTok-ready edits per day when briefs are clear.</li>
+            <li>Sharp hooks in the first 3 seconds, trend native pacing.</li>
+            <li>Target: 3+ TikTok ready edits per day when briefs are clear.</li>
             <li>Access to our paid community (Editor Kickstart+).</li>
             <li>We coach you and share all our training.</li>
             <li>
               <strong className="text-white">Good English is a MUST.</strong>
             </li>
           </ul>
-          <div className="rounded-xl border border-violet-500/30 bg-violet-500/10 p-4">
-            <p className="font-semibold text-violet-100">
-              Unlimited earning opportunity
-            </p>
-            <p className="mt-2 text-white/75">
-              Performance pay: <strong className="text-white">$500 per 500,000 views</strong>{" "}
-              on content you edit. Post as often as you want —{" "}
-              <strong className="text-white">no cap on volume</strong>. Strong
-              short-form editors can scale earnings fast; the more you ship, the
-              more you make.
-            </p>
-            <p className="mt-2 text-xs text-white/55">
-              Style references:{" "}
-              {EXAMPLE_TIKTOK_ACCOUNTS.map((acc, i) => (
-                <span key={acc.url}>
-                  {i > 0 ? " · " : null}
-                  <a
-                    href={acc.url}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className={careersTheme.link}
-                  >
-                    {acc.handle}
-                  </a>
-                </span>
-              ))}
-            </p>
-          </div>
+          <VideoEditorPerformancePayBlock />
+          <p className="text-xs text-white/55">
+            Style references:{" "}
+            {EXAMPLE_TIKTOK_ACCOUNTS.map((acc, i) => (
+              <span key={acc.url}>
+                {i > 0 ? ", " : null}
+                <a
+                  href={acc.url}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className={careersTheme.link}
+                >
+                  {acc.handle}
+                </a>
+              </span>
+            ))}
+          </p>
         </div>
       </div>
 
@@ -245,7 +216,7 @@ export function SmartShortFormVideoEditorApplicationForm({
           name="application_source"
           required
           defaultValue=""
-          className={cn("min-h-11 w-full max-w-md rounded-md border px-3 text-sm", careersFormFieldClass)}
+          className={careersSelectFieldClass}
           onFocus={markStarted}
         >
           <option value="" disabled>
@@ -347,7 +318,7 @@ export function SmartShortFormVideoEditorApplicationForm({
           name="editing_software"
           required
           defaultValue=""
-          className={cn("min-h-11 w-full max-w-md rounded-md border px-3 text-sm", careersFormFieldClass)}
+          className={careersSelectFieldClass}
           onFocus={markStarted}
         >
           <option value="" disabled>
@@ -366,11 +337,11 @@ export function SmartShortFormVideoEditorApplicationForm({
           htmlFor="sf_workflow"
           className="after:ml-0.5 after:text-red-500 after:content-['*']"
         >
-          Describe your short-form editing workflow
+          Describe your short form editing workflow
         </Label>
         <p className={cn("text-xs", careersTheme.hint)}>
           9:16 vertical, export settings, caption workflow, how fast you turn
-          around a TikTok-ready cut, and whether you can deliver in 4K when needed.
+          around a TikTok ready cut, and whether you can deliver in 4K when needed.
         </p>
         <Textarea
           id="sf_workflow"
@@ -384,31 +355,13 @@ export function SmartShortFormVideoEditorApplicationForm({
 
       <div className="space-y-2">
         <Label
-          htmlFor="sf_income"
-          className="after:ml-0.5 after:text-red-500 after:content-['*']"
-        >
-          Average monthly income over the last 3 months
-        </Label>
-        <p className={cn("text-xs", careersTheme.hint)}>USD per month.</p>
-        <Input
-          id="sf_income"
-          name="avg_monthly_income_usd"
-          required
-          placeholder="e.g. 2500"
-          className={cn("min-h-11 w-full", careersFormFieldClass)}
-          onFocus={markStarted}
-        />
-      </div>
-
-      <div className="space-y-2">
-        <Label
           htmlFor="sf_hook"
           className="after:ml-0.5 after:text-red-500 after:content-['*']"
         >
-          What matters most when editing short-form / TikTok videos?
+          What matters most when editing short form / TikTok videos?
         </Label>
         <p className={cn("text-xs", careersTheme.hint)}>
-          Hooks, pacing, on-screen text, sound, retention — especially for SaaS /
+          Hooks, pacing, on-screen text, sound, retention, especially for SaaS /
           ecommerce accounts like our reference TikToks. Be specific.
         </p>
         <Textarea
@@ -423,10 +376,10 @@ export function SmartShortFormVideoEditorApplicationForm({
 
       <div className="space-y-2">
         <Label className="after:ml-0.5 after:text-red-500 after:content-['*']">
-          Daily output — can you sustain mass production?
+          Daily output, can you sustain mass production?
         </Label>
         <p className={cn("text-xs", careersTheme.hint)}>
-          We target 3+ polished short-form edits per day when briefs are clear.
+          We target 3+ polished short form edits per day when briefs are clear.
         </p>
         <div className="space-y-2">
           {DAILY_OUTPUT_OPTIONS.map((opt) => (
@@ -475,7 +428,7 @@ export function SmartShortFormVideoEditorApplicationForm({
           htmlFor="sf_portfolio"
           className="after:ml-0.5 after:text-red-500 after:content-['*']"
         >
-          Portfolio — TikTok, Reels, or Drive with your best shorts
+          Portfolio: TikTok, Reels, or Drive with your best shorts
         </Label>
         <Input
           id="sf_portfolio"
@@ -490,9 +443,9 @@ export function SmartShortFormVideoEditorApplicationForm({
       </div>
 
       <div className="space-y-2">
-        <Label htmlFor="sf_loom">Loom — why you are a good fit (optional)</Label>
+        <Label htmlFor="sf_loom">Loom, why you are a good fit (optional)</Label>
         <p className={cn("text-xs", careersTheme.hint)}>
-          Optional — can increase your chances (~3×).
+          Optional, can increase your chances (~3x).
         </p>
         <Input
           id="sf_loom"

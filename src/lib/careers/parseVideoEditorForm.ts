@@ -65,11 +65,6 @@ export function parseSmartShortFormVideoEditorApplicationForm(
     };
   }
 
-  const avg_monthly_income_usd = str(form, "avg_monthly_income_usd", 200);
-  if (!avg_monthly_income_usd) {
-    return { ok: false, error: "Average monthly income (last 3 months) required" };
-  }
-
   const short_form_hook_priority = str(form, "short_form_hook_priority", 12000);
   if (!short_form_hook_priority) {
     return {
@@ -110,7 +105,6 @@ export function parseSmartShortFormVideoEditorApplicationForm(
       english_fluency,
       editing_software,
       short_form_workflow,
-      avg_monthly_income_usd,
       short_form_hook_priority,
       portfolio_social_url,
       daily_output_capacity,

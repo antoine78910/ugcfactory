@@ -34,3 +34,7 @@ export const careersTheme = {
 } as const;
 
 export const careersFormFieldClass = careersTheme.field;
+
+/** Dark native selects: black dropdown surface on Windows/macOS. */
+export const careersSelectFieldClass =
+  "min-h-11 w-full max-w-md rounded-md border border-white/15 bg-[#050507] px-3 text-sm text-white [color-scheme:dark] focus-visible:border-violet-400/50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-violet-500/30 [&>option]:bg-[#050507] [&>option]:text-white";

@@ -55,9 +55,9 @@ const JOBS: JobOpening[] = [
     href: "/careers/smart-video-editor",
     discipline: "Creative",
     location: "Remote · worldwide",
-    title: "Smart Short-Form Video Editor",
+    title: "Smart Short Form Video Editor",
     description:
-      "TikTok / Reels editor for youry.io — trend-native SaaS & ecommerce shorts, 3+ edits/day, $500 per 500k views, unlimited volume. Style: @buildyourstoreai, @pinecode.ai.",
+      "Smart short form editor for youry.io, performance $500/500k views (min $1, max $500/video), unlimited volume, 3+ edits/day. @buildyourstoreai, @pinecode.ai.",
   },
 ];
 

@@ -7,9 +7,6 @@ export const SMART_VIDEO_EDITOR_JOB_SLUG = SMART_SHORT_FORM_VIDEO_EDITOR_JOB_SLU
 /** Legacy slug from a brief rename — still accepted in API/admin. */
 export const LONG_FORM_VIDEO_EDITOR_JOB_SLUG = "long-form-video-editor";
 
-export const REFERENCE_EDIT_QUALITY_DRIVE_URL =
-  "https://drive.google.com/drive/folders/1x1hOpPLOcjxYF0ef4dUvFEFzk87pxVQS?usp=sharing";
-
 export const EXAMPLE_TIKTOK_ACCOUNTS = [
   {
     handle: "@pinecode.ai",
@@ -30,7 +27,6 @@ export type SmartShortFormVideoEditorApplicationData = {
   english_fluency: number;
   editing_software: string;
   short_form_workflow: string;
-  avg_monthly_income_usd: string;
   short_form_hook_priority: string;
   portfolio_social_url: string;
   daily_output_capacity: string;
@@ -64,15 +60,15 @@ export const EDITING_SOFTWARE_OPTIONS = [
 ] as const;
 
 export const DAILY_OUTPUT_OPTIONS = [
-  "Yes — 3+ TikTok/Reels-ready edits per day",
-  "Yes — around 2 per day consistently",
-  "Not yet — but I can ramp up quickly",
+  "Yes, 3+ TikTok/Reels ready edits per day",
+  "Yes, around 2 per day consistently",
+  "Not yet, but I can ramp up quickly",
 ] as const;
 
 export const ENGLISH_FLUENCY_LABELS: Record<number, string> = {
-  1: "1 — Limited",
-  2: "2 — Fair",
-  3: "3 — Good",
-  4: "4 — Very good",
-  5: "5 — Native / fluent",
+  1: "1, Limited",
+  2: "2, Fair",
+  3: "3, Good",
+  4: "4, Very good",
+  5: "5, Native / fluent",
 };
