@@ -1,6 +1,6 @@
 export const runtime = "nodejs";
-/** Slow shops + optional Playwright fallback (Link to Ad extract). */
-export const maxDuration = 90;
+/** Link to Ad extract — keep within Vercel Pro serverless ceiling (~60s). */
+export const maxDuration = 60;
 
 import { NextResponse } from "next/server";
 import * as cheerio from "cheerio";

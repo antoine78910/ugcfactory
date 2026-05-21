@@ -1,7 +1,9 @@
 import { NextResponse } from "next/server";
 import { serverLog } from "@/lib/serverLog";
 
-const PLAYWRIGHT_ENABLED = process.env.PLAYWRIGHT_FALLBACK !== "false";
+/** Playwright is too heavy for Vercel serverless (cold start + Chromium → FUNCTION_INVOCATION_TIMEOUT). */
+const IS_VERCEL = process.env.VERCEL === "1";
+const PLAYWRIGHT_ENABLED = process.env.PLAYWRIGHT_FALLBACK !== "false" && !IS_VERCEL;
 
 /** Headers closer to a real browser; some CDNs block bare fetch. */
 export const STORE_EXTRACT_BROWSER_HEADERS: HeadersInit = {
@@ -42,16 +44,17 @@ function isFetchAbortError(err: unknown): boolean {
   );
 }
 
-const FETCH_TIMEOUT_MS = 32_000;
-const FETCH_MAX_ATTEMPTS = 3;
-const RETRY_DELAY_MS = [0, 2_500, 5_000] as const;
-const PLAYWRIGHT_GOTO_TIMEOUT_MS = 48_000;
+/** Keep total wall time under typical Vercel limits (60s on Pro). */
+const FETCH_TIMEOUT_MS = IS_VERCEL ? 14_000 : 24_000;
+const FETCH_MAX_ATTEMPTS = IS_VERCEL ? 2 : 3;
+const RETRY_DELAY_MS = IS_VERCEL ? ([0, 1_200] as const) : ([0, 2_500, 5_000] as const);
+const PLAYWRIGHT_GOTO_TIMEOUT_MS = 32_000;
 
 function timeoutExtractResponse(): NextResponse {
   return NextResponse.json(
     {
       error:
-        "The page took too long to respond. We retried and used a browser fallback when possible. Try again in a moment, use a direct product URL (not a long redirect chain), or upload a product photo manually in Link to Ad.",
+        "The page took too long to respond. Try again, use a direct product URL (not a long redirect chain), or upload a product photo manually in Link to Ad.",
       code: "TIMEOUT",
     },
     { status: 502 },
@@ -61,13 +64,12 @@ function timeoutExtractResponse(): NextResponse {
 /**
  * Try fetching store HTML via Playwright (headless Chromium).
  * Returns the rendered HTML string, or null if Playwright is not available / times out.
- * Requires `playwright` package to be installed and `npx playwright install chromium` to have been run.
  */
 export async function fetchStorePageHtmlPlaywright(pageUrl: string): Promise<string | null> {
   if (!PLAYWRIGHT_ENABLED) return null;
   try {
     const { chromium } = await import("playwright");
-    const browser = await chromium.launch({ headless: true, timeout: 20_000 });
+    const browser = await chromium.launch({ headless: true, timeout: 12_000 });
     try {
       const context = await browser.newContext({
         userAgent:
@@ -79,7 +81,7 @@ export async function fetchStorePageHtmlPlaywright(pageUrl: string): Promise<str
       });
       const page = await context.newPage();
       await page.goto(pageUrl, { waitUntil: "domcontentloaded", timeout: PLAYWRIGHT_GOTO_TIMEOUT_MS });
-      await page.waitForTimeout(2_400);
+      await page.waitForTimeout(1_600);
       const html = await page.content();
       return html;
     } finally {
@@ -98,6 +100,7 @@ async function tryPlaywrightExtract(
   pageUrl: string,
   reason: string,
 ): Promise<{ ok: true; html: string; usedPlaywright: true } | null> {
+  if (!PLAYWRIGHT_ENABLED) return null;
   serverLog("store_extract_playwright_attempt", { url: pageUrl.slice(0, 160), reason });
   const pwHtml = await fetchStorePageHtmlPlaywright(pageUrl);
   if (pwHtml && !looksLikeAntiBotChallengeHtml(pwHtml)) {
@@ -109,7 +112,7 @@ async function tryPlaywrightExtract(
 }
 
 /**
- * Download store HTML for extraction. Retries slow pages and 429/503; Playwright fallback on timeout or anti-bot.
+ * Download store HTML for extraction. Retries slow pages and 429/503; Playwright fallback when not on Vercel.
  */
 export async function fetchStorePageHtmlForExtract(pageUrl: string): Promise<
   { ok: true; html: string; usedPlaywright?: boolean } | { ok: false; response: NextResponse }
@@ -119,7 +122,7 @@ export async function fetchStorePageHtmlForExtract(pageUrl: string): Promise<
 
   for (let attempt = 0; attempt < FETCH_MAX_ATTEMPTS; attempt++) {
     if (attempt > 0) {
-      await sleep(RETRY_DELAY_MS[attempt] ?? 4_000);
+      await sleep(RETRY_DELAY_MS[attempt] ?? 2_000);
     }
 
     const controller = new AbortController();
@@ -137,7 +140,8 @@ export async function fetchStorePageHtmlForExtract(pageUrl: string): Promise<
       clearTimeout(timeout);
       if (isFetchAbortError(err)) {
         sawTimeout = true;
-        serverLog("store_extract_timeout", { attempt, url: pageUrl.slice(0, 160) });
+        serverLog("store_extract_timeout", { attempt, url: pageUrl.slice(0, 160), vercel: IS_VERCEL });
+        if (IS_VERCEL) break;
         if (attempt < FETCH_MAX_ATTEMPTS - 1) continue;
         break;
       }

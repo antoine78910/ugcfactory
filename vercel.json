@@ -1,8 +1,17 @@
-{
-  "crons": [
-    {
-      "path": "/api/cron/onboarding-cal-reminders",
-      "schedule": "0 * * * *"
-    }
-  ]
-}
+{
+  "crons": [
+    {
+      "path": "/api/cron/onboarding-cal-reminders",
+      "schedule": "0 * * * *"
+    }
+  ],
+  "functions": {
+    "src/app/api/store/extract/route.ts": {
+      "maxDuration": 60
+    },
+    "src/app/api/link-to-ad/initial-pipeline/route.ts": {
+      "maxDuration": 300
+    }
+  }
+}
+
