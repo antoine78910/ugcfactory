@@ -2745,9 +2745,9 @@ function WorkflowFlowWorkspace({
 
   const applyMarqueeSelection = useCallback(
     (paneRect: WorkflowMarqueeRect) => {
-      const { nodeLookup, transform } = storeApi.getState();
+      const { nodeLookup, transform, nodes: rfNodes } = storeApi.getState();
       const keepIds = new Set(
-        pickMarqueeModuleIds(normalizeMarqueePaneRect(paneRect), nodeLookup, transform, [], true),
+        pickMarqueeModuleIds(normalizeMarqueePaneRect(paneRect), nodeLookup, transform, rfNodes, true),
       );
       setNodes((prev) => {
         let changed = false;
