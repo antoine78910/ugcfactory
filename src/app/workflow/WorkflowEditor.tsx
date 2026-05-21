@@ -139,6 +139,7 @@ import {
 } from "./workflowAutoConnect";
 import { canCloneWorkflowSelection, cloneWorkflowSelection } from "./workflowClone";
 import {
+  isWorkflowMarqueeNodeType,
   normalizeMarqueePaneRect,
   pickMarqueeModuleIds,
   type WorkflowMarqueeRect,
@@ -2742,12 +2743,8 @@ function WorkflowFlowWorkspace({
     });
   }, [readOnly, storeApi]);
 
-  const applyMarqueeSelection = useCallback(
-    (paneRect: WorkflowMarqueeRect) => {
-      const { nodeLookup, transform } = storeApi.getState();
-      const keepIds = new Set(
-        pickMarqueeModuleIds(normalizeMarqueePaneRect(paneRect), nodeLookup, transform, [], true),
-      );
+  const applyModuleSelection = useCallback(
+    (keepIds: Set<string>) => {
       setNodes((prev) => {
         let changed = false;
         const next = prev.map((n) => {
@@ -2765,7 +2762,37 @@ function WorkflowFlowWorkspace({
         return prev.map((e) => (e.selected ? { ...e, selected: false } : e));
       });
     },
-    [setEdges, setNodes, storeApi],
+    [setEdges, setNodes],
+  );
+
+  const applyMarqueeSelection = useCallback(
+    (paneRect: WorkflowMarqueeRect) => {
+      const { nodeLookup, transform } = storeApi.getState();
+      const keepIds = new Set(pickMarqueeModuleIds(paneRect, nodeLookup, transform, false));
+      applyModuleSelection(keepIds);
+    },
+    [applyModuleSelection, storeApi],
+  );
+
+  const onSelectionChange = useCallback(
+    ({ nodes: selNodes }: { nodes: WorkflowCanvasNode[]; edges: Edge[] }) => {
+      if (readOnly || tool !== "select") return;
+
+      const { userSelectionRect } = storeApi.getState();
+      if (userSelectionRect) {
+        const rect = normalizeMarqueePaneRect(userSelectionRect);
+        lastMarqueeRectRef.current = rect;
+        applyMarqueeSelection(rect);
+        return;
+      }
+
+      if ((selNodes?.length ?? 0) <= 1) return;
+      const keepIds = new Set(
+        selNodes.filter((n) => isWorkflowMarqueeNodeType(n.type)).map((n) => n.id),
+      );
+      applyModuleSelection(keepIds);
+    },
+    [applyMarqueeSelection, applyModuleSelection, readOnly, storeApi, tool],
   );
 
   const onSelectionStart = useCallback(() => {
@@ -4577,10 +4604,17 @@ function WorkflowFlowWorkspace({
           onNodeClick={
             readOnly
               ? undefined
-              : (_event, node) => {
+              : (event, node) => {
                   lastClickedWorkflowNodeIdRef.current = node.id;
+                  if (tool !== "select") return;
+                  if (event.shiftKey || event.metaKey || event.ctrlKey) return;
+                  const clickId = node.id;
+                  requestAnimationFrame(() => {
+                    applyModuleSelection(new Set([clickId]));
+                  });
                 }
           }
+          onSelectionChange={readOnly ? undefined : onSelectionChange}
           onDragOver={readOnly ? undefined : onDragOver}
           onDrop={readOnly ? undefined : onDrop}
           nodesDraggable={!readOnly}
