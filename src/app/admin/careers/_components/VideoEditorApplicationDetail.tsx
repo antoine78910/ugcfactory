@@ -1,5 +1,8 @@
-import type { SmartVideoEditorApplicationData } from "@/lib/careers/videoEditorApplication";
-import { SMART_VIDEO_EDITOR_JOB_SLUG } from "@/lib/careers/videoEditorApplication";
+import type { SmartShortFormVideoEditorApplicationData } from "@/lib/careers/videoEditorApplication";
+import {
+  ENGLISH_FLUENCY_LABELS,
+  SMART_SHORT_FORM_VIDEO_EDITOR_JOB_SLUG,
+} from "@/lib/careers/videoEditorApplication";
 
 function Field({
   label,
@@ -30,62 +33,87 @@ function Field({
   );
 }
 
-function ListField({ label, items }: { label: string; items: string[] | undefined }) {
-  return (
-    <div className="sm:col-span-2">
-      <dt className="text-[10px] uppercase tracking-wide text-white/40">{label}</dt>
-      <dd className="mt-1 text-white/75">
-        {items && items.length > 0 ? (
-          <ul className="list-inside list-disc space-y-0.5">
-            {items.map((item) => (
-              <li key={item}>{item}</li>
-            ))}
-          </ul>
-        ) : (
-          "—"
-        )}
-      </dd>
-    </div>
-  );
-}
+const VIDEO_EDITOR_SLUGS = new Set([
+  SMART_SHORT_FORM_VIDEO_EDITOR_JOB_SLUG,
+  "long-form-video-editor",
+]);
+
+type LegacyApplicationData = SmartShortFormVideoEditorApplicationData &
+  Record<string, unknown>;
 
 export function isVideoEditorApplication(
   jobSlug: string,
   data: unknown,
-): data is SmartVideoEditorApplicationData {
-  return jobSlug === SMART_VIDEO_EDITOR_JOB_SLUG && data !== null && typeof data === "object";
+): data is LegacyApplicationData {
+  return VIDEO_EDITOR_SLUGS.has(jobSlug) && data !== null && typeof data === "object";
 }
 
-export function VideoEditorApplicationDetail({ data }: { data: SmartVideoEditorApplicationData }) {
+export function VideoEditorApplicationDetail({ data }: { data: LegacyApplicationData }) {
+  const fluency =
+    data.english_fluency != null
+      ? (ENGLISH_FLUENCY_LABELS[data.english_fluency] ?? String(data.english_fluency))
+      : "—";
+
   return (
     <>
-      <Field label="Age" value={data.age} />
-      <Field label="Country / time zone" value={data.country_timezone} />
-      <Field label="Discord / Telegram" value={data.discord_telegram} />
-      <Field label="Portfolio link" value={data.portfolio_link} />
-      <Field label="Editing experience" value={data.editing_experience} />
-      <ListField label="Editing software" items={data.editing_software} />
-      <Field label="Worked for creators/brands" value={data.worked_for_creators} />
-      <Field label="Best edits (links)" value={data.best_edits_links} pre />
-      <ListField label="Content types" items={data.content_types} />
+      <Field label="Full name" value={data.full_name} />
+      <Field label="Phone" value={data.phone_number} />
+      <Field label="Location" value={data.location} />
+      <Field label="Found via" value={data.application_source} />
       <Field
-        label="SaaS / ecommerce TikTok experience"
-        value={data.saas_dropship_style_experience}
+        label="Discord"
+        value={data.discord_username ?? (data.discord_telegram as string | undefined)}
+      />
+      <Field label="English fluency" value={fluency} />
+      <Field label="Editing software" value={data.editing_software} />
+      <Field
+        label="Short-form workflow"
+        value={
+          data.short_form_workflow ?? (data.edit_4k_capability as string | undefined)
+        }
         pre
       />
-      <Field label="Videos per day" value={data.videos_per_day} />
-      <Field label="Hours per day" value={data.hours_per_day} />
-      <Field label="Mass production (3+/day)" value={data.mass_production_3_per_day} />
-      <Field label="TikTok trends" value={data.tiktok_trends_comfort} />
-      <Field label="Fast deadlines" value={data.fast_deadlines} />
-      <Field label="What makes a video viral" value={data.viral_opinion} pre />
-      <Field label="First 3 seconds hook" value={data.hook_first_3_seconds} pre />
-      <Field label="Why join Youry" value={data.why_join_youry} pre />
-      <Field label="Why choose you" value={data.why_choose_you} pre />
-      <Field label="Available immediately" value={data.available_immediately} />
-      <Field label="Editing test" value={data.editing_test} />
-      <Field label="Performance pay ($1 / 1k views)" value={data.performance_payment_ok} />
-      <Field label="Long-term collaboration" value={data.long_term_collaboration} />
+      <Field label="Avg monthly income (USD)" value={data.avg_monthly_income_usd} />
+      <Field
+        label="Short-form / hook priority"
+        value={
+          data.short_form_hook_priority ??
+          (data.educational_video_editing_priority as string | undefined)
+        }
+        pre
+      />
+      <Field
+        label="Daily output"
+        value={
+          data.daily_output_capacity ?? (data.mass_production_3_per_day as string | undefined)
+        }
+      />
+      <Field
+        label="TikTok trends approach"
+        value={
+          data.tiktok_trends_approach ?? (data.saas_dropship_style_experience as string | undefined)
+        }
+        pre
+      />
+      <Field
+        label="Portfolio / social"
+        value={
+          data.portfolio_social_url ?? (data.portfolio_youtube_url as string | undefined)
+        }
+      />
+      <Field label="Loom (optional)" value={data.loom_fit_video_url} />
+      <Field label="Application date" value={data.application_date} />
     </>
   );
+}
+
+export function videoEditorSummary(data: LegacyApplicationData | null): string {
+  if (!data) return "—";
+  const discord =
+    data.discord_username ?? (data.discord_telegram as string | undefined) ?? "—";
+  const output =
+    data.daily_output_capacity ??
+    (data.videos_per_day != null ? `${data.videos_per_day}/day` : null) ??
+    "—";
+  return `${discord} · ${output}`;
 }

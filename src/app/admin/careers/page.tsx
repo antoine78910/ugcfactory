@@ -1,10 +1,10 @@
 import Link from "next/link";
 import { createSupabaseServiceClient } from "@/lib/supabase/admin";
-import type { SmartVideoEditorApplicationData } from "@/lib/careers/videoEditorApplication";
-import { SMART_VIDEO_EDITOR_JOB_SLUG } from "@/lib/careers/videoEditorApplication";
+import type { SmartShortFormVideoEditorApplicationData } from "@/lib/careers/videoEditorApplication";
 import {
   VideoEditorApplicationDetail,
   isVideoEditorApplication,
+  videoEditorSummary,
 } from "./_components/VideoEditorApplicationDetail";
 
 type FunnelEvent = {
@@ -41,15 +41,13 @@ type Application = {
   tiktok_url: string | null;
   creative_first_create: string | null;
   creative_inspiration: string | null;
-  application_data: SmartVideoEditorApplicationData | null;
+  application_data: SmartShortFormVideoEditorApplicationData | null;
 };
 
-function videoEditorSummary(
-  data: SmartVideoEditorApplicationData | null,
-): string {
-  if (!data) return "—";
-  return `${data.videos_per_day}/day · ${data.discord_telegram}`;
-}
+const VIDEO_EDITOR_JOB_SLUGS = new Set([
+  "smart-video-editor",
+  "long-form-video-editor",
+]);
 
 function distinctVisitors(rows: FunnelEvent[], pred: (r: FunnelEvent) => boolean) {
   const s = new Set<string>();
@@ -237,7 +235,7 @@ export default async function AdminCareersPage() {
                     </td>
                     <td className="p-2 text-white/80">{a.email}</td>
                     <td className="p-2 text-white/60">
-                      {a.job_slug === SMART_VIDEO_EDITOR_JOB_SLUG
+                      {VIDEO_EDITOR_JOB_SLUGS.has(a.job_slug)
                         ? videoEditorSummary(a.application_data)
                         : (a.relocate_open ?? "—")}
                     </td>

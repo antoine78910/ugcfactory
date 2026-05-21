@@ -2,14 +2,17 @@ export const runtime = "nodejs";
 
 import { NextResponse } from "next/server";
 import { createSupabaseServiceClient } from "@/lib/supabase/admin";
-import { parseVideoEditorApplicationForm } from "@/lib/careers/parseVideoEditorForm";
+import { parseSmartShortFormVideoEditorApplicationForm } from "@/lib/careers/parseVideoEditorForm";
 import { randomUUID } from "crypto";
 
 const MAX_RESUME_BYTES = 5 * 1024 * 1024;
 const JOB_SLUG_MAX = 120;
 
 const CREATIVE_JOB_SLUGS = new Set(["founding-creative"]);
-const VIDEO_EDITOR_JOB_SLUGS = new Set(["smart-video-editor"]);
+const VIDEO_EDITOR_JOB_SLUGS = new Set([
+  "smart-video-editor",
+  "long-form-video-editor",
+]);
 
 function sanitizeFilename(name: string): string {
   const base = name.replace(/[^a-zA-Z0-9._-]+/g, "_").slice(0, 120);
@@ -71,7 +74,22 @@ export async function POST(req: Request) {
   if (!jobSlug) {
     return NextResponse.json({ error: "Missing job" }, { status: 400 });
   }
-  if (!firstName || !lastName) {
+
+  let resolvedFirstName = firstName;
+  let resolvedLastName = lastName;
+  let videoEditorData: Record<string, unknown> | null = null;
+
+  if (videoEditor) {
+    const parsed = parseSmartShortFormVideoEditorApplicationForm(form);
+    if (!parsed.ok) {
+      return NextResponse.json({ error: parsed.error }, { status: 400 });
+    }
+    videoEditorData = parsed.data as unknown as Record<string, unknown>;
+    resolvedFirstName = parsed.firstName;
+    resolvedLastName = parsed.lastName;
+  }
+
+  if (!resolvedFirstName) {
     return NextResponse.json({ error: "Name required" }, { status: 400 });
   }
   if (!email || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
@@ -89,15 +107,6 @@ export async function POST(req: Request) {
 
   if (!videoEditor && (!relocateOpen || !["yes", "no"].includes(relocateOpen))) {
     return NextResponse.json({ error: "Please answer the relocation question" }, { status: 400 });
-  }
-
-  let videoEditorData: Record<string, unknown> | null = null;
-  if (videoEditor) {
-    const parsed = parseVideoEditorApplicationForm(form);
-    if (!parsed.ok) {
-      return NextResponse.json({ error: parsed.error }, { status: 400 });
-    }
-    videoEditorData = parsed.data as unknown as Record<string, unknown>;
   }
 
   if (!privacyAccepted) {
@@ -133,8 +142,8 @@ export async function POST(req: Request) {
     id: applicationId,
     visitor_id: visitorId.length >= 8 ? visitorId.slice(0, 80) : null,
     job_slug: jobSlug,
-    first_name: firstName.slice(0, 200),
-    last_name: lastName.slice(0, 200),
+    first_name: resolvedFirstName.slice(0, 200),
+    last_name: resolvedLastName.slice(0, 200),
     email: email.slice(0, 320),
     resume_storage_path: resumePath,
     linkedin_url: linkedinUrl ? linkedinUrl.slice(0, 2000) : null,
@@ -142,15 +151,27 @@ export async function POST(req: Request) {
     github_url: creative ? null : githubUrl,
     built_created: creative ? null : builtCreated,
     portfolio: videoEditor
-      ? String(videoEditorData?.portfolio_link ?? "").slice(0, 12000) || portfolio
+      ? String(
+          videoEditorData?.portfolio_social_url ??
+            videoEditorData?.portfolio_youtube_url ??
+            "",
+        ).slice(0, 12000) || portfolio
       : portfolio,
+    youtube_url: videoEditor
+      ? String(
+          videoEditorData?.portfolio_social_url ??
+            videoEditorData?.portfolio_youtube_url ??
+            "",
+        ).slice(0, 2000)
+      : creative && youtubeUrl
+        ? youtubeUrl.slice(0, 2000)
+        : null,
     first_month_build: creative ? null : firstMonthBuild,
     salary_expectation_eur: salaryExpectationEur ? salaryExpectationEur.slice(0, 200) : null,
     ai_workflow: creative ? null : aiWorkflow,
     relocate_open: videoEditor ? null : relocateOpen ? relocateOpen.slice(0, 20) : null,
     anything_else: videoEditor ? null : anythingElse,
     privacy_accepted: true,
-    youtube_url: creative && youtubeUrl ? youtubeUrl.slice(0, 2000) : null,
     instagram_url: creative && instagramUrl ? instagramUrl.slice(0, 2000) : null,
     tiktok_url: creative && tiktokUrl ? tiktokUrl.slice(0, 2000) : null,
     creative_first_create: creative ? creativeFirstCreate : null,

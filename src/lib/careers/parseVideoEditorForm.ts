@@ -1,169 +1,127 @@
-import type { SmartVideoEditorApplicationData } from "./videoEditorApplication";
+import type { SmartShortFormVideoEditorApplicationData } from "./videoEditorApplication";
 import {
-  CONTENT_TYPE_OPTIONS,
-  EDITING_EXPERIENCE_OPTIONS,
+  APPLICATION_SOURCE_OPTIONS,
+  DAILY_OUTPUT_OPTIONS,
   EDITING_SOFTWARE_OPTIONS,
-  FAST_DEADLINE_OPTIONS,
-  LONG_TERM_OPTIONS,
-  MASS_PRODUCTION_OPTIONS,
-  PERFORMANCE_PAYMENT_OPTIONS,
-  TIKTOK_TRENDS_OPTIONS,
 } from "./videoEditorApplication";
 
 function str(form: FormData, key: string, max = 8000): string {
   return String(form.get(key) ?? "").trim().slice(0, max);
 }
 
-function num(form: FormData, key: string, min: number, max: number): number | null {
-  const raw = String(form.get(key) ?? "").trim();
-  if (!raw) return null;
-  const n = Number(raw);
-  if (!Number.isFinite(n) || n < min || n > max) return null;
-  return n;
-}
-
-function pickOne<T extends readonly string[]>(
-  value: string,
-  allowed: T,
-): value is T[number] {
+function pickOne<T extends readonly string[]>(value: string, allowed: T): value is T[number] {
   return (allowed as readonly string[]).includes(value);
 }
 
-function pickMany(form: FormData, key: string, allowed: readonly string[]): string[] {
-  const values = form.getAll(key).map((v) => String(v).trim());
-  const other = str(form, `${key}_other`, 200);
-  const picked = values.filter((v) => allowed.includes(v));
-  if (values.includes("other") && other) picked.push(`Other: ${other}`);
-  return picked;
-}
-
-export type ParseVideoEditorResult =
-  | { ok: true; data: SmartVideoEditorApplicationData }
+export type ParseSmartShortFormVideoEditorResult =
+  | {
+      ok: true;
+      data: SmartShortFormVideoEditorApplicationData;
+      firstName: string;
+      lastName: string;
+    }
   | { ok: false; error: string };
 
-export function parseVideoEditorApplicationForm(form: FormData): ParseVideoEditorResult {
-  const age = num(form, "age", 16, 80);
-  if (age === null) return { ok: false, error: "Valid age required (16–80)" };
+export function parseSmartShortFormVideoEditorApplicationForm(
+  form: FormData,
+): ParseSmartShortFormVideoEditorResult {
+  const fullName = str(form, "full_name", 400);
+  if (!fullName) return { ok: false, error: "Full name required" };
 
-  const country_timezone = str(form, "country_timezone", 300);
-  if (!country_timezone) return { ok: false, error: "Country / time zone required" };
+  const parts = fullName.split(/\s+/).filter(Boolean);
+  const firstName = parts[0] ?? fullName;
+  const lastName = parts.length > 1 ? parts.slice(1).join(" ") : "—";
 
-  const discord_telegram = str(form, "discord_telegram", 200);
-  if (!discord_telegram) return { ok: false, error: "Discord or Telegram username required" };
+  const phone_number = str(form, "phone_number", 80);
+  if (!phone_number) return { ok: false, error: "Phone number required" };
 
-  const portfolio_link = str(form, "portfolio_link", 2000);
-  if (!portfolio_link) return { ok: false, error: "Portfolio or social link required" };
+  const location = str(form, "location", 300);
+  if (!location) return { ok: false, error: "Location required" };
 
-  const editing_experience = str(form, "editing_experience", 80);
-  if (!pickOne(editing_experience, EDITING_EXPERIENCE_OPTIONS)) {
-    return { ok: false, error: "Please select editing experience" };
+  const application_source = str(form, "application_source", 120);
+  if (!pickOne(application_source, APPLICATION_SOURCE_OPTIONS)) {
+    return { ok: false, error: "Please select where you found this application" };
   }
 
-  const editing_software = pickMany(form, "editing_software", EDITING_SOFTWARE_OPTIONS);
-  if (editing_software.length === 0) {
-    return { ok: false, error: "Select at least one editing software" };
+  const discord_username = str(form, "discord_username", 200);
+  if (!discord_username) return { ok: false, error: "Discord username required" };
+
+  const englishRaw = str(form, "english_fluency", 4);
+  const english_fluency = Number(englishRaw);
+  if (!Number.isInteger(english_fluency) || english_fluency < 1 || english_fluency > 5) {
+    return { ok: false, error: "Rate your English fluency (1–5)" };
   }
 
-  const worked_for_creators = str(form, "worked_for_creators", 10);
-  if (!["Yes", "No"].includes(worked_for_creators)) {
-    return { ok: false, error: "Please answer if you worked for creators or brands" };
+  const editing_software = str(form, "editing_software", 120);
+  if (!pickOne(editing_software, EDITING_SOFTWARE_OPTIONS)) {
+    return { ok: false, error: "Please select your editing software" };
   }
 
-  const best_edits_links = str(form, "best_edits_links", 12000);
-  if (!best_edits_links) return { ok: false, error: "Share links to your 3 best edits" };
-
-  const content_types = pickMany(form, "content_types", CONTENT_TYPE_OPTIONS);
-  if (content_types.length === 0) {
-    return { ok: false, error: "Select at least one content type" };
-  }
-
-  const videos_per_day = num(form, "videos_per_day", 1, 30);
-  if (videos_per_day === null) return { ok: false, error: "Videos per day required (1–30)" };
-
-  const hours_per_day = num(form, "hours_per_day", 1, 16);
-  if (hours_per_day === null) return { ok: false, error: "Hours per day required (1–16)" };
-
-  const fast_deadlines = str(form, "fast_deadlines", 80);
-  if (!pickOne(fast_deadlines, FAST_DEADLINE_OPTIONS)) {
-    return { ok: false, error: "Please answer about fast deadlines" };
-  }
-
-  const viral_opinion = str(form, "viral_opinion", 12000);
-  if (!viral_opinion) return { ok: false, error: "Tell us what makes a video go viral" };
-
-  const hook_first_3_seconds = str(form, "hook_first_3_seconds", 12000);
-  if (!hook_first_3_seconds) return { ok: false, error: "Tell us how you hook viewers in 3 seconds" };
-
-  const why_join_youry = str(form, "why_join_youry", 12000);
-  if (!why_join_youry) return { ok: false, error: "Tell us why you want to join Youry" };
-
-  const why_choose_you = str(form, "why_choose_you", 12000);
-  if (!why_choose_you) return { ok: false, error: "Tell us why we should choose you" };
-
-  const available_immediately = str(form, "available_immediately", 10);
-  if (!["Yes", "No"].includes(available_immediately)) {
-    return { ok: false, error: "Please answer availability" };
-  }
-
-  const editing_test = str(form, "editing_test", 10);
-  if (!["Yes", "No"].includes(editing_test)) {
-    return { ok: false, error: "Please answer about the editing test" };
-  }
-
-  const performance_payment_ok = str(form, "performance_payment_ok", 80);
-  if (!pickOne(performance_payment_ok, PERFORMANCE_PAYMENT_OPTIONS)) {
-    return { ok: false, error: "Please answer about performance-based payment" };
-  }
-
-  const long_term_collaboration = str(form, "long_term_collaboration", 40);
-  if (!pickOne(long_term_collaboration, LONG_TERM_OPTIONS)) {
-    return { ok: false, error: "Please answer about long-term collaboration" };
-  }
-
-  const tiktok_trends_comfort = str(form, "tiktok_trends_comfort", 120);
-  if (!pickOne(tiktok_trends_comfort, TIKTOK_TRENDS_OPTIONS)) {
-    return { ok: false, error: "Please answer about TikTok trends" };
-  }
-
-  const mass_production_3_per_day = str(form, "mass_production_3_per_day", 120);
-  if (!pickOne(mass_production_3_per_day, MASS_PRODUCTION_OPTIONS)) {
-    return { ok: false, error: "Please answer about daily output (3+ videos)" };
-  }
-
-  const saas_dropship_style_experience = str(form, "saas_dropship_style_experience", 12000);
-  if (!saas_dropship_style_experience) {
+  const short_form_workflow = str(form, "short_form_workflow", 12000);
+  if (!short_form_workflow) {
     return {
       ok: false,
-      error: "Describe your experience with SaaS / ecommerce TikTok edits (dropship.io, pinecode style)",
+      error: "Describe your short-form workflow (9:16, speed, captions, export)",
     };
   }
 
+  const avg_monthly_income_usd = str(form, "avg_monthly_income_usd", 200);
+  if (!avg_monthly_income_usd) {
+    return { ok: false, error: "Average monthly income (last 3 months) required" };
+  }
+
+  const short_form_hook_priority = str(form, "short_form_hook_priority", 12000);
+  if (!short_form_hook_priority) {
+    return {
+      ok: false,
+      error: "Tell us what matters most when editing short-form / TikTok videos",
+    };
+  }
+
+  const portfolio_social_url = str(form, "portfolio_social_url", 2000);
+  if (!portfolio_social_url) {
+    return { ok: false, error: "Portfolio or TikTok / Reels link required" };
+  }
+
+  const daily_output_capacity = str(form, "daily_output_capacity", 120);
+  if (!pickOne(daily_output_capacity, DAILY_OUTPUT_OPTIONS)) {
+    return { ok: false, error: "Please answer about daily short-form output" };
+  }
+
+  const tiktok_trends_approach = str(form, "tiktok_trends_approach", 12000);
+  if (!tiktok_trends_approach) {
+    return { ok: false, error: "Explain how you use TikTok trends for SaaS / ecommerce shorts" };
+  }
+
+  const loomRaw = str(form, "loom_fit_video_url", 2000);
+  const loom_fit_video_url = loomRaw || null;
+  const application_date = str(form, "application_date", 40) || null;
+
   return {
     ok: true,
+    firstName,
+    lastName,
     data: {
-      age,
-      country_timezone,
-      discord_telegram,
-      portfolio_link,
-      editing_experience,
+      full_name: fullName,
+      phone_number,
+      location,
+      application_source,
+      discord_username,
+      english_fluency,
       editing_software,
-      worked_for_creators,
-      best_edits_links,
-      content_types,
-      videos_per_day,
-      hours_per_day,
-      fast_deadlines,
-      viral_opinion,
-      hook_first_3_seconds,
-      why_join_youry,
-      why_choose_you,
-      available_immediately,
-      editing_test,
-      performance_payment_ok,
-      long_term_collaboration,
-      tiktok_trends_comfort,
-      mass_production_3_per_day,
-      saas_dropship_style_experience,
+      short_form_workflow,
+      avg_monthly_income_usd,
+      short_form_hook_priority,
+      portfolio_social_url,
+      daily_output_capacity,
+      tiktok_trends_approach,
+      loom_fit_video_url,
+      application_date,
     },
   };
 }
+
+/** @deprecated */
+export const parseLongFormVideoEditorApplicationForm =
+  parseSmartShortFormVideoEditorApplicationForm;
+export const parseVideoEditorApplicationForm = parseSmartShortFormVideoEditorApplicationForm;

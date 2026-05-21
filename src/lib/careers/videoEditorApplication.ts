@@ -1,78 +1,78 @@
-/** Job slug for the TikTok / trends mass-production video editor role. */
-export const SMART_VIDEO_EDITOR_JOB_SLUG = "smart-video-editor";
+/** Job slug for the smart short-form (TikTok / Reels) video editor role. */
+export const SMART_SHORT_FORM_VIDEO_EDITOR_JOB_SLUG = "smart-video-editor";
 
-export type SmartVideoEditorApplicationData = {
-  age: number;
-  country_timezone: string;
-  discord_telegram: string;
-  portfolio_link: string;
-  editing_experience: string;
-  editing_software: string[];
-  worked_for_creators: string;
-  best_edits_links: string;
-  content_types: string[];
-  videos_per_day: number;
-  hours_per_day: number;
-  fast_deadlines: string;
-  viral_opinion: string;
-  hook_first_3_seconds: string;
-  why_join_youry: string;
-  why_choose_you: string;
-  available_immediately: string;
-  editing_test: string;
-  performance_payment_ok: string;
-  long_term_collaboration: string;
-  tiktok_trends_comfort: string;
-  mass_production_3_per_day: string;
-  saas_dropship_style_experience: string;
+/** @deprecated Alias */
+export const SMART_VIDEO_EDITOR_JOB_SLUG = SMART_SHORT_FORM_VIDEO_EDITOR_JOB_SLUG;
+
+/** Legacy slug from a brief rename — still accepted in API/admin. */
+export const LONG_FORM_VIDEO_EDITOR_JOB_SLUG = "long-form-video-editor";
+
+export const REFERENCE_EDIT_QUALITY_DRIVE_URL =
+  "https://drive.google.com/drive/folders/1x1hOpPLOcjxYF0ef4dUvFEFzk87pxVQS?usp=sharing";
+
+export const EXAMPLE_TIKTOK_ACCOUNTS = [
+  {
+    handle: "@pinecode.ai",
+    url: "https://www.tiktok.com/@pinecode.ai",
+  },
+  {
+    handle: "@buildyourstoreai",
+    url: "https://www.tiktok.com/@buildyourstoreai",
+  },
+] as const;
+
+export type SmartShortFormVideoEditorApplicationData = {
+  full_name: string;
+  phone_number: string;
+  location: string;
+  application_source: string;
+  discord_username: string;
+  english_fluency: number;
+  editing_software: string;
+  short_form_workflow: string;
+  avg_monthly_income_usd: string;
+  short_form_hook_priority: string;
+  portfolio_social_url: string;
+  daily_output_capacity: string;
+  tiktok_trends_approach: string;
+  loom_fit_video_url: string | null;
+  application_date: string | null;
 };
 
-export const EDITING_EXPERIENCE_OPTIONS = [
-  "Less than 6 months",
-  "6-12 months",
-  "1-2 years",
-  "2-4 years",
-  "More than 4 years",
+/** @deprecated */
+export type LongFormVideoEditorApplicationData = SmartShortFormVideoEditorApplicationData;
+
+export const APPLICATION_SOURCE_OPTIONS = [
+  "TikTok",
+  "Instagram",
+  "YouTube",
+  "Discord",
+  "LinkedIn",
+  "Referral / friend",
+  "Youry website",
+  "Other",
 ] as const;
 
 export const EDITING_SOFTWARE_OPTIONS = [
+  "Adobe Premiere Pro + After Effects",
   "Adobe Premiere Pro",
+  "Adobe After Effects",
   "Final Cut Pro",
   "DaVinci Resolve",
   "CapCut",
-  "After Effects",
+  "Other",
 ] as const;
 
-export const CONTENT_TYPE_OPTIONS = [
-  "UGC (User Generated Content)",
-  "Shorts / Reels / TikTok",
-  "Ads",
-  "Storytelling",
-  "Motion Design",
-  "SaaS / ecommerce TikTok (dropship.io, pinecode style)",
+export const DAILY_OUTPUT_OPTIONS = [
+  "Yes — 3+ TikTok/Reels-ready edits per day",
+  "Yes — around 2 per day consistently",
+  "Not yet — but I can ramp up quickly",
 ] as const;
 
-export const FAST_DEADLINE_OPTIONS = [
-  "Yes, absolutely",
-  "It depends on the project",
-  "No, I prefer to take my time",
-] as const;
-
-export const PERFORMANCE_PAYMENT_OPTIONS = [
-  "Yes, that's okay",
-  "No, I'd prefer another system",
-] as const;
-
-export const LONG_TERM_OPTIONS = ["Yes", "No", "Depends on the growth"] as const;
-
-export const TIKTOK_TRENDS_OPTIONS = [
-  "Yes, I track trends daily",
-  "Sometimes, when a brief asks for it",
-  "No, I focus on evergreen edits",
-] as const;
-
-export const MASS_PRODUCTION_OPTIONS = [
-  "Yes, 3+ TikTok-ready edits per day",
-  "Yes, but closer to 2 per day",
-  "Not yet, but I can ramp up",
-] as const;
+export const ENGLISH_FLUENCY_LABELS: Record<number, string> = {
+  1: "1 — Limited",
+  2: "2 — Fair",
+  3: "3 — Good",
+  4: "4 — Very good",
+  5: "5 — Native / fluent",
+};

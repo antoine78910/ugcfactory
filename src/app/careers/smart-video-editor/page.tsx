@@ -5,19 +5,23 @@ import { CareersJobMetaCard, CareersJobShell } from "../_components/CareersJobSh
 import { careersTheme } from "../_components/careersTheme";
 import { JobPostingTabs } from "../_components/JobPostingTabs";
 import { JobPostingViewTracker } from "../_components/JobPostingViewTracker";
-import { SmartVideoEditorApplicationForm } from "../_components/SmartVideoEditorApplicationForm";
-import { SMART_VIDEO_EDITOR_JOB_SLUG } from "@/lib/careers/videoEditorApplication";
+import { SmartShortFormVideoEditorApplicationForm } from "../_components/SmartShortFormVideoEditorApplicationForm";
+import {
+  EXAMPLE_TIKTOK_ACCOUNTS,
+  REFERENCE_EDIT_QUALITY_DRIVE_URL,
+  SMART_SHORT_FORM_VIDEO_EDITOR_JOB_SLUG,
+} from "@/lib/careers/videoEditorApplication";
 
 export const dynamic = "force-dynamic";
 
 export const metadata: Metadata = {
-  title: "Smart Video Editor (TikTok & trends), Youry",
+  title: "Smart Short-Form Video Editor (TikTok & trends), Youry",
   description:
-    "Trend-native TikTok editor for Youry: mass-produce SaaS and ecommerce shorts (dropship.io / pinecode style), 3+ edits per day, performance-driven creative.",
+    "Edit high-volume TikTok / Reels for youry.io — SaaS & ecommerce short-form, $500 per 500k views, unlimited posts, 3+ edits/day.",
   openGraph: {
-    title: "Smart Video Editor (TikTok & trends), Youry",
+    title: "Smart Short-Form Video Editor, Youry",
     description:
-      "Join our content team on youry.io — fast hooks, trend fluency, and high-volume TikTok edits for performance brands.",
+      "Trend-native short-form editor on youry.io — performance pay with no volume cap.",
   },
 };
 
@@ -37,67 +41,64 @@ export default async function SmartVideoEditorPage({
         <a href="https://youry.io" target="_blank" rel="noopener noreferrer">
           Youry
         </a>
-        , AI-powered UGC for teams who need scroll-stopping video at the speed of
-        performance marketing — ecommerce, SaaS, and apps that test creative
-        weekly, not quarterly.
+        , AI-powered UGC for teams who ship creative at performance-marketing
+        speed — ecommerce and SaaS brands that test TikTok and Reels weekly.
       </p>
 
       <h3>The role</h3>
       <p>
-        We are hiring a <strong>Smart Video Editor</strong> — not a generic
-        “cutter,” but someone who lives on TikTok trends and can mass-produce
-        edits that feel native to SaaS and ecommerce accounts (think{" "}
+        We are hiring a <strong>Smart Short-Form Video Editor</strong> — you
+        live on TikTok trends and mass-produce edits that feel native to SaaS and
+        ecommerce accounts. Study our reference style on{" "}
+        {EXAMPLE_TIKTOK_ACCOUNTS.map((acc, i) => (
+          <span key={acc.url}>
+            {i > 0 ? " and " : null}
+            <a href={acc.url} target="_blank" rel="noopener noreferrer">
+              {acc.handle}
+            </a>
+          </span>
+        ))}{" "}
+        (BuildYourStore AI, Pinecode). Match the bar in our{" "}
         <a
-          href="https://dropship.io"
+          href={REFERENCE_EDIT_QUALITY_DRIVE_URL}
           target="_blank"
           rel="noopener noreferrer"
         >
-          dropship.io
+          reference edit folder
         </a>
-        , pinecode, and similar performance brands). You turn raw footage and
-        briefs into hook-first, trend-aware shorts that ship fast.
+        .
       </p>
+
+      <h3>Compensation — high upside, no volume cap</h3>
+      <p className="careers-job-prose--emphasis">
+        <strong>$500 per 500,000 views</strong> on videos you edit. Post as often
+        as you want — <strong>no limit on how many shorts you can ship</strong>.
+        The faster and cleaner you edit, the more you can earn. This is a
+        high-upside role for editors who love volume + taste.
+      </p>
+
+      <h3>What you get</h3>
+      <ul>
+        {[
+          "Editor Kickstart+ community access.",
+          "Coaching and full training from our team.",
+          "Real briefs — TikTok-first SaaS / ecommerce shorts.",
+          "Trial edit pathway via Discord.",
+        ].map((item) => (
+          <li key={item}>
+            <p>{item}</p>
+          </li>
+        ))}
+      </ul>
 
       <h3>What success looks like</h3>
       <ul>
         {[
-          "You deliver at least 3 TikTok-ready edits per day, consistently, without sacrificing hook quality.",
-          "You spot and adapt trends before they feel stale — captions, pacing, sound, and framing.",
-          "Your edits feel like they belong on high-velocity SaaS / ecommerce TikTok, not corporate slideshows.",
-          "You are comfortable with performance-based compensation tied to views.",
-          "You communicate clearly on Discord or Telegram and hit fast turnarounds.",
-        ].map((item) => (
-          <li key={item}>
-            <p>{item}</p>
-          </li>
-        ))}
-      </ul>
-
-      <h3>What you will do</h3>
-      <ul>
-        {[
-          "Edit TikTok / Reels / Shorts for Youry and partner brands — UGC, ads, and product-demo style cuts.",
-          "Follow trend cycles daily: hooks, text overlays, jump cuts, native sounds, and pacing.",
-          "Mass-produce variants and iterations for testing (3+ finished edits per day target).",
-          "Work from briefs and raw clips — CapCut, Premiere, DaVinci, or your stack of choice.",
-          "Collaborate async with founders and growth — tight feedback loops, minimal layers.",
-          "Optionally complete an editing test to prove speed + taste on a SaaS-style brief.",
-        ].map((item) => (
-          <li key={item}>
-            <p>{item}</p>
-          </li>
-        ))}
-      </ul>
-
-      <h3>You are</h3>
-      <ul>
-        {[
-          "Experienced with short-form social (TikTok first) — you know what stops the scroll.",
-          "Fast and reliable — you have shipped high volume before or can prove you can ramp.",
-          "Trend-fluent — you study what works in ecommerce / SaaS TikTok, not only entertainment.",
-          "Comfortable with CapCut or pro NLEs; AI-assisted workflows are a plus.",
-          "Okay with performance pay: $1 per 1,000 views generated (see application form).",
-          "Available for a long-term collaboration if the fit is mutual.",
+          "3+ TikTok-ready edits per day when briefs are clear.",
+          "Hooks that stop the scroll in the first 3 seconds.",
+          "Trend-fluent cuts — not stale or generic corporate edits.",
+          "Flawless English in on-screen text.",
+          "Fast Discord communication and turnaround.",
         ].map((item) => (
           <li key={item}>
             <p>{item}</p>
@@ -106,39 +107,18 @@ export default async function SmartVideoEditorPage({
       </ul>
 
       <h3>Hard requirements</h3>
-      <p className="careers-job-prose--muted">
-        If any of these is a no, please do not apply.
-      </p>
       <ul>
         {[
-          "Portfolio with real short-form work (TikTok, Reels, or links to edits).",
-          "Ability to sustain 3+ polished TikTok-ready edits per day when briefs are clear.",
-          "Comfort with fast deadlines and async communication (Discord / Telegram).",
-          "Honest answers on trend fluency and SaaS / ecommerce-style editing experience.",
+          "Portfolio of real short-form work (TikTok, Reels, or similar).",
+          "Strong written/spoken English.",
+          "Honest answers on daily output and trend workflow.",
+          "Adobe Premiere + After Effects preferred (CapCut OK if quality matches).",
         ].map((item) => (
           <li key={item}>
             <p>{item}</p>
           </li>
         ))}
       </ul>
-
-      <h3>What we offer</h3>
-      <ul>
-        {[
-          "Performance-based pay: $1 per 1,000 views on work you produce for us.",
-          "High-volume, real briefs — build a reel and rhythm on live performance creative.",
-          "Remote-first, EU-friendly hours, small team with direct founder access.",
-          "Long-term path if output and taste stay strong.",
-        ].map((item) => (
-          <li key={item}>
-            <p>{item}</p>
-          </li>
-        ))}
-      </ul>
-
-      <p className="careers-job-prose--emphasis">
-        Show us your best TikTok edits. Show us you can move at trend speed.
-      </p>
 
       <div className="pt-8">
         <Button asChild size="lg" className={careersTheme.btnPrimary}>
@@ -151,28 +131,27 @@ export default async function SmartVideoEditorPage({
   );
 
   const application = (
-    <SmartVideoEditorApplicationForm jobSlug={SMART_VIDEO_EDITOR_JOB_SLUG} />
+    <SmartShortFormVideoEditorApplicationForm
+      jobSlug={SMART_SHORT_FORM_VIDEO_EDITOR_JOB_SLUG}
+    />
   );
 
   return (
     <>
-      <JobPostingViewTracker jobSlug={SMART_VIDEO_EDITOR_JOB_SLUG} />
+      <JobPostingViewTracker jobSlug={SMART_SHORT_FORM_VIDEO_EDITOR_JOB_SLUG} />
       <CareersJobShell
-        title="Smart Video Editor"
+        title="Smart Short-Form Video Editor"
         titleAside="(TikTok & trends)"
       >
         <div className="grid gap-10 lg:grid-cols-[minmax(0,220px)_1fr] lg:gap-16 xl:grid-cols-[minmax(0,260px)_1fr]">
           <aside className="lg:sticky lg:top-24 lg:self-start">
             <CareersJobMetaCard
               items={[
-                { title: "Location", value: "Remote · EU-friendly hours" },
-                { title: "Employment type", value: "Contract / full time" },
-                { title: "Location type", value: "Remote-first" },
+                { title: "Location", value: "Remote · worldwide" },
+                { title: "Employment type", value: "Contract / freelance" },
+                { title: "Pay model", value: "$500 / 500k views" },
+                { title: "Output target", value: "3+ shorts / day" },
                 { title: "Department", value: "Youry, Creative" },
-                {
-                  title: "Output target",
-                  value: "3+ TikTok-ready edits / day",
-                },
               ]}
             />
           </aside>
@@ -180,7 +159,7 @@ export default async function SmartVideoEditorPage({
           <div className="min-w-0">
             <JobPostingTabs
               initialTab={initialTab}
-              jobSlug={SMART_VIDEO_EDITOR_JOB_SLUG}
+              jobSlug={SMART_SHORT_FORM_VIDEO_EDITOR_JOB_SLUG}
               overview={overview}
               application={application}
             />
