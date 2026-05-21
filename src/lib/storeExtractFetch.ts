@@ -35,8 +35,28 @@ function sleep(ms: number): Promise<void> {
   return new Promise((r) => setTimeout(r, ms));
 }
 
-const FETCH_TIMEOUT_MS = 22_000;
-const RETRY_DELAY_MS = [0, 2800, 6500] as const;
+function isFetchAbortError(err: unknown): boolean {
+  return (
+    (err instanceof Error && err.name === "AbortError") ||
+    (typeof DOMException !== "undefined" && err instanceof DOMException && err.name === "AbortError")
+  );
+}
+
+const FETCH_TIMEOUT_MS = 32_000;
+const FETCH_MAX_ATTEMPTS = 3;
+const RETRY_DELAY_MS = [0, 2_500, 5_000] as const;
+const PLAYWRIGHT_GOTO_TIMEOUT_MS = 48_000;
+
+function timeoutExtractResponse(): NextResponse {
+  return NextResponse.json(
+    {
+      error:
+        "The page took too long to respond. We retried and used a browser fallback when possible. Try again in a moment, use a direct product URL (not a long redirect chain), or upload a product photo manually in Link to Ad.",
+      code: "TIMEOUT",
+    },
+    { status: 502 },
+  );
+}
 
 /**
  * Try fetching store HTML via Playwright (headless Chromium).
@@ -46,41 +66,60 @@ const RETRY_DELAY_MS = [0, 2800, 6500] as const;
 export async function fetchStorePageHtmlPlaywright(pageUrl: string): Promise<string | null> {
   if (!PLAYWRIGHT_ENABLED) return null;
   try {
-    // Dynamic import so the server doesn't crash when playwright is not installed
     const { chromium } = await import("playwright");
-    const browser = await chromium.launch({ headless: true, timeout: 12_000 });
+    const browser = await chromium.launch({ headless: true, timeout: 20_000 });
     try {
       const context = await browser.newContext({
-        userAgent: "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36",
+        userAgent:
+          "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36",
         locale: "en-US",
         extraHTTPHeaders: {
           "Accept-Language": "en-US,en;q=0.9",
         },
       });
       const page = await context.newPage();
-      await page.goto(pageUrl, { waitUntil: "domcontentloaded", timeout: 22_000 });
-      // Brief pause for JS-rendered images to populate
-      await page.waitForTimeout(1_800);
+      await page.goto(pageUrl, { waitUntil: "domcontentloaded", timeout: PLAYWRIGHT_GOTO_TIMEOUT_MS });
+      await page.waitForTimeout(2_400);
       const html = await page.content();
       return html;
     } finally {
       await browser.close();
     }
-  } catch {
+  } catch (err) {
+    serverLog("store_extract_playwright_error", {
+      url: pageUrl.slice(0, 160),
+      message: err instanceof Error ? err.message : "unknown",
+    });
     return null;
   }
 }
 
+async function tryPlaywrightExtract(
+  pageUrl: string,
+  reason: string,
+): Promise<{ ok: true; html: string; usedPlaywright: true } | null> {
+  serverLog("store_extract_playwright_attempt", { url: pageUrl.slice(0, 160), reason });
+  const pwHtml = await fetchStorePageHtmlPlaywright(pageUrl);
+  if (pwHtml && !looksLikeAntiBotChallengeHtml(pwHtml)) {
+    serverLog("store_extract_playwright_success", { url: pageUrl.slice(0, 160), reason });
+    return { ok: true, html: pwHtml, usedPlaywright: true };
+  }
+  serverLog("store_extract_playwright_failed", { url: pageUrl.slice(0, 160), reason });
+  return null;
+}
+
 /**
- * Download store HTML for extraction. Retries 429/503 a few times; maps anti-bot pages to a clear API error.
- * On anti-bot detection, automatically attempts a Playwright headless fallback before giving up.
+ * Download store HTML for extraction. Retries slow pages and 429/503; Playwright fallback on timeout or anti-bot.
  */
 export async function fetchStorePageHtmlForExtract(pageUrl: string): Promise<
   { ok: true; html: string; usedPlaywright?: boolean } | { ok: false; response: NextResponse }
 > {
-  for (let attempt = 0; attempt < 3; attempt++) {
+  let sawTimeout = false;
+  let lastNetworkError: string | null = null;
+
+  for (let attempt = 0; attempt < FETCH_MAX_ATTEMPTS; attempt++) {
     if (attempt > 0) {
-      await sleep(RETRY_DELAY_MS[attempt]);
+      await sleep(RETRY_DELAY_MS[attempt] ?? 4_000);
     }
 
     const controller = new AbortController();
@@ -96,28 +135,24 @@ export async function fetchStorePageHtmlForExtract(pageUrl: string): Promise<
       });
     } catch (err) {
       clearTimeout(timeout);
-      const msg = err instanceof Error ? err.message : "Network error";
-      const aborted =
-        (err instanceof Error && err.name === "AbortError") ||
-        (typeof DOMException !== "undefined" && err instanceof DOMException && err.name === "AbortError");
-      if (aborted) {
-        return {
-          ok: false,
-          response: NextResponse.json(
-            {
-              error:
-                "The page took too long to respond. Try again, use a shorter product URL, or upload a product photo manually in Link to Ad.",
-              code: "TIMEOUT",
-            },
-            { status: 502 },
-          ),
-        };
+      if (isFetchAbortError(err)) {
+        sawTimeout = true;
+        serverLog("store_extract_timeout", { attempt, url: pageUrl.slice(0, 160) });
+        if (attempt < FETCH_MAX_ATTEMPTS - 1) continue;
+        break;
       }
+      lastNetworkError = err instanceof Error ? err.message : "Network error";
+      serverLog("store_extract_network", {
+        attempt,
+        url: pageUrl.slice(0, 160),
+        message: lastNetworkError,
+      });
+      if (attempt < FETCH_MAX_ATTEMPTS - 1) continue;
       return {
         ok: false,
         response: NextResponse.json(
           {
-            error: `Could not reach this URL (${msg}). Check the link or try from another network.`,
+            error: `Could not reach this URL (${lastNetworkError}). Check the link or try from another network.`,
             code: "NETWORK",
           },
           { status: 502 },
@@ -132,13 +167,8 @@ export async function fetchStorePageHtmlForExtract(pageUrl: string): Promise<
     if (res.ok) {
       if (looksLikeAntiBotChallengeHtml(text)) {
         serverLog("store_extract_anti_bot_body", { url: pageUrl.slice(0, 160), status: res.status });
-        // Try Playwright before giving up
-        const pwHtml = await fetchStorePageHtmlPlaywright(pageUrl);
-        if (pwHtml && !looksLikeAntiBotChallengeHtml(pwHtml)) {
-          serverLog("store_extract_playwright_success", { url: pageUrl.slice(0, 160) });
-          return { ok: true, html: pwHtml, usedPlaywright: true };
-        }
-        serverLog("store_extract_playwright_failed", { url: pageUrl.slice(0, 160) });
+        const pw = await tryPlaywrightExtract(pageUrl, "anti_bot_ok_body");
+        if (pw) return pw;
         return {
           ok: false,
           response: NextResponse.json(
@@ -154,7 +184,7 @@ export async function fetchStorePageHtmlForExtract(pageUrl: string): Promise<
       return { ok: true, html: text };
     }
 
-    if ((res.status === 429 || res.status === 503) && attempt < 2) {
+    if ((res.status === 429 || res.status === 503) && attempt < FETCH_MAX_ATTEMPTS - 1) {
       serverLog("store_extract_retry", {
         status: res.status,
         attempt,
@@ -165,11 +195,8 @@ export async function fetchStorePageHtmlForExtract(pageUrl: string): Promise<
 
     if (looksLikeAntiBotChallengeHtml(text)) {
       serverLog("store_extract_anti_bot_error_page", { status: res.status, url: pageUrl.slice(0, 160) });
-      const pwHtml = await fetchStorePageHtmlPlaywright(pageUrl);
-      if (pwHtml && !looksLikeAntiBotChallengeHtml(pwHtml)) {
-        serverLog("store_extract_playwright_success", { url: pageUrl.slice(0, 160) });
-        return { ok: true, html: pwHtml, usedPlaywright: true };
-      }
+      const pw = await tryPlaywrightExtract(pageUrl, `anti_bot_http_${res.status}`);
+      if (pw) return pw;
       return {
         ok: false,
         response: NextResponse.json(
@@ -207,5 +234,23 @@ export async function fetchStorePageHtmlForExtract(pageUrl: string): Promise<
     };
   }
 
-  throw new Error("storeExtractFetch: unexpected fallthrough");
+  const pwFallback = await tryPlaywrightExtract(pageUrl, sawTimeout ? "fetch_timeout" : "fetch_exhausted");
+  if (pwFallback) return pwFallback;
+
+  if (sawTimeout) {
+    return { ok: false, response: timeoutExtractResponse() };
+  }
+
+  return {
+    ok: false,
+    response: NextResponse.json(
+      {
+        error: lastNetworkError
+          ? `Could not reach this URL (${lastNetworkError}). Check the link or try again.`
+          : "Could not download the product page after several attempts.",
+        code: "NETWORK",
+      },
+      { status: 502 },
+    ),
+  };
 }

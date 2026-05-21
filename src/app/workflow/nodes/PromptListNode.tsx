@@ -8,7 +8,9 @@ import { memo, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { cn } from "@/lib/utils";
 
 import { primeRemoteMediaForDisplay, splitIntoPromptLines } from "../workflowNodeRun";
+import { triggerWorkflowMediaDownload } from "../workflowMediaDownload";
 import { useWorkflowNodePatch } from "../workflowNodePatchContext";
+import { useWorkflowReadOnly } from "../workflowReadOnlyContext";
 import { workflowDisableSpellcheck } from "../workflowDisableSpellcheck";
 import { keepWheelInsideScrollable } from "../workflowWheelScroll";
 import { WorkflowNodeContextToolbar } from "./WorkflowNodeContextToolbar";
@@ -45,23 +47,6 @@ function formatMediaDuration(totalSeconds: number): string {
   const m = Math.floor(sec / 60);
   const s = sec % 60;
   return `${m}:${String(s).padStart(2, "0")}`;
-}
-
-function triggerMediaDownload(url: string, fallbackName: string) {
-  const trimmed = url.trim();
-  if (!trimmed) return;
-  const a = document.createElement("a");
-  if (/^blob:|^data:/i.test(trimmed)) {
-    a.href = trimmed;
-    a.download = fallbackName;
-  } else {
-    a.href = `/api/download?url=${encodeURIComponent(trimmed)}`;
-  }
-  a.rel = "noopener noreferrer";
-  a.style.display = "none";
-  document.body.appendChild(a);
-  a.click();
-  a.remove();
 }
 
 const WORKFLOW_PENDING_MEDIA_PREFIX = "__workflow_pending_media__:";
@@ -103,6 +88,7 @@ const PromptListMediaGalleryCell = memo(function PromptListMediaGalleryCell({
   onDeleteSlot,
   onPreviewUrl,
 }: PromptListMediaGalleryCellProps) {
+  const readOnly = useWorkflowReadOnly();
   const renderUrl = toRenderableMediaUrl(url);
   const pending = isPendingMediaToken(url);
   const errorToken = parseWorkflowErrorMediaToken(url);
@@ -130,6 +116,7 @@ const PromptListMediaGalleryCell = memo(function PromptListMediaGalleryCell({
           <p className="line-clamp-3 text-[10px] leading-tight text-rose-100/90">
             {errorToken?.message?.trim() || "Generation failed."}
           </p>
+          {!readOnly ? (
           <div className="mt-1 flex items-center justify-end gap-1">
             <button
               type="button"
@@ -169,6 +156,7 @@ const PromptListMediaGalleryCell = memo(function PromptListMediaGalleryCell({
               Regenerate
             </button>
           </div>
+          ) : null}
         </div>
       ) : isProbablyVideoUrl(url) ? (
         <video
@@ -206,25 +194,35 @@ const PromptListMediaGalleryCell = memo(function PromptListMediaGalleryCell({
       ) : null}
       {!isErrorToken ? (
       <>
-      <div className="absolute left-1.5 top-1.5 z-[2] opacity-0 transition group-hover:opacity-100">
+      <div
+        className={cn(
+          "absolute left-1.5 top-1.5 z-[2] transition",
+          readOnly ? "opacity-100" : "opacity-0 group-hover:opacity-100",
+        )}
+      >
         <button
           type="button"
-          className="nodrag nopan inline-flex h-7 w-7 items-center justify-center rounded-full border border-white/15 bg-black/55 text-white/85 backdrop-blur-sm hover:bg-black/70"
+          className="workflow-node-interactive nodrag nopan inline-flex h-7 w-7 items-center justify-center rounded-full border border-white/15 bg-black/55 text-white/85 backdrop-blur-sm hover:bg-black/70"
           title="Download"
           onClick={(e) => {
             e.preventDefault();
             e.stopPropagation();
             const fallback = isProbablyVideoUrl(url) ? `workflow-media-${slotIndex + 1}.mp4` : `workflow-media-${slotIndex + 1}.jpg`;
-            triggerMediaDownload(renderUrl, fallback);
+            triggerWorkflowMediaDownload(renderUrl, fallback);
           }}
         >
           <Download className="h-3.5 w-3.5" aria-hidden />
         </button>
       </div>
-      <div className="absolute inset-x-1.5 bottom-1.5 z-[2] flex items-center justify-end gap-1 opacity-0 transition group-hover:opacity-100">
+      <div
+        className={cn(
+          "absolute inset-x-1.5 bottom-1.5 z-[2] flex items-center justify-end gap-1 transition",
+          readOnly ? "opacity-100" : "opacity-0 group-hover:opacity-100",
+        )}
+      >
         <button
           type="button"
-          className="nodrag nopan inline-flex h-7 w-7 items-center justify-center rounded-full border border-white/15 bg-black/55 text-white/85 backdrop-blur-sm hover:bg-black/70"
+          className="workflow-node-interactive nodrag nopan inline-flex h-7 w-7 items-center justify-center rounded-full border border-white/15 bg-black/55 text-white/85 backdrop-blur-sm hover:bg-black/70"
           title="View large"
           onClick={(e) => {
             e.preventDefault();
@@ -234,6 +232,7 @@ const PromptListMediaGalleryCell = memo(function PromptListMediaGalleryCell({
         >
           <Maximize2 className="h-3.5 w-3.5" aria-hidden />
         </button>
+        {!readOnly ? (
         <button
           type="button"
           className="nodrag nopan inline-flex h-7 w-7 items-center justify-center rounded-full border border-white/15 bg-black/55 text-white/85 backdrop-blur-sm hover:bg-black/70"
@@ -246,6 +245,7 @@ const PromptListMediaGalleryCell = memo(function PromptListMediaGalleryCell({
         >
           <Trash2 className="h-3.5 w-3.5" aria-hidden />
         </button>
+        ) : null}
       </div>
       </>
       ) : null}
@@ -254,6 +254,7 @@ const PromptListMediaGalleryCell = memo(function PromptListMediaGalleryCell({
 });
 
 function PromptListNodeBase({ id, data: rawData, selected }: NodeProps<PromptListNodeType>) {
+  const readOnly = useWorkflowReadOnly();
   const data = { ...PROMPT_LIST_DEFAULT_DATA, ...rawData };
   const mode = data.mode ?? "prompts";
   const contentKind = data.contentKind ?? "text";
@@ -410,7 +411,7 @@ function PromptListNodeBase({ id, data: rawData, selected }: NodeProps<PromptLis
 
   return (
     <>
-      <WorkflowNodeContextToolbar nodeId={id} onRun={() => {}} variant="sticky" />
+      {!readOnly ? <WorkflowNodeContextToolbar nodeId={id} onRun={() => {}} variant="sticky" /> : null}
       <div
         className="relative flex items-start gap-1"
         onMouseEnter={() => window.dispatchEvent(new CustomEvent("workflow:hover-node", { detail: { nodeId: id } }))}
@@ -450,7 +451,9 @@ function PromptListNodeBase({ id, data: rawData, selected }: NodeProps<PromptLis
         >
           <div className="absolute -top-7 left-0 z-[8] flex min-w-0 items-center gap-2.5 pr-2">
             <ListOrdered className="h-4 w-4 shrink-0 text-violet-300/90" strokeWidth={2} aria-hidden />
-            {titleEditing ? (
+            {readOnly ? (
+              <span className="min-w-0 truncate text-[13px] font-semibold tracking-tight text-white">{displayTitle}</span>
+            ) : titleEditing ? (
               <input
                 {...workflowDisableSpellcheck}
                 value={titleDraft}
@@ -506,6 +509,7 @@ function PromptListNodeBase({ id, data: rawData, selected }: NodeProps<PromptLis
                 <p className="text-[16px] font-semibold text-white/90">No elements yet</p>
                 <p className="text-[13px] text-white/45">Add elements to this list</p>
               </div>
+              {!readOnly ? (
               <div className="mt-2 flex items-center gap-2">
                 <button
                   type="button"
@@ -529,6 +533,7 @@ function PromptListNodeBase({ id, data: rawData, selected }: NodeProps<PromptLis
                   Add media
                 </button>
               </div>
+              ) : null}
             </div>
           ) : isMediaList && showMediaGallery ? (
           <>
@@ -548,6 +553,7 @@ function PromptListNodeBase({ id, data: rawData, selected }: NodeProps<PromptLis
             </div>
             <div className="flex items-center justify-end border-t border-white/[0.08] px-2.5 py-2 text-[10px] text-white/55">
               <span>{nonEmptyLines.length} media</span>
+              {!readOnly ? (
               <button
                 type="button"
                 title="Add media"
@@ -556,6 +562,7 @@ function PromptListNodeBase({ id, data: rawData, selected }: NodeProps<PromptLis
               >
                 <Plus className="h-4 w-4" aria-hidden />
               </button>
+              ) : null}
             </div>
           </>
           ) : editorOpen ? (
@@ -726,17 +733,33 @@ function PromptListNodeBase({ id, data: rawData, selected }: NodeProps<PromptLis
               aria-modal="true"
               aria-label="Full media preview"
             >
-              <button
-                type="button"
-                className="nodrag nopan absolute right-3 top-3 z-10 inline-flex h-10 w-10 items-center justify-center rounded-full border border-white/20 bg-black/65 text-white shadow-lg hover:bg-black/85"
-                title="Close preview"
-                onClick={(e) => {
-                  e.stopPropagation();
-                  setPreviewMediaUrl(null);
-                }}
-              >
-                <X className="h-4 w-4" aria-hidden />
-              </button>
+              <div className="absolute right-3 top-3 z-10 flex items-center gap-2">
+                <button
+                  type="button"
+                  className="nodrag nopan inline-flex h-10 w-10 items-center justify-center rounded-full border border-white/20 bg-black/65 text-white shadow-lg hover:bg-black/85"
+                  title="Download"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    const fallback = isProbablyVideoUrl(previewMediaUrl)
+                      ? "workflow-media.mp4"
+                      : "workflow-media.jpg";
+                    triggerWorkflowMediaDownload(toRenderableMediaUrl(previewMediaUrl), fallback);
+                  }}
+                >
+                  <Download className="h-4 w-4" aria-hidden />
+                </button>
+                <button
+                  type="button"
+                  className="nodrag nopan inline-flex h-10 w-10 items-center justify-center rounded-full border border-white/20 bg-black/65 text-white shadow-lg hover:bg-black/85"
+                  title="Close preview"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    setPreviewMediaUrl(null);
+                  }}
+                >
+                  <X className="h-4 w-4" aria-hidden />
+                </button>
+              </div>
               {isProbablyVideoUrl(previewMediaUrl) ? (
                 <video
                   src={toRenderableMediaUrl(previewMediaUrl)}

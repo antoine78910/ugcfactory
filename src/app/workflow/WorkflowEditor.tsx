@@ -131,6 +131,7 @@ import {
   sanitizeProjectForCommunityTemplate,
 } from "./workflowTemplateSanitizer";
 import { WorkflowNodePatchProvider } from "./workflowNodePatchContext";
+import { WorkflowReadOnlyProvider } from "./workflowReadOnlyContext";
 import { ShareWorkflowDialog } from "./ShareWorkflowDialog";
 import { WorkflowInviteWelcome } from "./WorkflowInviteWelcome";
 import {
@@ -139,7 +140,6 @@ import {
 } from "./workflowAutoConnect";
 import { canCloneWorkflowSelection, cloneWorkflowSelection } from "./workflowClone";
 import {
-  isWorkflowMarqueeNodeType,
   normalizeMarqueePaneRect,
   pickMarqueeModuleIds,
   type WorkflowMarqueeRect,
@@ -2743,8 +2743,12 @@ function WorkflowFlowWorkspace({
     });
   }, [readOnly, storeApi]);
 
-  const applyModuleSelection = useCallback(
-    (keepIds: Set<string>) => {
+  const applyMarqueeSelection = useCallback(
+    (paneRect: WorkflowMarqueeRect) => {
+      const { nodeLookup, transform } = storeApi.getState();
+      const keepIds = new Set(
+        pickMarqueeModuleIds(normalizeMarqueePaneRect(paneRect), nodeLookup, transform, [], true),
+      );
       setNodes((prev) => {
         let changed = false;
         const next = prev.map((n) => {
@@ -2762,37 +2766,7 @@ function WorkflowFlowWorkspace({
         return prev.map((e) => (e.selected ? { ...e, selected: false } : e));
       });
     },
-    [setEdges, setNodes],
-  );
-
-  const applyMarqueeSelection = useCallback(
-    (paneRect: WorkflowMarqueeRect) => {
-      const { nodeLookup, transform } = storeApi.getState();
-      const keepIds = new Set(pickMarqueeModuleIds(paneRect, nodeLookup, transform, false));
-      applyModuleSelection(keepIds);
-    },
-    [applyModuleSelection, storeApi],
-  );
-
-  const onSelectionChange = useCallback(
-    ({ nodes: selNodes }: { nodes: WorkflowCanvasNode[]; edges: Edge[] }) => {
-      if (readOnly || tool !== "select") return;
-
-      const { userSelectionRect } = storeApi.getState();
-      if (userSelectionRect) {
-        const rect = normalizeMarqueePaneRect(userSelectionRect);
-        lastMarqueeRectRef.current = rect;
-        applyMarqueeSelection(rect);
-        return;
-      }
-
-      if ((selNodes?.length ?? 0) <= 1) return;
-      const keepIds = new Set(
-        selNodes.filter((n) => isWorkflowMarqueeNodeType(n.type)).map((n) => n.id),
-      );
-      applyModuleSelection(keepIds);
-    },
-    [applyMarqueeSelection, applyModuleSelection, readOnly, storeApi, tool],
+    [setEdges, setNodes, storeApi],
   );
 
   const onSelectionStart = useCallback(() => {
@@ -4587,6 +4561,7 @@ function WorkflowFlowWorkspace({
         readOnly={readOnly}
       />
 
+      <WorkflowReadOnlyProvider readOnly={readOnly}>
       <WorkflowNodePatchProvider onPatch={patchNodeData}>
         <ReactFlow
           nodes={nodes}
@@ -4604,17 +4579,10 @@ function WorkflowFlowWorkspace({
           onNodeClick={
             readOnly
               ? undefined
-              : (event, node) => {
+              : (_event, node) => {
                   lastClickedWorkflowNodeIdRef.current = node.id;
-                  if (tool !== "select") return;
-                  if (event.shiftKey || event.metaKey || event.ctrlKey) return;
-                  const clickId = node.id;
-                  requestAnimationFrame(() => {
-                    applyModuleSelection(new Set([clickId]));
-                  });
                 }
           }
-          onSelectionChange={readOnly ? undefined : onSelectionChange}
           onDragOver={readOnly ? undefined : onDragOver}
           onDrop={readOnly ? undefined : onDrop}
           nodesDraggable={!readOnly}
@@ -4825,6 +4793,7 @@ function WorkflowFlowWorkspace({
           />
         </ReactFlow>
       </WorkflowNodePatchProvider>
+      </WorkflowReadOnlyProvider>
 
       {!readOnly && cutSnipFx ? <WorkflowCutSnipFx x={cutSnipFx.x} y={cutSnipFx.y} /> : null}
 

@@ -535,6 +535,11 @@
   pointer-events: none;
 }
 
+/* Re-enable clicks on explicit view/download controls inside template preview nodes. */
+.workflow-template-readonly .react-flow__node .workflow-node-interactive {
+  pointer-events: auto;
+}
+
 /* Image / video generator, run in progress (minimal, smooth) */
 .workflow-generator-card--busy {
   animation: workflow-generator-card-border 2.4s ease-in-out infinite;

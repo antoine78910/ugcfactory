@@ -1,7 +1,7 @@
 "use client";
 
 import { Handle, Position, useReactFlow, type Node, type NodeProps } from "@xyflow/react";
-import { Clapperboard, CopyPlus, ImageIcon, Loader2, Maximize2, Trash2, Upload, X } from "lucide-react";
+import { Clapperboard, CopyPlus, Download, ImageIcon, Loader2, Maximize2, Trash2, Upload, X } from "lucide-react";
 import { createPortal } from "react-dom";
 import { memo, useCallback, useEffect, useMemo, useRef, useState, type ChangeEvent } from "react";
 import { toast } from "sonner";
@@ -13,7 +13,9 @@ import type { WorkflowCanvasNode } from "../workflowFlowTypes";
 import { isVideoFile, measureImageAspectFromObjectUrl, measureVideoAspectFromObjectUrl } from "../workflowMediaAspect";
 import { WorkflowMediaTrimDialog } from "../WorkflowMediaTrimDialog";
 import { workflowDisableSpellcheck } from "../workflowDisableSpellcheck";
+import { triggerWorkflowMediaDownload } from "../workflowMediaDownload";
 import { useWorkflowNodePatch } from "../workflowNodePatchContext";
+import { useWorkflowReadOnly } from "../workflowReadOnlyContext";
 import { WorkflowNodeContextToolbar } from "./WorkflowNodeContextToolbar";
 
 export type ImageRefNodeData = {
@@ -135,6 +137,7 @@ function frameDimensions(intrinsicAspect?: number): { width: number; height: num
 const noop = () => {};
 
 function ImageRefNodeBase({ id, data, selected }: NodeProps<ImageRefNodeType>) {
+  const readOnly = useWorkflowReadOnly();
   const { getNodes, getEdges, setNodes, setEdges } = useReactFlow();
   /**
    * Cross-page-safe data patch (works even if user navigates pages mid-upload).
@@ -526,8 +529,9 @@ function ImageRefNodeBase({ id, data, selected }: NodeProps<ImageRefNodeType>) {
               </div>
             ) : null}
 
-            {hovered && (
+            {(hovered || readOnly) && data.imageUrl.trim() ? (
               <div className="absolute inset-0 flex items-end justify-end gap-1.5 bg-gradient-to-t from-black/50 to-transparent p-2">
+                {!readOnly ? (
                 <button
                   type="button"
                   onClick={() => replaceInputRef.current?.click()}
@@ -540,16 +544,28 @@ function ImageRefNodeBase({ id, data, selected }: NodeProps<ImageRefNodeType>) {
                     Replace
                   </span>
                 </button>
+                ) : null}
+                <button
+                  type="button"
+                  onClick={() => {
+                    const fallback = isVideo ? "workflow-video.mp4" : "workflow-image.jpg";
+                    triggerWorkflowMediaDownload(data.imageUrl, fallback);
+                  }}
+                  className="workflow-node-interactive nodrag nopan rounded-lg bg-black/50 p-1.5 text-white/80 backdrop-blur-sm transition hover:bg-black/70 hover:text-white"
+                  title="Download"
+                >
+                  <Download className="h-3.5 w-3.5" />
+                </button>
                 <button
                   type="button"
                   onClick={() => setLightbox(true)}
-                  className="nodrag nopan rounded-lg bg-black/50 p-1.5 text-white/80 backdrop-blur-sm transition hover:bg-black/70 hover:text-white"
+                  className="workflow-node-interactive nodrag nopan rounded-lg bg-black/50 p-1.5 text-white/80 backdrop-blur-sm transition hover:bg-black/70 hover:text-white"
                   title="Enlarge"
                 >
                   <Maximize2 className="h-3.5 w-3.5" />
                 </button>
               </div>
-            )}
+            ) : null}
           </div>
         </div>
         <div className="nodrag nopan relative z-[7] mt-2 flex shrink-0 flex-col gap-1">
@@ -653,17 +669,31 @@ function ImageRefNodeBase({ id, data, selected }: NodeProps<ImageRefNodeType>) {
               aria-modal="true"
               aria-label="Full media preview"
             >
-              <button
-                type="button"
-                className="absolute right-3 top-3 z-10 rounded-full border border-white/20 bg-black/65 p-2 text-white shadow-lg hover:bg-black/85"
-                onClick={(e) => {
-                  e.stopPropagation();
-                  setLightbox(false);
-                }}
-                aria-label="Close preview"
-              >
-                <X className="h-5 w-5" />
-              </button>
+              <div className="absolute right-3 top-3 z-10 flex items-center gap-2">
+                <button
+                  type="button"
+                  className="rounded-full border border-white/20 bg-black/65 p-2 text-white shadow-lg hover:bg-black/85"
+                  title="Download"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    const fallback = isVideo ? "workflow-video.mp4" : "workflow-image.jpg";
+                    triggerWorkflowMediaDownload(data.imageUrl, fallback);
+                  }}
+                >
+                  <Download className="h-5 w-5" />
+                </button>
+                <button
+                  type="button"
+                  className="rounded-full border border-white/20 bg-black/65 p-2 text-white shadow-lg hover:bg-black/85"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    setLightbox(false);
+                  }}
+                  aria-label="Close preview"
+                >
+                  <X className="h-5 w-5" />
+                </button>
+              </div>
               {isVideo ? (
                 <video
                   src={data.imageUrl}

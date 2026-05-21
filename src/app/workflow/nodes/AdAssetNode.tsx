@@ -65,7 +65,9 @@ import {
 } from "@/components/ui/select";
 import { cn } from "@/lib/utils";
 
+import { triggerWorkflowMediaDownload } from "../workflowMediaDownload";
 import { useWorkflowNodePatch } from "../workflowNodePatchContext";
+import { useWorkflowReadOnly } from "../workflowReadOnlyContext";
 import { buildWorkflow360ProfileBranch, buildWorkflowProjectPipelineFromRun } from "../workflowProjectPipeline";
 import {
   WORKFLOW_AVATAR_360_PROFILE_ALLOWED_MODELS,
@@ -417,23 +419,6 @@ function parseAspectParts(ratio: string): { w: number; h: number } {
   return { w: a, h: b };
 }
 
-function triggerMediaDownload(url: string, fallbackName: string) {
-  const trimmed = url.trim();
-  if (!trimmed) return;
-  const a = document.createElement("a");
-  if (/^blob:|^data:/i.test(trimmed)) {
-    a.href = trimmed;
-    a.download = fallbackName;
-  } else {
-    a.href = `/api/download?url=${encodeURIComponent(trimmed)}`;
-  }
-  a.rel = "noopener noreferrer";
-  a.style.display = "none";
-  document.body.appendChild(a);
-  a.click();
-  a.remove();
-}
-
 /** Longest side of the output preview (px); module shape follows aspect ratio. */
 const OUTPUT_FRAME_MAX_LONG = 276;
 /** Max longest side when encoding an extracted video frame (keeps workflow JSON smaller). */
@@ -678,6 +663,7 @@ function adAssetNodeLooksLikeImageUrl(s: string): boolean {
 }
 
 function AdAssetNodeBase({ id, data, selected }: NodeProps<AdAssetNodeType>) {
+  const readOnly = useWorkflowReadOnly();
   const patch = useWorkflowNodePatch();
   const { getNodes, getEdges, setNodes, setEdges } = useReactFlow();
   const storeApi = useStoreApi();
@@ -990,7 +976,7 @@ function AdAssetNodeBase({ id, data, selected }: NodeProps<AdAssetNodeType>) {
     const outputUrl = (data.outputPreviewUrl ?? data.referencePreviewUrl ?? "").trim();
     if (!outputUrl) return;
     const fallbackName = data.kind === "video" ? "workflow-video.mp4" : "workflow-image.jpg";
-    triggerMediaDownload(outputUrl, fallbackName);
+    triggerWorkflowMediaDownload(outputUrl, fallbackName);
   }, [data.kind, data.outputPreviewUrl, data.referencePreviewUrl]);
 
   const attachSeedanceProReferenceVideoFile = useCallback(
@@ -4871,7 +4857,12 @@ function AdAssetNodeBase({ id, data, selected }: NodeProps<AdAssetNodeType>) {
             </div>
           ) : null}
           {hasPreviewMedia && (data.kind === "image" || data.kind === "video") ? (
-            <div className="nodrag nopan absolute left-2 top-2 z-[6] flex flex-col items-center gap-1 opacity-0 transition group-hover/card:opacity-100">
+            <div
+              className={cn(
+                "nodrag nopan absolute left-2 top-2 z-[6] flex flex-col items-center gap-1 transition",
+                readOnly ? "opacity-100" : "opacity-0 group-hover/card:opacity-100",
+              )}
+            >
               <button
                 type="button"
                 onClick={(e) => {
@@ -4880,7 +4871,7 @@ function AdAssetNodeBase({ id, data, selected }: NodeProps<AdAssetNodeType>) {
                   openOutputPreviewLightbox();
                 }}
                 title="Open fullscreen"
-                className="nodrag nopan flex h-7 w-7 items-center justify-center rounded-full border border-white/15 bg-black/55 text-white/85 backdrop-blur-sm transition hover:bg-black/70"
+                className="workflow-node-interactive nodrag nopan flex h-7 w-7 items-center justify-center rounded-full border border-white/15 bg-black/55 text-white/85 backdrop-blur-sm transition hover:bg-black/70"
               >
                 <Maximize2 className="h-3.5 w-3.5" aria-hidden />
               </button>
@@ -4892,7 +4883,7 @@ function AdAssetNodeBase({ id, data, selected }: NodeProps<AdAssetNodeType>) {
                   downloadPreviewMedia();
                 }}
                 title="Download"
-                className="nodrag nopan flex h-7 w-7 items-center justify-center rounded-full border border-white/15 bg-black/55 text-white/85 backdrop-blur-sm transition hover:bg-black/70"
+                className="workflow-node-interactive nodrag nopan flex h-7 w-7 items-center justify-center rounded-full border border-white/15 bg-black/55 text-white/85 backdrop-blur-sm transition hover:bg-black/70"
               >
                 <Download className="h-3.5 w-3.5" aria-hidden />
               </button>
@@ -5998,17 +5989,30 @@ function AdAssetNodeBase({ id, data, selected }: NodeProps<AdAssetNodeType>) {
               aria-modal="true"
               aria-label="Full output preview"
             >
-              <button
-                type="button"
-                className="nodrag nopan absolute right-3 top-3 z-10 inline-flex h-10 w-10 items-center justify-center rounded-full border border-white/20 bg-black/65 text-white shadow-lg hover:bg-black/85"
-                title="Close preview"
-                onClick={(e) => {
-                  e.stopPropagation();
-                  setOutputPreviewLightbox(false);
-                }}
-              >
-                <X className="h-4 w-4" aria-hidden />
-              </button>
+              <div className="absolute right-3 top-3 z-10 flex items-center gap-2">
+                <button
+                  type="button"
+                  className="nodrag nopan inline-flex h-10 w-10 items-center justify-center rounded-full border border-white/20 bg-black/65 text-white shadow-lg hover:bg-black/85"
+                  title="Download"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    downloadPreviewMedia();
+                  }}
+                >
+                  <Download className="h-4 w-4" aria-hidden />
+                </button>
+                <button
+                  type="button"
+                  className="nodrag nopan inline-flex h-10 w-10 items-center justify-center rounded-full border border-white/20 bg-black/65 text-white shadow-lg hover:bg-black/85"
+                  title="Close preview"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    setOutputPreviewLightbox(false);
+                  }}
+                >
+                  <X className="h-4 w-4" aria-hidden />
+                </button>
+              </div>
               <div
                 className="nodrag nopan flex max-h-[92vh] max-w-[96vw] items-center justify-center"
                 onClick={(e) => e.stopPropagation()}
