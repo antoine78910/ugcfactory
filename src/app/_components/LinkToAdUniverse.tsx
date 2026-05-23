@@ -520,6 +520,9 @@ function NanoThreeImageGenerationGrid({
 const LTA_KLING_VIDEO_STAGE_CLASS =
   "relative mx-auto w-full max-w-[min(22rem,94vw)] sm:max-w-[24rem]";
 
+/** Video prompt editor spans the work panel; not tied to the narrow 9:16 stage. */
+const LTA_VIDEO_PROMPT_PANEL_CLASS = "w-full max-w-none self-stretch";
+
 /** Large 9:16 stage while Kling renders, same visual language as Nano image generation (feed-ready). */
 function KlingVideoGenerationPlaceholder({
   posterUrl,
@@ -9145,6 +9148,7 @@ export default function LinkToAdUniverse({
                       !showKlingVideoGeneratingUi &&
                       !klingVideoUrl ? (
                         <LinkToAdVideoPromptPanel
+                          className={LTA_VIDEO_PROMPT_PANEL_CLASS}
                           isVideoPromptLoading={isVideoPromptLoading}
                           linkToAdTrialEconomy={linkToAdTrialEconomy}
                           videoPromptIsLegacyBlob={videoPromptIsLegacyBlob}
@@ -9195,7 +9199,8 @@ export default function LinkToAdUniverse({
                           />
                         ) : klingVideoUrl ? (
                           <>
-                            <div className="mt-4 flex flex-col items-center gap-4">
+                            <div className="mt-4 flex flex-col gap-4">
+                              <div className="flex flex-col items-center gap-4">
                               {activeSlotIs30s && klingVideoUrlPart2 ? (
                                 <div
                                   className={cn(
@@ -9252,6 +9257,53 @@ export default function LinkToAdUniverse({
                                   "flex w-full flex-col gap-2",
                                 )}
                               >
+                                {activeSlotIs30s && klingVideoUrlPart2?.trim() ? (
+                                  <>
+                                    <Button
+                                      variant="secondary"
+                                      size="sm"
+                                      className="h-10 w-full justify-center border border-white/15 bg-white/5 text-white hover:bg-white/10"
+                                      asChild
+                                    >
+                                      <a
+                                        href={`/api/download?url=${encodeURIComponent(klingVideoUrl)}`}
+                                        target="_blank"
+                                        rel="noopener noreferrer"
+                                      >
+                                        Download part 1
+                                      </a>
+                                    </Button>
+                                    <Button
+                                      variant="secondary"
+                                      size="sm"
+                                      className="h-10 w-full justify-center border border-white/15 bg-white/5 text-white hover:bg-white/10"
+                                      asChild
+                                    >
+                                      <a
+                                        href={`/api/download?url=${encodeURIComponent(klingVideoUrlPart2)}`}
+                                        target="_blank"
+                                        rel="noopener noreferrer"
+                                      >
+                                        Download part 2
+                                      </a>
+                                    </Button>
+                                  </>
+                                ) : (
+                                  <Button
+                                    variant="secondary"
+                                    size="sm"
+                                    className="h-10 w-full justify-center border border-white/15 bg-white/5 text-white hover:bg-white/10"
+                                    asChild
+                                  >
+                                    <a
+                                      href={`/api/download?url=${encodeURIComponent(klingVideoUrl)}`}
+                                      target="_blank"
+                                      rel="noopener noreferrer"
+                                    >
+                                      Download video
+                                    </a>
+                                  </Button>
+                                )}
                                 <Button
                                   type="button"
                                   className={`h-auto min-h-10 w-full px-3 py-2 ${primaryBtnClass}`}
@@ -9286,58 +9338,12 @@ export default function LinkToAdUniverse({
                                     </span>
                                   )}
                                 </Button>
-                                {activeSlotIs30s && klingVideoUrlPart2?.trim() ? (
-                                  <div className="flex w-full flex-col gap-2">
-                                    <Button
-                                      variant="secondary"
-                                      size="sm"
-                                      className="h-10 w-full justify-center border border-white/15 bg-white/5 text-white hover:bg-white/10"
-                                      asChild
-                                    >
-                                      <a
-                                        href={`/api/download?url=${encodeURIComponent(klingVideoUrl)}`}
-                                        target="_blank"
-                                        rel="noopener noreferrer"
-                                      >
-                                        Download part 1
-                                      </a>
-                                    </Button>
-                                    <Button
-                                      variant="secondary"
-                                      size="sm"
-                                      className="h-10 w-full justify-center border border-white/15 bg-white/5 text-white hover:bg-white/10"
-                                      asChild
-                                    >
-                                      <a
-                                        href={`/api/download?url=${encodeURIComponent(klingVideoUrlPart2)}`}
-                                        target="_blank"
-                                        rel="noopener noreferrer"
-                                      >
-                                        Download part 2
-                                      </a>
-                                    </Button>
-                                  </div>
-                                ) : (
-                                  <Button
-                                    variant="secondary"
-                                    size="sm"
-                                    className="h-10 w-full justify-center border border-white/15 bg-white/5 text-white hover:bg-white/10"
-                                    asChild
-                                  >
-                                    <a
-                                      href={`/api/download?url=${encodeURIComponent(klingVideoUrl)}`}
-                                      target="_blank"
-                                      rel="noopener noreferrer"
-                                    >
-                                      Download video
-                                    </a>
-                                  </Button>
-                                )}
+                              </div>
                               </div>
                               {(mergedVideoPromptDraft.trim() || ugcVideoPromptGpt.trim()) &&
                               !showKlingVideoGeneratingUi ? (
                                 <LinkToAdVideoPromptPanel
-                                  className={cn(LTA_KLING_VIDEO_STAGE_CLASS, "w-full")}
+                                  className={LTA_VIDEO_PROMPT_PANEL_CLASS}
                                   isVideoPromptLoading={isVideoPromptLoading}
                                   linkToAdTrialEconomy={linkToAdTrialEconomy}
                                   videoPromptIsLegacyBlob={videoPromptIsLegacyBlob}
