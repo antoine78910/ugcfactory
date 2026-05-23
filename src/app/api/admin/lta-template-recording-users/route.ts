@@ -4,6 +4,7 @@ import { NextResponse } from "next/server";
 import { requireAdmin } from "@/lib/admin";
 import { createSupabaseServiceClient } from "@/lib/supabase/admin";
 import { LTA_TEMPLATE_RECORDING_DEFAULT_EMAILS } from "@/lib/ltaTemplateRecording";
+import { isMissingLtaTemplateTableError } from "@/lib/ltaTemplateRecordingDb";
 
 export type LtaTemplateRecordingUserRow = {
   email: string;
@@ -33,15 +34,14 @@ export async function GET() {
     .order("created_at", { ascending: false });
 
   if (error) {
-    const msg = error.message?.toLowerCase() ?? "";
-    if (msg.includes("relation") && msg.includes("does not exist")) {
+    if (isMissingLtaTemplateTableError(error.message)) {
       return NextResponse.json({
         rows: [...LTA_TEMPLATE_RECORDING_DEFAULT_EMAILS].map((email) => ({
           email,
           created_at: "",
           builtin: true,
         })),
-        warning: "Run migration 20260523120000_lta_template_recording.sql",
+        warning: "Run migration 20260523120000_lta_template_recording.sql on your Supabase project.",
       });
     }
     return NextResponse.json({ error: error.message }, { status: 500 });
@@ -80,6 +80,12 @@ export async function POST(req: Request) {
 
   const { error } = await admin.from("lta_template_recording_users").upsert({ email }, { onConflict: "email" });
   if (error) {
+    if (isMissingLtaTemplateTableError(error.message)) {
+      return NextResponse.json(
+        { error: "Template recording tables are missing. Run the Supabase migration first." },
+        { status: 503 },
+      );
+    }
     return NextResponse.json({ error: error.message }, { status: 500 });
   }
 
@@ -107,6 +113,12 @@ export async function DELETE(req: Request) {
 
   const { error } = await admin.from("lta_template_recording_users").delete().eq("email", email);
   if (error) {
+    if (isMissingLtaTemplateTableError(error.message)) {
+      return NextResponse.json(
+        { error: "Template recording tables are missing. Run the Supabase migration first." },
+        { status: 503 },
+      );
+    }
     return NextResponse.json({ error: error.message }, { status: 500 });
   }
 

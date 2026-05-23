@@ -9,6 +9,7 @@ import {
   type LtaTemplateRecordingGateStep,
 } from "@/lib/ltaTemplateRecording";
 import { buildExtractedForTemplateStep } from "@/lib/ltaTemplateRecordingSnapshot";
+import { isDefaultTemplateRecordingEmail } from "@/lib/ltaTemplateRecording";
 
 export type TemplateRunCache = {
   id: string;
@@ -32,6 +33,8 @@ type FlowStage =
   | "finished";
 
 export type UseLtaTemplateRecordingArgs = {
+  /** Logged-in email from the browser session (OAuth-safe). */
+  clientEmail?: string | null;
   hydrateFromRun: (
     run: TemplateRunCache,
     opts?: { silent?: boolean; preserveVideoDuration?: boolean },
@@ -88,17 +91,30 @@ export function useLtaTemplateRecording(args: UseLtaTemplateRecordingArgs) {
     flowStage !== "step4_gate";
 
   useEffect(() => {
+    if (isDefaultTemplateRecordingEmail(args.clientEmail)) {
+      setFeatureEnabled(true);
+    }
+  }, [args.clientEmail]);
+
+  useEffect(() => {
     let cancelled = false;
-    void fetch("/api/me/lta-template-recording", { cache: "no-store" })
+    void fetch("/api/me/lta-template-recording", { cache: "no-store", credentials: "include" })
       .then((r) => r.json())
       .then((j: { enabled?: boolean }) => {
-        if (!cancelled) setFeatureEnabled(Boolean(j.enabled));
+        if (cancelled) return;
+        const fromApi = Boolean(j.enabled);
+        const fromClient = isDefaultTemplateRecordingEmail(args.clientEmail);
+        setFeatureEnabled(fromApi || fromClient);
       })
-      .catch(() => {});
+      .catch(() => {
+        if (!cancelled && isDefaultTemplateRecordingEmail(args.clientEmail)) {
+          setFeatureEnabled(true);
+        }
+      });
     return () => {
       cancelled = true;
     };
-  }, []);
+  }, [args.clientEmail]);
 
   const loadBrands = useCallback(async () => {
     setBrandsLoading(true);

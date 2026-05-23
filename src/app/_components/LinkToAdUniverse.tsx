@@ -118,6 +118,7 @@ import type { InternalFetch } from "@/lib/linkToAd/internalFetch";
 import { runInitialPipeline } from "@/lib/linkToAd/runInitialPipeline";
 import { proxiedMediaSrc } from "@/lib/mediaProxyUrl";
 import { loadAvatarUrls } from "@/lib/avatarLibrary";
+import { sessionUserEmail } from "@/lib/sessionUserEmail";
 import { useLtaTemplateRecording } from "@/app/_components/lta/useLtaTemplateRecording";
 import {
   LinkToAdTemplateBrandPicker,
@@ -1323,7 +1324,7 @@ export default function LinkToAdUniverse({
     if (!supabaseClient) return;
     supabaseClient.auth
       .getUser()
-      .then(({ data }) => _setUserEmail(data.user?.email ?? null))
+      .then(({ data }) => _setUserEmail(data.user ? sessionUserEmail(data.user) : null))
       .catch(() => {});
   }, [supabaseClient]);
   /** 30s = two chained 15s clips, disabled in UI until launch (“Soon”). */
@@ -3148,6 +3149,7 @@ export default function LinkToAdUniverse({
   }, [cancelCurrentGeneration, hydrateVideoPromptFromStored]);
 
   const templateRecording = useLtaTemplateRecording({
+    clientEmail: _userEmail,
     hydrateFromRun,
     prepareBlankCanvas: prepareBlankCanvasForTemplate,
     setStoreUrl,

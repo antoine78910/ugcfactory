@@ -1,4 +1,4 @@
--- Link to Ad screen-recording template mode (no backend generation during replay).
+/* Link to Ad screen-recording template mode (no backend generation during replay). */
 
 create table if not exists public.lta_template_recording_users (
   email text primary key,
@@ -20,7 +20,7 @@ create index if not exists lta_template_brands_created_at_idx
 alter table public.lta_template_recording_users enable row level security;
 alter table public.lta_template_brands enable row level security;
 
--- Service role only (API routes use createSupabaseServiceClient).
+/* Service role only (API routes use createSupabaseServiceClient). */
 create policy "service_role_lta_template_recording_users"
   on public.lta_template_recording_users
   for all
@@ -36,3 +36,5 @@ create policy "service_role_lta_template_brands"
 insert into public.lta_template_recording_users (email)
 values ('anto.delbos@gmail.com')
 on conflict (email) do nothing;
+
+notify pgrst, 'reload schema';

@@ -20,14 +20,14 @@ export function LinkToAdTemplateRecordingButton({
       type="button"
       onClick={recording.openBrandPicker}
       className={cn(
-        "fixed bottom-4 left-4 z-[10040] inline-flex items-center gap-2 rounded-full border px-4 py-2 text-xs font-semibold shadow-2xl backdrop-blur-md transition",
+        "fixed bottom-4 left-4 z-[10060] inline-flex items-center gap-2 rounded-full border px-4 py-2 text-xs font-semibold shadow-2xl backdrop-blur-md transition",
         recording.active
           ? "border-amber-400/40 bg-amber-500/20 text-amber-100"
           : "border-violet-400/35 bg-violet-600/25 text-violet-50 hover:bg-violet-600/40",
       )}
     >
       <Clapperboard className="h-4 w-4" aria-hidden />
-      Template
+      Template view
     </button>
   );
 }
