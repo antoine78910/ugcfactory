@@ -1,34 +1,46 @@
 "use client";
 
+import { useEffect, useState } from "react";
+import { createPortal } from "react-dom";
 import { Loader2, Clapperboard, X } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { proxiedMediaSrc } from "@/lib/mediaProxyUrl";
-import type { LtaTemplateBrandSummary } from "@/lib/ltaTemplateRecording";
 import type { useLtaTemplateRecording } from "@/app/_components/lta/useLtaTemplateRecording";
 
 type TemplateRecording = ReturnType<typeof useLtaTemplateRecording>;
 
+function useDocumentPortal() {
+  const [mounted, setMounted] = useState(false);
+  useEffect(() => setMounted(true), []);
+  return mounted;
+}
+
+/** Bottom-right FAB; portaled to `document.body` so parent layout cannot hide it. */
 export function LinkToAdTemplateRecordingButton({
   recording,
 }: {
   recording: TemplateRecording;
 }) {
-  if (!recording.featureEnabled) return null;
+  const mounted = useDocumentPortal();
+  if (!mounted || !recording.featureEnabled) return null;
 
-  return (
+  return createPortal(
     <button
       type="button"
       onClick={recording.openBrandPicker}
+      aria-label="Template mode — screen recording replay"
       className={cn(
-        "fixed bottom-4 left-4 z-[10060] inline-flex items-center gap-2 rounded-full border px-4 py-2 text-xs font-semibold shadow-2xl backdrop-blur-md transition",
+        "fixed bottom-5 right-5 z-[10100] inline-flex items-center gap-2 rounded-full border px-4 py-2.5 text-xs font-semibold shadow-[0_8px_32px_rgba(0,0,0,0.55)] backdrop-blur-md transition",
+        "ring-2 ring-violet-400/25",
         recording.active
-          ? "border-amber-400/40 bg-amber-500/20 text-amber-100"
-          : "border-violet-400/35 bg-violet-600/25 text-violet-50 hover:bg-violet-600/40",
+          ? "border-amber-400/50 bg-amber-500/25 text-amber-50"
+          : "border-violet-300/45 bg-violet-600/35 text-white hover:bg-violet-600/50",
       )}
     >
-      <Clapperboard className="h-4 w-4" aria-hidden />
-      Template view
-    </button>
+      <Clapperboard className="h-4 w-4 shrink-0" aria-hidden />
+      Template
+    </button>,
+    document.body,
   );
 }
 
@@ -37,15 +49,16 @@ export function LinkToAdTemplateBrandPicker({
 }: {
   recording: TemplateRecording;
 }) {
-  if (!recording.pickingBrand) return null;
+  const mounted = useDocumentPortal();
+  if (!mounted || !recording.pickingBrand) return null;
 
-  return (
-    <div className="fixed inset-0 z-[10045] flex items-end justify-center bg-black/70 p-4 sm:items-center">
+  return createPortal(
+    <div className="fixed inset-0 z-[10110] flex items-end justify-center bg-black/70 p-4 sm:items-center">
       <div className="flex max-h-[85vh] w-full max-w-lg flex-col overflow-hidden rounded-2xl border border-white/12 bg-[#0b0912] shadow-2xl">
         <div className="flex items-center justify-between gap-3 border-b border-white/10 px-4 py-3">
           <div>
-            <p className="text-sm font-semibold text-white">Template recording</p>
-            <p className="text-[11px] text-white/50">Pick a brand — no backend generation, replay only.</p>
+            <p className="text-sm font-semibold text-white">Template mode</p>
+            <p className="text-[11px] text-white/50">Pick a brand — replay only, no generation.</p>
           </div>
           <button
             type="button"
@@ -64,7 +77,7 @@ export function LinkToAdTemplateBrandPicker({
             </div>
           ) : recording.brands.length === 0 ? (
             <p className="py-8 text-center text-sm text-white/45">
-              No template brands yet. Mark projects as Template in My Projects or clipping.
+              No template brands yet. Mark projects as Template in My Projects.
             </p>
           ) : (
             <ul className="space-y-2">
@@ -105,7 +118,8 @@ export function LinkToAdTemplateBrandPicker({
           )}
         </div>
       </div>
-    </div>
+    </div>,
+    document.body,
   );
 }
 
@@ -114,14 +128,15 @@ export function LinkToAdTemplateRecordingGate({
 }: {
   recording: TemplateRecording;
 }) {
-  if (!recording.gateStep || !recording.gateLabel) return null;
+  const mounted = useDocumentPortal();
+  if (!mounted || !recording.gateStep || !recording.gateLabel) return null;
 
   const canGoBack = recording.gateStep > 1;
 
-  return (
-    <div className="fixed inset-0 z-[10050] flex items-center justify-center bg-black/55 p-4">
+  return createPortal(
+    <div className="fixed inset-0 z-[10120] flex items-center justify-center bg-black/55 p-4">
       <div className="w-full max-w-md rounded-2xl border border-violet-400/25 bg-[#0b0912] p-5 shadow-2xl">
-        <p className="text-[10px] font-bold uppercase tracking-widest text-violet-300/70">Template recording</p>
+        <p className="text-[10px] font-bold uppercase tracking-widest text-violet-300/70">Template mode</p>
         <h3 className="mt-1 text-[16px] font-semibold text-white">
           Step {recording.gateStep} — {recording.gateLabel}
         </h3>
@@ -154,6 +169,7 @@ export function LinkToAdTemplateRecordingGate({
           </button>
         </div>
       </div>
-    </div>
+    </div>,
+    document.body,
   );
 }

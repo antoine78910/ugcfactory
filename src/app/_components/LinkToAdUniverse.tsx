@@ -9600,7 +9600,7 @@ export default function LinkToAdUniverse({
     />
 
     {isDemoUser && demoReplayActive ? (
-      <div className="fixed bottom-4 right-4 z-[9999] flex flex-col items-center gap-2 rounded-xl border border-violet-500/30 bg-black/80 p-3 shadow-2xl backdrop-blur-md"
+      <div className="fixed bottom-4 left-4 z-[9999] flex flex-col items-center gap-2 rounded-xl border border-violet-500/30 bg-black/80 p-3 shadow-2xl backdrop-blur-md"
         style={{ maxWidth: 200 }}
       >
         <span className="text-[10px] font-bold uppercase tracking-widest text-violet-300/60">Replaying…</span>

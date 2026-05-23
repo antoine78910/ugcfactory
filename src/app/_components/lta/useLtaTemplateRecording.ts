@@ -10,6 +10,8 @@ import {
 } from "@/lib/ltaTemplateRecording";
 import { buildExtractedForTemplateStep } from "@/lib/ltaTemplateRecordingSnapshot";
 import { isDefaultTemplateRecordingEmail } from "@/lib/ltaTemplateRecording";
+import { useSupabaseBrowserClient } from "@/lib/supabase/BrowserSupabaseProvider";
+import { sessionUserEmail } from "@/lib/sessionUserEmail";
 
 export type TemplateRunCache = {
   id: string;
@@ -72,14 +74,29 @@ function gateStepForStage(stage: FlowStage): LtaTemplateRecordingGateStep | null
   return null;
 }
 
+function resolveClientAllowlistEmail(
+  fromProp: string | null | undefined,
+  fromSession: string | null | undefined,
+): string | null {
+  const a = (fromProp ?? "").trim().toLowerCase();
+  const b = (fromSession ?? "").trim().toLowerCase();
+  return a || b || null;
+}
+
 export function useLtaTemplateRecording(args: UseLtaTemplateRecordingArgs) {
-  const [featureEnabled, setFeatureEnabled] = useState(false);
+  const supabaseClient = useSupabaseBrowserClient();
+  const [sessionEmail, setSessionEmail] = useState<string | null>(null);
+  const [featureEnabled, setFeatureEnabled] = useState(() =>
+    isDefaultTemplateRecordingEmail(args.clientEmail),
+  );
   const [brands, setBrands] = useState<LtaTemplateBrandSummary[]>([]);
   const [brandsLoading, setBrandsLoading] = useState(false);
   const [flowStage, setFlowStage] = useState<FlowStage>("idle");
   const runCacheRef = useRef<TemplateRunCache | null>(null);
   const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const flowActiveRef = useRef(false);
+
+  const effectiveEmail = resolveClientAllowlistEmail(args.clientEmail, sessionEmail);
 
   const locksSelection =
     flowStage !== "idle" && flowStage !== "picking_brand" && flowStage !== "finished";
@@ -91,35 +108,51 @@ export function useLtaTemplateRecording(args: UseLtaTemplateRecordingArgs) {
     flowStage !== "step4_gate";
 
   useEffect(() => {
-    if (isDefaultTemplateRecordingEmail(args.clientEmail)) {
-      setFeatureEnabled(true);
-    }
-  }, [args.clientEmail]);
-
-  useEffect(() => {
+    if (!supabaseClient) return;
     let cancelled = false;
-    void fetch("/api/me/lta-template-recording", { cache: "no-store", credentials: "include" })
-      .then((r) => r.json())
-      .then((j: { enabled?: boolean }) => {
-        if (cancelled) return;
-        const fromApi = Boolean(j.enabled);
-        const fromClient = isDefaultTemplateRecordingEmail(args.clientEmail);
-        setFeatureEnabled(fromApi || fromClient);
-      })
-      .catch(() => {
-        if (!cancelled && isDefaultTemplateRecordingEmail(args.clientEmail)) {
-          setFeatureEnabled(true);
-        }
-      });
+    void supabaseClient.auth.getUser().then(({ data }) => {
+      if (cancelled || !data.user) return;
+      const email = sessionUserEmail(data.user);
+      if (email) setSessionEmail(email);
+    });
+    const { data: sub } = supabaseClient.auth.onAuthStateChange((_event, session) => {
+      const email = session?.user ? sessionUserEmail(session.user) : null;
+      setSessionEmail(email);
+    });
     return () => {
       cancelled = true;
+      sub.subscription.unsubscribe();
     };
-  }, [args.clientEmail]);
+  }, [supabaseClient]);
+
+  const refreshFeatureAccess = useCallback(async () => {
+    const fromClient = isDefaultTemplateRecordingEmail(effectiveEmail);
+    if (fromClient) setFeatureEnabled(true);
+
+    try {
+      const res = await fetch("/api/me/lta-template-recording", {
+        cache: "no-store",
+        credentials: "include",
+      });
+      const json = (await res.json().catch(() => ({}))) as { enabled?: boolean };
+      const fromApi = res.ok && Boolean(json.enabled);
+      setFeatureEnabled(fromApi || fromClient);
+    } catch {
+      if (fromClient) setFeatureEnabled(true);
+    }
+  }, [effectiveEmail]);
+
+  useEffect(() => {
+    void refreshFeatureAccess();
+  }, [refreshFeatureAccess]);
 
   const loadBrands = useCallback(async () => {
     setBrandsLoading(true);
     try {
-      const res = await fetch("/api/link-to-ad/template-brands", { cache: "no-store" });
+      const res = await fetch("/api/link-to-ad/template-brands", {
+        cache: "no-store",
+        credentials: "include",
+      });
       const json = (await res.json()) as { brands?: LtaTemplateBrandSummary[]; error?: string };
       if (!res.ok) throw new Error(json.error || "Could not load template brands");
       setBrands(Array.isArray(json.brands) ? json.brands : []);
@@ -208,6 +241,7 @@ export function useLtaTemplateRecording(args: UseLtaTemplateRecordingArgs) {
       try {
         const res = await fetch(`/api/runs/get?runId=${encodeURIComponent(brand.runId)}`, {
           cache: "no-store",
+          credentials: "include",
         });
         const json = (await res.json()) as {
           data?: TemplateRunCache;
@@ -231,9 +265,17 @@ export function useLtaTemplateRecording(args: UseLtaTemplateRecordingArgs) {
   );
 
   const openBrandPicker = useCallback(() => {
+    if (!featureEnabled) {
+      void refreshFeatureAccess().then(() => {
+        toast.message("Template mode unavailable", {
+          description: "Your account is not on the template recording allowlist.",
+        });
+      });
+      return;
+    }
     setFlowStage("picking_brand");
     void loadBrands();
-  }, [loadBrands]);
+  }, [featureEnabled, loadBrands, refreshFeatureAccess]);
 
   const exitTemplateMode = useCallback(() => {
     clearTimer();
@@ -303,16 +345,13 @@ export function useLtaTemplateRecording(args: UseLtaTemplateRecordingArgs) {
     return true;
   }, [flowStage]);
 
-  const interceptOnRun = useCallback(
-    async (storeUrl: string, realOnRun: () => Promise<void>) => {
-      if (!flowActiveRef.current) {
-        await realOnRun();
-        return;
-      }
-      toast.message("Template mode", { description: "Pick a brand with the Template button (bottom left)." });
-    },
-    [],
-  );
+  const interceptOnRun = useCallback(async (_storeUrl: string, realOnRun: () => Promise<void>) => {
+    if (!flowActiveRef.current) {
+      await realOnRun();
+      return;
+    }
+    toast.message("Template mode", { description: "Pick a brand with the Template button (bottom right)." });
+  }, []);
 
   return {
     featureEnabled,
