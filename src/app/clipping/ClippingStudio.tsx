@@ -65,8 +65,25 @@ const COUNTDOWN_SECONDS = 3;
 const HOOK_TITLE_TOP_RATIO = 0.18;
 /** Maximum title width as a fraction of canvas width. */
 const HOOK_TITLE_MAX_WIDTH_RATIO = 0.88;
-/** Base font size (px) at the canvas's native 1080px width. Scales down if too wide. */
+/** Base font size (px) at the canvas's native 1080px width (fixed; long text wraps). */
 const HOOK_TITLE_BASE_FONT_PX = 78;
+const DEFAULT_HOOK_TITLE_FONT = "Montserrat";
+const DEFAULT_HOOK_TITLE_COLOR = "#ffffff";
+
+const HOOK_TITLE_FONT_OPTIONS = [
+  { value: "Montserrat", label: "Montserrat" },
+  { value: "Inter", label: "Inter" },
+  { value: "Poppins", label: "Poppins" },
+  { value: "Arial", label: "Arial" },
+  { value: "Helvetica Neue", label: "Helvetica Neue" },
+] as const;
+
+/** Google Fonts families loaded for canvas hook titles (weight 900). */
+const HOOK_TITLE_GOOGLE_FONT_SPECS: Partial<Record<string, string>> = {
+  Montserrat: "Montserrat:wght@900",
+  Inter: "Inter:wght@900",
+  Poppins: "Poppins:wght@900",
+};
 
 /**
  * Suggested hook titles. Newlines split lines; users can edit freely after picking.
@@ -238,38 +255,93 @@ function drawCoverRounded(
   ctx.restore();
 }
 
+function hookTitleCanvasFont(fontSizePx: number, fontFamily: string): string {
+  const quoted = fontFamily.includes(" ") ? `"${fontFamily}"` : fontFamily;
+  return `900 ${fontSizePx}px ${quoted}, sans-serif`;
+}
+
+/** Wraps a single line to fit `maxWidth` without changing font size. */
+function wrapLineToWidth(
+  ctx: CanvasRenderingContext2D,
+  line: string,
+  maxWidth: number,
+): string[] {
+  const trimmed = line.trim();
+  if (!trimmed) return [""];
+  if (ctx.measureText(trimmed).width <= maxWidth) return [trimmed];
+
+  const words = trimmed.split(/\s+/);
+  const wrapped: string[] = [];
+  let current = "";
+
+  const pushWordByChar = (word: string) => {
+    let chunk = "";
+    for (const ch of word) {
+      const next = chunk + ch;
+      if (chunk && ctx.measureText(next).width > maxWidth) {
+        wrapped.push(chunk);
+        chunk = ch;
+      } else {
+        chunk = next;
+      }
+    }
+    current = chunk;
+  };
+
+  for (const word of words) {
+    const candidate = current ? `${current} ${word}` : word;
+    if (ctx.measureText(candidate).width <= maxWidth) {
+      current = candidate;
+      continue;
+    }
+    if (current) wrapped.push(current);
+    if (ctx.measureText(word).width > maxWidth) {
+      pushWordByChar(word);
+    } else {
+      current = word;
+    }
+  }
+  if (current) wrapped.push(current);
+  return wrapped.length > 0 ? wrapped : [trimmed];
+}
+
+function wrapHookTitleLines(
+  ctx: CanvasRenderingContext2D,
+  rawLines: string[],
+  maxWidth: number,
+): string[] {
+  const wrapped: string[] = [];
+  for (const line of rawLines) {
+    wrapped.push(...wrapLineToWidth(ctx, line, maxWidth));
+  }
+  return wrapped;
+}
+
 /**
  * Draws a multi-line hook title centered horizontally near the top of the canvas.
- * Auto-scales the font down so the widest line fits within `maxWidth`. White fill
- * with a thick black stroke + drop shadow for legibility against any webcam feed.
+ * Font size stays fixed; long lines wrap. Fill color is configurable; black stroke
+ * + drop shadow keep text legible on any webcam feed.
  */
 function drawHookTitle(
   ctx: CanvasRenderingContext2D,
   text: string,
   canvasWidth: number,
   canvasHeight: number,
+  fontFamily: string,
+  fillColor: string,
 ): void {
   const trimmed = text.trim();
   if (!trimmed) return;
-  const lines = text.split(/\r?\n/).map((l) => l.trimEnd());
-  while (lines.length > 0 && lines[lines.length - 1] === "") lines.pop();
-  while (lines.length > 0 && lines[0] === "") lines.shift();
-  if (lines.length === 0) return;
+  const rawLines = text.split(/\r?\n/).map((l) => l.trimEnd());
+  while (rawLines.length > 0 && rawLines[rawLines.length - 1] === "") rawLines.pop();
+  while (rawLines.length > 0 && rawLines[0] === "") rawLines.shift();
+  if (rawLines.length === 0) return;
 
+  const fontSize = HOOK_TITLE_BASE_FONT_PX;
   const maxWidth = canvasWidth * HOOK_TITLE_MAX_WIDTH_RATIO;
-  let fontSize = HOOK_TITLE_BASE_FONT_PX;
-  const fontFamily = '"Inter", "Helvetica Neue", Helvetica, Arial, sans-serif';
   ctx.save();
-  ctx.font = `900 ${fontSize}px ${fontFamily}`;
-  let widest = 0;
-  for (const line of lines) {
-    const w = ctx.measureText(line).width;
-    if (w > widest) widest = w;
-  }
-  if (widest > maxWidth && widest > 0) {
-    fontSize = Math.max(28, Math.floor(fontSize * (maxWidth / widest)));
-    ctx.font = `900 ${fontSize}px ${fontFamily}`;
-  }
+  ctx.font = hookTitleCanvasFont(fontSize, fontFamily);
+  const lines = wrapHookTitleLines(ctx, rawLines, maxWidth);
 
   const lineHeight = Math.round(fontSize * 1.18);
   const topY = Math.round(canvasHeight * HOOK_TITLE_TOP_RATIO);
@@ -285,7 +357,7 @@ function drawHookTitle(
   ctx.shadowOffsetY = 6;
   ctx.strokeStyle = "rgba(0, 0, 0, 0.92)";
   ctx.lineWidth = Math.max(6, Math.round(fontSize * 0.13));
-  ctx.fillStyle = "#ffffff";
+  ctx.fillStyle = fillColor;
 
   for (let i = 0; i < lines.length; i++) {
     const y = topY + i * lineHeight;
@@ -293,6 +365,29 @@ function drawHookTitle(
     ctx.fillText(lines[i], centerX, y);
   }
   ctx.restore();
+}
+
+function ensureHookTitleFontsStylesheet(): void {
+  if (typeof document === "undefined") return;
+  const linkId = "clipping-hook-title-fonts";
+  if (document.getElementById(linkId)) return;
+  const families = Object.values(HOOK_TITLE_GOOGLE_FONT_SPECS).filter(Boolean).join("&family=");
+  if (!families) return;
+  const link = document.createElement("link");
+  link.id = linkId;
+  link.rel = "stylesheet";
+  link.href = `https://fonts.googleapis.com/css2?family=${families}&display=swap`;
+  document.head.appendChild(link);
+}
+
+async function loadHookTitleFont(fontFamily: string, fontSizePx: number): Promise<void> {
+  if (typeof document === "undefined") return;
+  ensureHookTitleFontsStylesheet();
+  try {
+    await document.fonts.load(hookTitleCanvasFont(fontSizePx, fontFamily));
+  } catch {
+    /* best-effort — canvas falls back to sans-serif */
+  }
 }
 
 function fitFullWidthRect(
@@ -329,6 +424,8 @@ export default function ClippingStudio() {
   const [selectedCameraId, setSelectedCameraId] = useState<string | null>(null);
   const [mirrorWebcam, setMirrorWebcam] = useState(true);
   const [hookTitle, setHookTitle] = useState<string>("");
+  const [hookTitleFont, setHookTitleFont] = useState<string>(DEFAULT_HOOK_TITLE_FONT);
+  const [hookTitleColor, setHookTitleColor] = useState<string>(DEFAULT_HOOK_TITLE_COLOR);
 
   const [templateFile, setTemplateFile] = useState<File | null>(null);
   const [templateObjectUrl, setTemplateObjectUrl] = useState<string | null>(null);
@@ -395,9 +492,20 @@ export default function ClippingStudio() {
    * the textarea updates the canvas live without re-creating the draw loop.
    */
   const hookTitleRef = useRef<string>("");
+  const hookTitleFontRef = useRef<string>(DEFAULT_HOOK_TITLE_FONT);
+  const hookTitleColorRef = useRef<string>(DEFAULT_HOOK_TITLE_COLOR);
   useEffect(() => {
     hookTitleRef.current = hookTitle;
   }, [hookTitle]);
+  useEffect(() => {
+    hookTitleFontRef.current = hookTitleFont;
+  }, [hookTitleFont]);
+  useEffect(() => {
+    hookTitleColorRef.current = hookTitleColor;
+  }, [hookTitleColor]);
+  useEffect(() => {
+    void loadHookTitleFont(hookTitleFont, HOOK_TITLE_BASE_FONT_PX);
+  }, [hookTitleFont]);
 
   /* ------------------------------ Cleanup ------------------------------ */
   const stopRenderLoop = useCallback(() => {
@@ -790,7 +898,14 @@ export default function ClippingStudio() {
         ctx.stroke();
         ctx.restore();
 
-        drawHookTitle(ctx, hookTitleRef.current, CANVAS_WIDTH, CANVAS_HEIGHT);
+        drawHookTitle(
+          ctx,
+          hookTitleRef.current,
+          CANVAS_WIDTH,
+          CANVAS_HEIGHT,
+          hookTitleFontRef.current,
+          hookTitleColorRef.current,
+        );
       }
 
       animationFrameRef.current = requestAnimationFrame(tick);
@@ -2054,6 +2169,60 @@ export default function ClippingStudio() {
                 disabled={!canEditControls}
                 className="rounded-xl border border-white/10 bg-black/40 px-3 py-2 text-xs text-white/85 placeholder:text-white/30 focus:border-violet-400/60 focus:outline-none disabled:cursor-not-allowed disabled:opacity-50"
               />
+              <div className="grid grid-cols-2 gap-2">
+                <div className="flex flex-col gap-1">
+                  <label
+                    htmlFor="hook-title-font"
+                    className="text-[10px] uppercase tracking-widest text-white/35"
+                  >
+                    Font
+                  </label>
+                  <select
+                    id="hook-title-font"
+                    value={hookTitleFont}
+                    onChange={(e) => setHookTitleFont(e.target.value)}
+                    disabled={!canEditControls}
+                    className="rounded-xl border border-white/10 bg-black/40 px-3 py-2 text-xs text-white/85 focus:border-violet-400/60 focus:outline-none disabled:cursor-not-allowed disabled:opacity-50"
+                  >
+                    {HOOK_TITLE_FONT_OPTIONS.map((opt) => (
+                      <option key={opt.value} value={opt.value}>
+                        {opt.label}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+                <div className="flex flex-col gap-1">
+                  <label
+                    htmlFor="hook-title-color"
+                    className="text-[10px] uppercase tracking-widest text-white/35"
+                  >
+                    Text color
+                  </label>
+                  <div className="flex items-center gap-2">
+                    <input
+                      id="hook-title-color"
+                      type="color"
+                      value={hookTitleColor}
+                      onChange={(e) => setHookTitleColor(e.target.value)}
+                      disabled={!canEditControls}
+                      className="size-9 shrink-0 cursor-pointer rounded-lg border border-white/10 bg-black/40 p-0.5 disabled:cursor-not-allowed disabled:opacity-50"
+                      aria-label="Hook title text color"
+                    />
+                    <input
+                      type="text"
+                      value={hookTitleColor}
+                      onChange={(e) => setHookTitleColor(e.target.value)}
+                      disabled={!canEditControls}
+                      spellCheck={false}
+                      className="min-w-0 flex-1 rounded-xl border border-white/10 bg-black/40 px-2 py-2 font-mono text-[11px] text-white/85 focus:border-violet-400/60 focus:outline-none disabled:cursor-not-allowed disabled:opacity-50"
+                    />
+                  </div>
+                </div>
+              </div>
+              <p className="text-[10px] leading-snug text-white/40">
+                Long titles keep the same size and wrap to extra lines. Use Enter for manual line
+                breaks.
+              </p>
               <div className="flex flex-col gap-1">
                 <span className="text-[10px] uppercase tracking-widest text-white/35">
                   Examples

@@ -124,7 +124,6 @@ import {
   LinkToAdTemplateBrandPicker,
   LinkToAdTemplateRecordingButton,
   LinkToAdTemplateRecordingExitConfirm,
-  LinkToAdTemplateRecordingGate,
   LinkToAdTemplateRecordingStartConfirm,
 } from "@/app/_components/lta/LinkToAdTemplateRecordingUi";
 import { AvatarPickerDialog } from "@/app/_components/AvatarPickerDialog";
@@ -1334,18 +1333,7 @@ export default function LinkToAdUniverse({
   const DEMO_EMAILS = new Set(["anto.delbos@mail.com", "anto.delbos@gmail.com", "app@youry.com"]);
   const isDemoUser = Boolean(_userEmail && DEMO_EMAILS.has(_userEmail.toLowerCase()));
   const [manualHideCredits, setManualHideCredits] = useState(false);
-  /**
-   * Product rule:
-   * - Initial URL "Generate" should always show its credit pill.
-   * - Mid-flow step pills stay hidden for non-trial users.
-   * - Regenerate actions keep showing pills (trial + non-trial).
-   * - Demo-only hidden toggle can still force-hide for recordings.
-   */
-  const hideStepCredits = manualHideCredits;
-  const hideInitialGenerateCredits = manualHideCredits;
-  const hideRegenerateCredits = manualHideCredits;
-  // Backward-compatible alias used by older render closures during HMR.
-  const hideCredits = hideStepCredits;
+  /** Demo toggle can hide credit pills for recordings (see `hideLtaCreditsUi` after template hook). */
   const [demoReplayActive, setDemoReplayActive] = useState(false);
   const [demoPhaseIndex, setDemoPhaseIndex] = useState(0);
   const DEMO_PHASES = [
@@ -1379,6 +1367,7 @@ export default function LinkToAdUniverse({
   /** Read-only balance gate (opens billing modal). Use immediately before any paid LTA step. */
   const hasLtaCreditsFor = useCallback(
     (cost: number, opts?: { presentation?: "studio_billing" }): boolean => {
+      if (ltaTemplateLocksRef.current) return true;
       if (isPlatformCreditBypassActive()) return true;
       const k = Math.max(0, Math.floor(cost));
       if (k <= 0) return true;
@@ -3146,9 +3135,55 @@ export default function LinkToAdUniverse({
     setPipelineByAngle([emptyAnglePipeline(), emptyAnglePipeline(), emptyAnglePipeline()]);
     setShowUrlFlowProgressOverlay(false);
     setIsNanoAllImagesSubmitting(false);
+    setIsNanoPromptsLoading(false);
     setIsVideoPromptLoading(false);
     setIsKlingSubmitting(false);
   }, [cancelCurrentGeneration, hydrateVideoPromptFromStored]);
+
+  const syncNanoPromptSignatureAfterTemplateHydrate = useCallback(
+    (extracted: unknown, storeUrlForRefs: string) => {
+      const snap = readUniverseFromExtracted(extracted);
+      if (!snap) return;
+      const idx = snap.selectedAngleIndex;
+      if (idx === null) return;
+      const script = selectedScriptOptionByIndex(snap.scriptsText, idx).trim();
+      if (!script) return;
+      const avatarRefs = (snap.personaPhotoUrls ?? [])
+        .map((u) => u.trim())
+        .filter((u, i, arr) => /^https?:\/\//i.test(u) && arr.indexOf(u) === i)
+        .slice(-3)
+        .reverse();
+      const productRefs = allProductUrlsForNanoBanana({
+        pageUrl: storeUrlForRefs.trim(),
+        neutralUploadUrl: snap.neutralUploadUrl,
+        candidateUrls:
+          snap.productOnlyImageUrls && snap.productOnlyImageUrls.length > 0
+            ? snap.productOnlyImageUrls
+            : snap.cleanCandidate?.url
+              ? [snap.cleanCandidate.url]
+              : [],
+        fallbackUrl: snap.fallbackImageUrl,
+      });
+      const genRefs: string[] = [];
+      const seen = new Set<string>();
+      const add = (raw: string | null | undefined) => {
+        const t = (raw ?? "").trim();
+        if (!t || !/^https?:\/\//i.test(t) || seen.has(t)) return;
+        seen.add(t);
+        genRefs.push(t);
+      };
+      const preview =
+        snap.cleanCandidate?.url?.trim() ||
+        snap.fallbackImageUrl?.trim() ||
+        productRefs[0] ||
+        "";
+      if (preview) add(preview);
+      if (genRefs.length === 0 && productRefs[0]) add(productRefs[0]);
+      for (const url of snap.personaPhotoUrls ?? []) add(url);
+      nanoBananaPromptsSignatureRef.current = `script:${fnv1aHash(script)}|imgs:${genRefs.join(",")}|avatars:${avatarRefs.join(",")}|provider:${scriptProvider}`;
+    },
+    [scriptProvider],
+  );
 
   const templateRecording = useLtaTemplateRecording({
     clientEmail: _userEmail,
@@ -3160,13 +3195,27 @@ export default function LinkToAdUniverse({
     setShowUrlFlowProgressOverlay,
     setServerPipelineStepIndex,
     setIsNanoAllImagesSubmitting,
+    setIsNanoPromptsLoading,
     setIsVideoPromptLoading,
     setIsKlingSubmitting,
+    onAfterTemplateHydrate: (extracted, run) => {
+      syncNanoPromptSignatureAfterTemplateHydrate(
+        extracted,
+        typeof run.store_url === "string" ? run.store_url : "",
+      );
+    },
   });
 
+  /** Hide credit pills and skip wallet charges during template replay. */
+  const hideLtaCreditsUi =
+    manualHideCredits || templateRecording.isTemplateReplayActive;
+
   useEffect(() => {
-    ltaTemplateLocksRef.current = templateRecording.locksSelection;
-  }, [templateRecording.locksSelection]);
+    ltaTemplateLocksRef.current = templateRecording.isTemplateReplayActive;
+    if (templateRecording.isTemplateReplayActive) {
+      setLtaFrozenCredits(null);
+    }
+  }, [templateRecording.isTemplateReplayActive]);
 
   useEffect(() => {
     if (!resumeRunId) {
@@ -6534,7 +6583,7 @@ export default function LinkToAdUniverse({
                         <Sparkles className="h-4 w-4 shrink-0" aria-hidden />
                         <LinkToAdStudioStyleCreditPill
                           amount={ltaInitialGenerateCharge}
-                          hideCredits={hideInitialGenerateCredits}
+                          hideCredits={hideLtaCreditsUi}
                           compact
                         />
                       </span>
@@ -7011,7 +7060,7 @@ export default function LinkToAdUniverse({
                       <Sparkles className="h-5 w-5 shrink-0" aria-hidden />
                       <LinkToAdStudioStyleCreditPill
                         amount={ltaInitialGenerateCharge}
-                        hideCredits={hideInitialGenerateCredits}
+                        hideCredits={hideLtaCreditsUi}
                       />
                     </span>
                   )}
@@ -7652,7 +7701,7 @@ export default function LinkToAdUniverse({
                       <RefreshCw className="h-3 w-3 transition-transform group-hover/regen:rotate-90" aria-hidden />
                     )}
                     {isAnglesRegenerating ? "Regenerating..." : "Regenerate"}
-                    {hideRegenerateCredits ? null : <CreditCostBadge amount={2} />}
+                    {hideLtaCreditsUi ? null : <CreditCostBadge amount={2} />}
                   </button>
                 </div>
                 <div className="grid gap-3 sm:grid-cols-3">
@@ -8223,7 +8272,7 @@ export default function LinkToAdUniverse({
                             <RefreshCw className="h-2.5 w-2.5 transition-transform group-hover/ri:rotate-90" aria-hidden />
                           )}
                           {isThreeImagesBusy ? "Regenerating..." : "Regen 3 images"}
-                          {hideRegenerateCredits ? null : <CreditCostBadge amount={ltaThreeImagesCharge} className="text-[9px]" />}
+                          {hideLtaCreditsUi ? null : <CreditCostBadge amount={ltaThreeImagesCharge} className="text-[9px]" />}
                         </button>
                       ) : null}
                     </div>
@@ -8287,7 +8336,7 @@ export default function LinkToAdUniverse({
                           <RefreshCw className="h-2.5 w-2.5 transition-transform group-hover/regen-sa:rotate-90" aria-hidden />
                         )}
                         {isAnglesRegenerating ? "Regenerating..." : "Regenerate"}
-                        {hideRegenerateCredits ? null : <CreditCostBadge amount={2} className="px-1 py-px text-[9px]" />}
+                        {hideLtaCreditsUi ? null : <CreditCostBadge amount={2} className="px-1 py-px text-[9px]" />}
                       </button>
                     </div>
                     <div className="grid grid-cols-1 gap-2">
@@ -8550,7 +8599,7 @@ export default function LinkToAdUniverse({
                           <Sparkles className="h-5 w-5 shrink-0" aria-hidden />
                           <LinkToAdStudioStyleCreditPill
                             amount={ltaThreeImagesCharge}
-                            hideCredits={hideStepCredits}
+                            hideCredits={hideLtaCreditsUi}
                           />
                         </span>
                       </Button>
@@ -8588,7 +8637,7 @@ export default function LinkToAdUniverse({
                               <RefreshCw className="h-3 w-3 transition-transform group-hover/ri:rotate-90" aria-hidden />
                             )}
                             {isThreeImagesBusy ? "Regenerating 3 images..." : "Regenerate 3 images"}
-                            {hideRegenerateCredits ? null : <CreditCostBadge amount={ltaThreeImagesCharge} />}
+                            {hideLtaCreditsUi ? null : <CreditCostBadge amount={ltaThreeImagesCharge} />}
                           </button>
                         ) : null}
                       </div>
@@ -8702,7 +8751,7 @@ export default function LinkToAdUniverse({
                               <Video className="h-5 w-5 shrink-0" aria-hidden />
                               <LinkToAdStudioStyleCreditPill
                                 amount={ltaVideoPromptFromImageCreditsDisplay}
-                                hideCredits={hideStepCredits}
+                                hideCredits={hideLtaCreditsUi}
                               />
                             </span>
                           )}
@@ -8726,7 +8775,8 @@ export default function LinkToAdUniverse({
                     isNanoAllImagesSubmitting) ? (
                     <div className="shrink-0 rounded-xl border border-white/10 bg-black/25 px-4 pb-3 pt-2">
                       <div className="flex flex-col gap-2">
-                        {!nanoBananaPromptsRaw.trim() &&
+                        {!templateRecording.isTemplateReplayActive &&
+                        !nanoBananaPromptsRaw.trim() &&
                         !isNanoPromptsLoading &&
                         !isNanoAllImagesSubmitting &&
                         !nanoPollTaskId ? (
@@ -9189,10 +9239,10 @@ export default function LinkToAdUniverse({
                                     <span className="inline-flex items-center gap-2 text-sm font-semibold leading-tight">
                                       <RefreshCw className="h-4 w-4 shrink-0" aria-hidden />
                                       Regenerate
-                                      {hideRegenerateCredits ? null : (
+                                      {hideLtaCreditsUi ? null : (
                                         <LinkToAdStudioStyleCreditPill
                                           amount={ltaKlingVideoRegenCharge}
-                                          hideCredits={hideRegenerateCredits}
+                                          hideCredits={hideLtaCreditsUi}
                                           compact
                                         />
                                       )}
@@ -9356,7 +9406,7 @@ export default function LinkToAdUniverse({
                                 <Video className="h-4 w-4 shrink-0" aria-hidden />
                                 <LinkToAdStudioStyleCreditPill
                                   amount={ltaVideoConfirmCreditsDisplay}
-                                  hideCredits={hideStepCredits}
+                                  hideCredits={hideLtaCreditsUi}
                                 />
                               </span>
                             </Button>
@@ -9392,7 +9442,7 @@ export default function LinkToAdUniverse({
                           <Video className="h-5 w-5 shrink-0" aria-hidden />
                           <LinkToAdStudioStyleCreditPill
                             amount={ltaVideoPromptFromImageCreditsDisplay}
-                            hideCredits={hideStepCredits}
+                            hideCredits={hideLtaCreditsUi}
                           />
                         </span>
                       </Button>
@@ -9532,7 +9582,7 @@ export default function LinkToAdUniverse({
               className="flex h-10 items-center justify-center gap-2 rounded-xl border border-violet-400/25 bg-violet-500/15 text-[13px] font-medium text-white/90 transition-all hover:border-violet-400/40 hover:bg-violet-500/25"
             >
               Regenerate images too
-              {hideRegenerateCredits ? null : (
+              {hideLtaCreditsUi ? null : (
                 <CreditCostBadge amount={ltaThreeImagesCharge} className="px-2" iconClassName="h-3 w-3" />
               )}
             </button>
@@ -9613,7 +9663,7 @@ export default function LinkToAdUniverse({
       </div>
     ) : null}
     <LinkToAdUrlFlowProgressOverlay
-      open={showUrlFlowProgressOverlay}
+      open={showUrlFlowProgressOverlay && !templateRecording.isTemplateReplayActive}
       assetKind={linkToAdAssetType === "app" ? "app" : "product"}
       stage={stage}
       serverPipelineStepIndex={serverPipelineStepIndex}
@@ -9622,7 +9672,6 @@ export default function LinkToAdUniverse({
     <LinkToAdTemplateRecordingStartConfirm recording={templateRecording} />
     <LinkToAdTemplateRecordingExitConfirm recording={templateRecording} />
     <LinkToAdTemplateBrandPicker recording={templateRecording} />
-    <LinkToAdTemplateRecordingGate recording={templateRecording} />
     <LinkToAdProductSetupDialog
       open={productSetupDialogOpen}
       onOpenChange={setProductSetupDialogOpen}

@@ -15,7 +15,7 @@ function useDocumentPortal() {
   return mounted;
 }
 
-/** Bottom-right FAB with on/off toggle; portaled to `document.body`. */
+/** Bottom-right dock: step controls (no overlay) + template toggle; portaled to `document.body`. */
 export function LinkToAdTemplateRecordingButton({
   recording,
 }: {
@@ -24,47 +24,122 @@ export function LinkToAdTemplateRecordingButton({
   const mounted = useDocumentPortal();
   if (!mounted || !recording.featureEnabled) return null;
 
-  const toggleDisabled =
-    recording.active ||
-    recording.pickingBrand ||
+  const stepLoading =
     recording.flowStage === "step1_loading" ||
     recording.flowStage === "step2_loading" ||
     recording.flowStage === "step3_loading" ||
     recording.flowStage === "step4_loading";
 
+  const toggleDisabled = recording.active || recording.pickingBrand || stepLoading;
+
+  const showStepBar = Boolean(recording.gateStep && recording.gateLabel);
+  const canGoBack = (recording.gateStep ?? 0) > 1;
+
   return createPortal(
-    <div
-      className={cn(
-        "fixed bottom-5 right-5 z-[10100] flex items-center gap-2.5 rounded-full border px-3 py-2 shadow-[0_8px_32px_rgba(0,0,0,0.55)] backdrop-blur-md transition",
-        "ring-2 ring-violet-400/25",
-        recording.templateToggleOn
-          ? "border-amber-400/45 bg-amber-500/20"
-          : "border-violet-300/40 bg-violet-600/30",
-      )}
-    >
-      <button
-        type="button"
-        role="switch"
-        aria-checked={recording.templateToggleOn}
-        aria-label="Template mode on/off"
-        disabled={toggleDisabled}
-        onClick={() => recording.requestTemplateToggle(!recording.templateToggleOn)}
+    <div className="pointer-events-none fixed bottom-5 right-5 z-[10100] flex max-w-[min(92vw,22rem)] flex-col items-end gap-2">
+      {stepLoading ? (
+        <div
+          className={cn(
+            "pointer-events-auto w-full rounded-2xl border px-3 py-2.5 shadow-[0_8px_32px_rgba(0,0,0,0.45)] backdrop-blur-md",
+            "border-violet-400/30 bg-[#0b0912]/95 ring-1 ring-violet-400/20",
+          )}
+        >
+          <div className="flex items-center gap-2 text-[11px] font-medium text-violet-200/90">
+            <Loader2 className="h-3.5 w-3.5 shrink-0 animate-spin" aria-hidden />
+            Loading step…
+          </div>
+        </div>
+      ) : null}
+
+      {showStepBar ? (
+        <div
+          className={cn(
+            "pointer-events-auto w-full rounded-2xl border p-3 shadow-[0_8px_32px_rgba(0,0,0,0.5)] backdrop-blur-md",
+            "border-violet-400/30 bg-[#0b0912]/95 ring-2 ring-violet-400/20",
+          )}
+          role="region"
+          aria-label="Template mode step controls"
+        >
+          <p className="text-[10px] font-bold uppercase tracking-widest text-violet-300/70">Template mode</p>
+          <p className="mt-0.5 text-[13px] font-semibold text-white">
+            Step {recording.gateStep} — {recording.gateLabel}
+          </p>
+          <p className="mt-1 text-[11px] leading-snug text-white/50">
+            Film this step, then continue. Loading is done — the page stays visible.
+          </p>
+          <div className="mt-2.5 flex flex-col gap-1.5">
+            <button
+              type="button"
+              className="inline-flex h-8 w-full items-center justify-center rounded-full border border-white/15 text-[11px] font-semibold text-white/80 transition hover:bg-white/10"
+              onClick={recording.retakeCurrentStepFromGate}
+            >
+              Retake the step
+            </button>
+            <div className="flex flex-wrap items-center gap-1.5">
+              {canGoBack ? (
+                <button
+                  type="button"
+                  className="inline-flex h-8 flex-1 items-center justify-center rounded-full border border-white/10 text-[10px] font-medium text-white/55 transition hover:bg-white/10 hover:text-white/75"
+                  onClick={recording.previousFromGate}
+                >
+                  Previous
+                </button>
+              ) : null}
+              <button
+                type="button"
+                className={cn(
+                  "inline-flex h-8 items-center justify-center rounded-full border border-violet-400/40 bg-violet-500/25 px-3 text-[11px] font-semibold text-violet-50 transition hover:bg-violet-500/35",
+                  canGoBack ? "flex-1" : "flex-[2]",
+                )}
+                onClick={recording.continueFromGate}
+              >
+                Continue
+              </button>
+              <button
+                type="button"
+                className="inline-flex h-8 items-center justify-center rounded-full border border-white/15 px-3 text-[11px] font-semibold text-white/70 transition hover:bg-white/10"
+                onClick={() => recording.requestTemplateToggle(false)}
+              >
+                Exit
+              </button>
+            </div>
+          </div>
+        </div>
+      ) : null}
+
+      <div
         className={cn(
-          "relative h-6 w-11 shrink-0 rounded-full transition disabled:cursor-not-allowed disabled:opacity-60",
-          recording.templateToggleOn ? "bg-violet-500" : "bg-white/20",
+          "pointer-events-auto flex items-center gap-2.5 rounded-full border px-3 py-2 shadow-[0_8px_32px_rgba(0,0,0,0.55)] backdrop-blur-md transition",
+          "ring-2 ring-violet-400/25",
+          recording.templateToggleOn
+            ? "border-amber-400/45 bg-amber-500/20"
+            : "border-violet-300/40 bg-violet-600/30",
         )}
       >
-        <span
+        <button
+          type="button"
+          role="switch"
+          aria-checked={recording.templateToggleOn}
+          aria-label="Template mode on/off"
+          disabled={toggleDisabled}
+          onClick={() => recording.requestTemplateToggle(!recording.templateToggleOn)}
           className={cn(
-            "absolute top-0.5 left-0.5 h-5 w-5 rounded-full bg-white shadow transition-transform",
-            recording.templateToggleOn && "translate-x-5",
+            "relative h-6 w-11 shrink-0 rounded-full transition disabled:cursor-not-allowed disabled:opacity-60",
+            recording.templateToggleOn ? "bg-violet-500" : "bg-white/20",
           )}
-        />
-      </button>
-      <span className="flex items-center gap-1.5 pr-1 text-xs font-semibold text-white">
-        <Clapperboard className="h-4 w-4 shrink-0 text-violet-200" aria-hidden />
-        Template
-      </span>
+        >
+          <span
+            className={cn(
+              "absolute top-0.5 left-0.5 h-5 w-5 rounded-full bg-white shadow transition-transform",
+              recording.templateToggleOn && "translate-x-5",
+            )}
+          />
+        </button>
+        <span className="flex items-center gap-1.5 pr-1 text-xs font-semibold text-white">
+          <Clapperboard className="h-4 w-4 shrink-0 text-violet-200" aria-hidden />
+          Template
+        </span>
+      </div>
     </div>,
     document.body,
   );
@@ -180,7 +255,7 @@ export function LinkToAdTemplateBrandPicker({
             </div>
           ) : recording.brands.length === 0 ? (
             <p className="py-8 text-center text-sm text-white/45">
-              No template brands yet. Mark projects as Template in My Projects.
+              No templates yet. Anyone can mark a project with Template in My Projects (shared list).
             </p>
           ) : (
             <ul className="space-y-2">
@@ -226,53 +301,7 @@ export function LinkToAdTemplateBrandPicker({
   );
 }
 
-export function LinkToAdTemplateRecordingGate({
-  recording,
-}: {
-  recording: TemplateRecording;
-}) {
-  const mounted = useDocumentPortal();
-  if (!mounted || !recording.gateStep || !recording.gateLabel) return null;
-
-  const canGoBack = recording.gateStep > 1;
-
-  return createPortal(
-    <div className="fixed inset-0 z-[10120] flex items-center justify-center bg-black/55 p-4">
-      <div className="w-full max-w-md rounded-2xl border border-violet-400/25 bg-[#0b0912] p-5 shadow-2xl">
-        <p className="text-[10px] font-bold uppercase tracking-widest text-violet-300/70">Template mode</p>
-        <h3 className="mt-1 text-[16px] font-semibold text-white">
-          Step {recording.gateStep} — {recording.gateLabel}
-        </h3>
-        <p className="mt-2 text-[13px] leading-relaxed text-white/60">
-          Film this step, then continue. Need more time? Stay on this screen — loading already finished.
-        </p>
-        <div className="mt-5 flex flex-wrap items-center justify-end gap-2">
-          {canGoBack ? (
-            <button
-              type="button"
-              className="inline-flex h-9 items-center rounded-full border border-white/15 px-4 text-[12px] font-semibold text-white/75 transition hover:bg-white/10"
-              onClick={recording.previousFromGate}
-            >
-              Previous step
-            </button>
-          ) : null}
-          <button
-            type="button"
-            className="inline-flex h-9 items-center rounded-full border border-violet-400/40 bg-violet-500/25 px-4 text-[12px] font-semibold text-violet-50 transition hover:bg-violet-500/35"
-            onClick={recording.continueFromGate}
-          >
-            Continue
-          </button>
-          <button
-            type="button"
-            className="inline-flex h-9 items-center rounded-full border border-white/10 px-3 text-[11px] text-white/45 transition hover:text-white/70"
-            onClick={recording.exitTemplateMode}
-          >
-            Exit
-          </button>
-        </div>
-      </div>
-    </div>,
-    document.body,
-  );
+/** @deprecated Step controls live on {@link LinkToAdTemplateRecordingButton} (no fullscreen gate). */
+export function LinkToAdTemplateRecordingGate(_props: { recording: TemplateRecording }) {
+  return null;
 }

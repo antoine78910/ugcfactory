@@ -4,62 +4,44 @@ import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
 import { readLinkToAdTemplates, removeLinkToAdTemplate, type LinkToAdTemplateSummary } from "@/lib/linkToAdTemplates";
 import { proxiedMediaSrc } from "@/lib/mediaProxyUrl";
-import { readUniverseFromExtracted } from "@/lib/linkToAdUniverse";
-
-type RunRow = {
-  id: string;
-  created_at: string;
-  store_url: string;
-  title: string | null;
-  selected_image_url: string | null;
-  extracted?: unknown;
-};
 
 export default function ClippingLinkToAdTemplatesPage() {
   const [templates, setTemplates] = useState<LinkToAdTemplateSummary[]>([]);
 
   useEffect(() => {
     const refresh = async () => {
-      const local = readLinkToAdTemplates();
-      // Deep-dive fallback: if local templates are empty or stale, build templates directly
-      // from Link to Ad runs so clipping still shows project cards.
       try {
-        const res = await fetch("/api/runs/list", { method: "GET", cache: "no-store" });
-        const json = (await res.json().catch(() => null)) as { data?: unknown } | null;
-        const rows = Array.isArray(json?.data) ? (json!.data as RunRow[]) : [];
-        const fromRuns: LinkToAdTemplateSummary[] = rows
-          .map((r) => {
-            const snap = readUniverseFromExtracted(r.extracted);
-            if (!r?.id || !r?.store_url || !snap) return null;
-            const thumbUrl =
-              (Array.isArray(snap.productOnlyImageUrls) ? snap.productOnlyImageUrls[0] : null) ??
-              (Array.isArray(snap.userPhotoUrls) ? snap.userPhotoUrls[0] : null) ??
-              snap.nanoBananaImageUrl ??
-              snap.neutralUploadUrl ??
-              r.selected_image_url ??
-              null;
-            return {
-              normalizedUrl: r.store_url.trim().toLowerCase(),
-              storeUrl: r.store_url,
-              title: r.title ?? null,
-              thumbUrl,
-              sourceRunId: r.id,
-              createdAt: r.created_at,
-            } satisfies LinkToAdTemplateSummary;
-          })
-          .filter((x): x is LinkToAdTemplateSummary => x !== null);
-        const merged = [...local];
-        const seen = new Set(local.map((x) => x.sourceRunId));
-        for (const t of fromRuns) {
-          if (seen.has(t.sourceRunId)) continue;
-          seen.add(t.sourceRunId);
-          merged.push(t);
+        const res = await fetch("/api/link-to-ad/template-brands", {
+          method: "GET",
+          cache: "no-store",
+          credentials: "include",
+        });
+        const json = (await res.json().catch(() => null)) as {
+          brands?: Array<{
+            runId: string;
+            normalizedUrl: string;
+            storeUrl: string;
+            title: string | null;
+            thumbUrl: string | null;
+          }>;
+        } | null;
+        if (res.ok && Array.isArray(json?.brands)) {
+          setTemplates(
+            json.brands.map((b) => ({
+              normalizedUrl: b.normalizedUrl,
+              storeUrl: b.storeUrl,
+              title: b.title,
+              thumbUrl: b.thumbUrl,
+              sourceRunId: b.runId,
+              createdAt: new Date().toISOString(),
+            })),
+          );
+          return;
         }
-        merged.sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
-        setTemplates(merged);
       } catch {
-        setTemplates(local);
+        /* fall back to local cache */
       }
+      setTemplates(readLinkToAdTemplates());
     };
     void refresh();
     const onFocus = () => refresh();
@@ -131,8 +113,49 @@ export default function ClippingLinkToAdTemplatesPage() {
                     <button
                       type="button"
                       onClick={() => {
-                        const { rows } = removeLinkToAdTemplate(template.normalizedUrl);
-                        setTemplates(rows);
+                        void (async () => {
+                          try {
+                            await fetch("/api/link-to-ad/template-brands/sync", {
+                              method: "POST",
+                              headers: { "Content-Type": "application/json" },
+                              credentials: "include",
+                              body: JSON.stringify({
+                                runId: template.sourceRunId,
+                                remove: true,
+                              }),
+                            });
+                          } catch {
+                            /* ignore */
+                          }
+                          removeLinkToAdTemplate(template.normalizedUrl);
+                          const res = await fetch("/api/link-to-ad/template-brands", {
+                            cache: "no-store",
+                            credentials: "include",
+                          });
+                          const json = (await res.json().catch(() => null)) as {
+                            brands?: Array<{
+                              runId: string;
+                              normalizedUrl: string;
+                              storeUrl: string;
+                              title: string | null;
+                              thumbUrl: string | null;
+                            }>;
+                          } | null;
+                          if (res.ok && Array.isArray(json?.brands)) {
+                            setTemplates(
+                              json.brands.map((b) => ({
+                                normalizedUrl: b.normalizedUrl,
+                                storeUrl: b.storeUrl,
+                                title: b.title,
+                                thumbUrl: b.thumbUrl,
+                                sourceRunId: b.runId,
+                                createdAt: new Date().toISOString(),
+                              })),
+                            );
+                          } else {
+                            setTemplates(readLinkToAdTemplates());
+                          }
+                        })();
                       }}
                       className="inline-flex items-center justify-center rounded-xl border border-white/15 bg-black/30 px-3 py-2 text-xs font-semibold text-white/65 transition hover:text-white"
                     >

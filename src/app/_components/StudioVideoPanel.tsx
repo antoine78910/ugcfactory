@@ -4765,14 +4765,6 @@ export default function StudioVideoPanel({
               ) : seedanceProOmniRefUploads ? (
                 <div>
                   <Label className="text-xs text-white/65">Reference media</Label>
-                  <p className="mt-1 text-[10px] leading-snug text-white/40">
-                    Seedance 2 / Fast: optional <span className="text-white/55">images + MP4/MOV + MP3/WAV</span> (max{" "}
-                    {SEEDANCE_PRO_MAX_IMAGE_URLS} images + {SEEDANCE_PRO_MAX_VIDEO_URLS} video +{" "}
-                    {SEEDANCE_PRO_MAX_AUDIO_URLS} sound). Use{" "}
-                    <span className="text-white/55">@imageN</span> / <span className="text-white/55">@videoN</span> /{" "}
-                    <span className="text-white/55">@audioN</span> or tags are prepended. Audio needs an image or video.
-                    Empty = text-only.
-                  </p>
                   <input
                     ref={seedanceProOmniFileRef}
                     type="file"

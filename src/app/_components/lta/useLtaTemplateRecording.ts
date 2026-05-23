@@ -8,7 +8,10 @@ import {
   type LtaTemplateBrandSummary,
   type LtaTemplateRecordingGateStep,
 } from "@/lib/ltaTemplateRecording";
-import { buildExtractedForTemplateStep } from "@/lib/ltaTemplateRecordingSnapshot";
+import {
+  buildExtractedForTemplateStep,
+  type BuildExtractedForTemplateStepOpts,
+} from "@/lib/ltaTemplateRecordingSnapshot";
 import { isDefaultTemplateRecordingEmail } from "@/lib/ltaTemplateRecording";
 import { useSupabaseBrowserClient } from "@/lib/supabase/BrowserSupabaseProvider";
 import { sessionUserEmail } from "@/lib/sessionUserEmail";
@@ -58,8 +61,11 @@ export type UseLtaTemplateRecordingArgs = {
   setShowUrlFlowProgressOverlay: (v: boolean) => void;
   setServerPipelineStepIndex: (v: number | null) => void;
   setIsNanoAllImagesSubmitting: (v: boolean) => void;
+  setIsNanoPromptsLoading: (v: boolean) => void;
   setIsVideoPromptLoading: (v: boolean) => void;
   setIsKlingSubmitting: (v: boolean) => void;
+  /** After each template hydrate (e.g. sync prompt signature so image gen does not call the API). */
+  onAfterTemplateHydrate?: (extracted: unknown, run: TemplateRunCache) => void;
 };
 
 function delay(ms: number): Promise<void> {
@@ -105,7 +111,10 @@ export function useLtaTemplateRecording(args: UseLtaTemplateRecordingArgs) {
   const templateFlowInProgress =
     flowStage !== "idle" && flowStage !== "picking_brand" && flowStage !== "finished";
 
-  const locksSelection = templateToggleOn && templateFlowInProgress;
+  /** True while Link to Ad template replay is active (not normal LTA generation). */
+  const isTemplateReplayActive = templateToggleOn && templateFlowInProgress;
+
+  const locksSelection = isTemplateReplayActive;
   const active =
     locksSelection &&
     flowStage !== "step1_gate" &&
@@ -178,19 +187,21 @@ export function useLtaTemplateRecording(args: UseLtaTemplateRecordingArgs) {
   }, []);
 
   const applyCachedStep = useCallback(
-    (step: LtaTemplateRecordingGateStep) => {
+    (step: LtaTemplateRecordingGateStep, buildOpts?: BuildExtractedForTemplateStepOpts) => {
       const run = runCacheRef.current;
       if (!run) return;
-      const extracted = buildExtractedForTemplateStep(run.extracted, step);
+      const extracted = buildExtractedForTemplateStep(run.extracted, step, buildOpts);
       args.hydrateFromRun(
         { ...run, extracted },
         { silent: true, preserveVideoDuration: true },
       );
+      args.onAfterTemplateHydrate?.(extracted, run);
       args.setStage("ready");
       args.setIsWorking(false);
       args.setShowUrlFlowProgressOverlay(false);
       args.setServerPipelineStepIndex(null);
       args.setIsNanoAllImagesSubmitting(false);
+      args.setIsNanoPromptsLoading(false);
       args.setIsVideoPromptLoading(false);
       args.setIsKlingSubmitting(false);
     },
@@ -201,7 +212,7 @@ export function useLtaTemplateRecording(args: UseLtaTemplateRecordingArgs) {
     args.prepareBlankCanvas();
     args.setStoreUrl(runCacheRef.current?.store_url?.trim() ?? "");
     args.setIsWorking(true);
-    args.setShowUrlFlowProgressOverlay(true);
+    args.setShowUrlFlowProgressOverlay(false);
     const stages = ["scanning", "finding_image", "summarizing", "writing_scripts", "server_pipeline"] as const;
     const perStage = Math.max(2000, Math.floor(LTA_TEMPLATE_RECORDING_MIN_STEP_MS / stages.length));
     for (let i = 0; i < stages.length; i++) {
@@ -222,10 +233,17 @@ export function useLtaTemplateRecording(args: UseLtaTemplateRecordingArgs) {
   }, [applyCachedStep, args]);
 
   const runStep3Loading = useCallback(async () => {
-    args.setIsNanoAllImagesSubmitting(true);
     args.setIsWorking(true);
+    args.setIsNanoPromptsLoading(true);
     await delay(LTA_TEMPLATE_RECORDING_MIN_STEP_MS);
-    applyCachedStep(3);
+    applyCachedStep(3, { step3Phase: "prompts" });
+    args.setIsNanoPromptsLoading(false);
+
+    args.setIsNanoAllImagesSubmitting(true);
+    await delay(LTA_TEMPLATE_RECORDING_MIN_STEP_MS);
+    applyCachedStep(3, { step3Phase: "full" });
+    args.setIsNanoAllImagesSubmitting(false);
+    args.setIsWorking(false);
     setFlowStage("step3_gate");
   }, [applyCachedStep, args]);
 
@@ -294,6 +312,7 @@ export function useLtaTemplateRecording(args: UseLtaTemplateRecordingArgs) {
     args.setIsWorking(false);
     args.setShowUrlFlowProgressOverlay(false);
     args.setIsNanoAllImagesSubmitting(false);
+    args.setIsNanoPromptsLoading(false);
     args.setIsVideoPromptLoading(false);
     args.setIsKlingSubmitting(false);
     args.setStage("ready");
@@ -390,26 +409,43 @@ export function useLtaTemplateRecording(args: UseLtaTemplateRecordingArgs) {
     }
   }, [applyCachedStep, flowStage]);
 
+  /** Re-run fake loading for the current gate step (re-film the transition). */
+  const retakeCurrentStepFromGate = useCallback(() => {
+    if (flowStage === "step1_gate") {
+      setFlowStage("step1_loading");
+      void runStep1Loading();
+      return;
+    }
+    if (flowStage === "step2_gate") {
+      setFlowStage("step2_loading");
+      void runStep2Loading();
+      return;
+    }
+    if (flowStage === "step3_gate") {
+      setFlowStage("step3_loading");
+      void runStep3Loading();
+      return;
+    }
+    if (flowStage === "step4_gate") {
+      setFlowStage("step4_loading");
+      void runStep4Loading();
+    }
+  }, [flowStage, runStep1Loading, runStep2Loading, runStep3Loading, runStep4Loading]);
+
   const interceptPaidAction = useCallback((): boolean => {
-    if (!templateToggleOn) return false;
-    if (flowStage === "idle" || flowStage === "finished") return false;
-    if (flowStage === "picking_brand") return true;
+    if (!isTemplateReplayActive) return false;
     toast.message("Template mode", {
       description:
         flowStage.endsWith("_gate") || flowStage.endsWith("_loading")
-          ? "Use Continue on the step dialog when you are ready to film the next step."
+          ? "Use Continue on the template bar (bottom-right) when you are ready for the next step."
           : "Template recording is in progress.",
     });
     return true;
-  }, [flowStage]);
+  }, [flowStage, isTemplateReplayActive]);
 
   const interceptOnRun = useCallback(
     async (_storeUrl: string, realOnRun: () => Promise<void>) => {
-      if (
-        templateToggleOn &&
-        flowStage !== "idle" &&
-        flowStage !== "finished"
-      ) {
+      if (isTemplateReplayActive) {
         toast.message("Template mode", {
           description: "Turn off template mode or finish the replay before running a real generation.",
         });
@@ -417,7 +453,7 @@ export function useLtaTemplateRecording(args: UseLtaTemplateRecordingArgs) {
       }
       await realOnRun();
     },
-    [flowStage, templateToggleOn],
+    [isTemplateReplayActive],
   );
 
   return {
@@ -430,6 +466,7 @@ export function useLtaTemplateRecording(args: UseLtaTemplateRecordingArgs) {
     flowStage,
     active,
     locksSelection,
+    isTemplateReplayActive,
     gateStep,
     gateLabel: gateStep ? LTA_TEMPLATE_RECORDING_STEP_LABELS[gateStep] : null,
     requestTemplateToggle,
@@ -441,6 +478,7 @@ export function useLtaTemplateRecording(args: UseLtaTemplateRecordingArgs) {
     exitTemplateMode,
     continueFromGate,
     previousFromGate,
+    retakeCurrentStepFromGate,
     interceptPaidAction,
     interceptOnRun,
     pickingBrand: flowStage === "picking_brand",

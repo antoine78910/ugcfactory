@@ -982,9 +982,26 @@ export default function AppBrandWizard() {
   const [imageGen, setImageGen] = useState<ImageGenState>({ kind: "idle" });
   const [selectedImageUrl, setSelectedImageUrl] = useState<string | null>(null);
 
-  useEffect(() => {
+  const refreshLinkToAdTemplateUrls = useCallback(async () => {
+    try {
+      const res = await fetch("/api/link-to-ad/template-brands/marked-urls", {
+        cache: "no-store",
+        credentials: "include",
+      });
+      const json = (await res.json()) as { normalizedUrls?: string[] };
+      if (res.ok && Array.isArray(json.normalizedUrls)) {
+        setLinkToAdTemplateUrls(json.normalizedUrls);
+        return;
+      }
+    } catch {
+      /* fall back to local cache */
+    }
     setLinkToAdTemplateUrls(readLinkToAdTemplates().map((t) => t.normalizedUrl));
   }, []);
+
+  useEffect(() => {
+    void refreshLinkToAdTemplateUrls();
+  }, [refreshLinkToAdTemplateUrls]);
 
   const imagePromptDisplayBlocks = useMemo(() => {
     const raw = imagePrompt.trim();
@@ -2119,67 +2136,82 @@ export default function AppBrandWizard() {
     }
   }, [projects, selectedProjectNormalizedUrl]);
 
-  const toggleLinkToAdTemplate = useCallback((project: {
-    normalizedUrl: string;
-    storeUrl: string;
-    title: string | null;
-    runs: Array<{
-      id: string;
-      selected_image_url: string | null;
-      extracted?: unknown;
-    }>;
-  }) => {
-    const normalized = project.normalizedUrl.trim();
-    if (!normalized) return;
-    const latestRun = project.runs[0];
-    if (!latestRun?.id) {
-      toast.error("No run found for this project.");
-      return;
-    }
-    const isTemplate = linkToAdTemplateUrls.includes(normalized);
-    if (isTemplate) {
-      const { rows, persisted } = removeLinkToAdTemplate(normalized);
-      setLinkToAdTemplateUrls(rows.map((t) => t.normalizedUrl));
-      void fetch("/api/link-to-ad/template-brands/sync", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ runId: latestRun.id, remove: true }),
-      }).catch(() => {});
-      if (!persisted) {
-        toast.error("Could not update templates (local storage unavailable).");
+  const toggleLinkToAdTemplate = useCallback(
+    async (project: {
+      normalizedUrl: string;
+      storeUrl: string;
+      title: string | null;
+      runs: Array<{
+        id: string;
+        selected_image_url: string | null;
+        extracted?: unknown;
+      }>;
+    }) => {
+      const normalized = project.normalizedUrl.trim().toLowerCase();
+      if (!normalized) return;
+      const latestRun = project.runs[0];
+      if (!latestRun?.id) {
+        toast.error("No run found for this project.");
         return;
       }
-      toast.success("Removed from Link to Ad templates.");
-      return;
-    }
-    const thumb =
-      universeThumbFromExtracted(latestRun.extracted) ?? latestRun.selected_image_url ?? null;
-    const { rows, persisted } = upsertLinkToAdTemplate({
-      normalizedUrl: normalized,
-      storeUrl: project.storeUrl,
-      title: project.title ?? null,
-      thumbUrl: thumb,
-      sourceRunId: latestRun.id,
-      createdAt: new Date().toISOString(),
-    });
-    setLinkToAdTemplateUrls(rows.map((t) => t.normalizedUrl));
-    void fetch("/api/link-to-ad/template-brands/sync", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        runId: latestRun.id,
+      const isTemplate = linkToAdTemplateUrls.includes(normalized);
+      if (isTemplate) {
+        try {
+          const res = await fetch("/api/link-to-ad/template-brands/sync", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            credentials: "include",
+            body: JSON.stringify({ runId: latestRun.id, remove: true }),
+          });
+          const json = (await res.json().catch(() => ({}))) as { error?: string };
+          if (!res.ok) throw new Error(json.error || "Could not remove template");
+        } catch (e) {
+          toast.error("Could not remove template", {
+            description: e instanceof Error ? e.message : "Unknown error",
+          });
+          return;
+        }
+        removeLinkToAdTemplate(normalized);
+        await refreshLinkToAdTemplateUrls();
+        toast.success("Removed from Link to Ad templates.");
+        return;
+      }
+      const thumb =
+        universeThumbFromExtracted(latestRun.extracted) ?? latestRun.selected_image_url ?? null;
+      try {
+        const res = await fetch("/api/link-to-ad/template-brands/sync", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          credentials: "include",
+          body: JSON.stringify({
+            runId: latestRun.id,
+            normalizedUrl: normalized,
+            storeUrl: project.storeUrl,
+            title: project.title ?? null,
+            thumbUrl: thumb,
+          }),
+        });
+        const json = (await res.json().catch(() => ({}))) as { error?: string };
+        if (!res.ok) throw new Error(json.error || "Could not save template");
+      } catch (e) {
+        toast.error("Could not save template", {
+          description: e instanceof Error ? e.message : "Unknown error",
+        });
+        return;
+      }
+      upsertLinkToAdTemplate({
         normalizedUrl: normalized,
         storeUrl: project.storeUrl,
         title: project.title ?? null,
         thumbUrl: thumb,
-      }),
-    }).catch(() => {});
-    if (!persisted) {
-      toast.error("Template not saved (local storage unavailable).");
-      return;
-    }
-    toast.success("Added to Link to Ad templates.");
-  }, [linkToAdTemplateUrls]);
+        sourceRunId: latestRun.id,
+        createdAt: new Date().toISOString(),
+      });
+      await refreshLinkToAdTemplateUrls();
+      toast.success("Added to Link to Ad templates (visible to everyone).");
+    },
+    [linkToAdTemplateUrls, refreshLinkToAdTemplateUrls],
+  );
 
   function resetForNewProject() {
     setStep("url");
@@ -3486,13 +3518,13 @@ export default function AppBrandWizard() {
                                 }}
                                 className={cn(
                                   "absolute right-2 top-2 z-20 inline-flex items-center gap-1 rounded-lg border px-2 py-1 text-[10px] font-semibold uppercase tracking-wide transition",
-                                  linkToAdTemplateUrls.includes(proj.normalizedUrl)
+                                  linkToAdTemplateUrls.includes(proj.normalizedUrl.trim().toLowerCase())
                                     ? "border-violet-300/55 bg-violet-500/25 text-violet-100"
                                     : "border-white/20 bg-black/55 text-white/70 hover:border-violet-400/45 hover:text-white",
                                 )}
                                 aria-label="Toggle Link to Ad template"
                                 title={
-                                  linkToAdTemplateUrls.includes(proj.normalizedUrl)
+                                  linkToAdTemplateUrls.includes(proj.normalizedUrl.trim().toLowerCase())
                                     ? "Remove from Link to Ad templates"
                                     : "Add as Link to Ad template"
                                 }
@@ -3658,12 +3690,12 @@ export default function AppBrandWizard() {
                                     variant="secondary"
                                     className={cn(
                                       "h-9 w-9 border text-white transition",
-                                      linkToAdTemplateUrls.includes(proj.normalizedUrl)
+                                      linkToAdTemplateUrls.includes(proj.normalizedUrl.trim().toLowerCase())
                                         ? "border-violet-300/55 bg-violet-500/25 hover:bg-violet-500/35"
                                         : "border-white/15 bg-black/60 text-white/80 hover:bg-black/75",
                                     )}
                                     title={
-                                      linkToAdTemplateUrls.includes(proj.normalizedUrl)
+                                      linkToAdTemplateUrls.includes(proj.normalizedUrl.trim().toLowerCase())
                                         ? "Remove from Link to Ad templates"
                                         : "Add as Link to Ad template"
                                     }
