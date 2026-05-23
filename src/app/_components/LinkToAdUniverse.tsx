@@ -599,6 +599,155 @@ function KlingVideoGenerationPlaceholder({
   );
 }
 
+function LinkToAdVideoPromptPanel({
+  className,
+  isVideoPromptLoading,
+  linkToAdTrialEconomy,
+  videoPromptIsLegacyBlob,
+  videoPromptSections,
+  videoPromptExpandedKey,
+  onToggleExpandedKey,
+  onPatchSection,
+}: {
+  className?: string;
+  isVideoPromptLoading: boolean;
+  linkToAdTrialEconomy: boolean;
+  videoPromptIsLegacyBlob: boolean;
+  videoPromptSections: VideoPromptEditableSections;
+  videoPromptExpandedKey: "legacy" | "motion" | "dialogue" | "ambience" | null;
+  onToggleExpandedKey: (key: "legacy" | "motion" | "dialogue" | "ambience" | null) => void;
+  onPatchSection: (patch: Partial<VideoPromptEditableSections>) => void;
+}) {
+  return (
+    <div
+      className={cn(
+        "rounded-xl border border-violet-500/25 bg-violet-500/[0.06] px-2.5 pb-2 pt-1",
+        className,
+      )}
+    >
+      <p className="px-1 pb-1 text-[10px] font-bold uppercase tracking-wide text-violet-300/90">
+        Video prompt
+      </p>
+      {isVideoPromptLoading ? (
+        <div className="mt-2 flex items-center gap-2 text-xs text-violet-200">
+          <Loader2 className="h-4 w-4 shrink-0 animate-spin text-violet-300" aria-hidden />
+          <span>{LINK_TO_AD_LOADING_MESSAGES.video_prompt}</span>
+        </div>
+      ) : linkToAdTrialEconomy ? (
+        videoPromptIsLegacyBlob ? (
+          <LtaTrialPromptPeek
+            className="mt-1"
+            sections={[{ label: "Prompt", body: videoPromptSections.motion }]}
+          />
+        ) : (
+          <LtaTrialPromptPeek
+            className="mt-1"
+            sections={[
+              { label: "Motion", body: videoPromptSections.motion },
+              { label: "Dialogue", body: videoPromptSections.dialogue },
+              { label: "Ambience", body: videoPromptSections.ambience },
+            ]}
+          />
+        )
+      ) : videoPromptIsLegacyBlob ? (
+        <div className="space-y-2">
+          <p className="px-1 text-[9px] font-semibold uppercase tracking-wide text-amber-200/75">
+            Older prompt, regenerate the video prompt for Motion / Dialogue / Ambience
+          </p>
+          <div className="flex min-w-0 items-start gap-2">
+            <button
+              type="button"
+              onClick={() => onToggleExpandedKey(videoPromptExpandedKey === "legacy" ? null : "legacy")}
+              className="w-[4.75rem] shrink-0 pt-0.5 text-left text-[10px] font-semibold uppercase tracking-wide text-white/40 transition hover:text-white/60"
+            >
+              Prompt
+            </button>
+            <div className="min-w-0 flex-1">
+              {videoPromptExpandedKey !== "legacy" ? (
+                <button
+                  type="button"
+                  onClick={() => onToggleExpandedKey("legacy")}
+                  className="w-full rounded-md px-1 py-0.5 text-left transition hover:bg-white/[0.03]"
+                >
+                  <p className="line-clamp-3 whitespace-pre-wrap text-[11px] leading-snug text-white/60">
+                    {videoPromptSections.motion.trim() || "Tap to edit…"}
+                  </p>
+                </button>
+              ) : (
+                <Textarea
+                  value={videoPromptSections.motion}
+                  onChange={(e) => onPatchSection({ motion: e.target.value })}
+                  rows={Math.max(3, Math.min(12, videoPromptSections.motion.split("\n").length + 2))}
+                  spellCheck
+                  onKeyDown={(e) => {
+                    if (e.key === "Escape") {
+                      e.preventDefault();
+                      onToggleExpandedKey(null);
+                    }
+                  }}
+                  className="min-h-[4.5rem] w-full resize-y border-0 border-b border-white/[0.07] bg-transparent px-1 py-0.5 text-[11px] leading-snug text-white/80 shadow-none outline-none ring-0 focus-visible:border-violet-400/30 focus-visible:ring-0"
+                />
+              )}
+            </div>
+          </div>
+        </div>
+      ) : (
+        <div className="mt-1.5 space-y-2.5 pb-0.5">
+          {(
+            [
+              { key: "motion" as const, label: "Motion" },
+              { key: "dialogue" as const, label: "Dialogue" },
+              { key: "ambience" as const, label: "Ambience" },
+            ] as const
+          ).map(({ key, label }) => {
+            const value = videoPromptSections[key];
+            const expanded = videoPromptExpandedKey === key;
+            const display = value.trim();
+            return (
+              <div key={key} className="flex min-w-0 items-start gap-2">
+                <button
+                  type="button"
+                  onClick={() => onToggleExpandedKey(expanded ? null : key)}
+                  className="w-[4.75rem] shrink-0 pt-0.5 text-left text-[10px] font-semibold uppercase tracking-wide text-white/40 transition hover:text-white/60"
+                >
+                  {label}
+                </button>
+                <div className="min-w-0 flex-1">
+                  {!expanded ? (
+                    <button
+                      type="button"
+                      onClick={() => onToggleExpandedKey(key)}
+                      className="w-full rounded-md px-1 py-0.5 text-left transition hover:bg-white/[0.03]"
+                    >
+                      <p className="line-clamp-3 whitespace-pre-wrap text-[11px] leading-snug text-white/60">
+                        {display || "Tap to edit…"}
+                      </p>
+                    </button>
+                  ) : (
+                    <Textarea
+                      value={value}
+                      onChange={(e) => onPatchSection({ [key]: e.target.value })}
+                      rows={Math.max(3, Math.min(12, value.split("\n").length + 2))}
+                      spellCheck
+                      onKeyDown={(e) => {
+                        if (e.key === "Escape") {
+                          e.preventDefault();
+                          onToggleExpandedKey(null);
+                        }
+                      }}
+                      className="min-h-[4.5rem] w-full resize-y border-0 border-b border-white/[0.07] bg-transparent px-1 py-0.5 text-[11px] leading-snug text-white/80 shadow-none outline-none ring-0 focus-visible:border-violet-400/30 focus-visible:ring-0"
+                    />
+                  )}
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      )}
+    </div>
+  );
+}
+
 /** Retries transient failures during long NanoBanana runs (browser often surfaces these as "fetch failed"). */
 async function fetchWithRetry(
   input: string,
@@ -9014,135 +9163,18 @@ export default function LinkToAdUniverse({
                   <div className="flex min-w-0 flex-1 flex-col gap-6">
                     {showVideoWorkPanel ? (
                     <>
-                      {(mergedVideoPromptDraft.trim() || ugcVideoPromptGpt.trim()) && !showKlingVideoGeneratingUi ? (
-                        <div className="rounded-xl border border-violet-500/25 bg-violet-500/[0.06] px-2.5 pb-2 pt-1">
-                          <p className="px-1 pb-1 text-[10px] font-bold uppercase tracking-wide text-violet-300/90">
-                            Video prompt
-                          </p>
-                          {isVideoPromptLoading ? (
-                            <div className="mt-2 flex items-center gap-2 text-xs text-violet-200">
-                              <Loader2 className="h-4 w-4 shrink-0 animate-spin text-violet-300" aria-hidden />
-                              <span>{LINK_TO_AD_LOADING_MESSAGES.video_prompt}</span>
-                            </div>
-                          ) : linkToAdTrialEconomy ? (
-                            videoPromptIsLegacyBlob ? (
-                              <LtaTrialPromptPeek
-                                className="mt-1"
-                                sections={[{ label: "Prompt", body: videoPromptSections.motion }]}
-                              />
-                            ) : (
-                              <LtaTrialPromptPeek
-                                className="mt-1"
-                                sections={[
-                                  { label: "Motion", body: videoPromptSections.motion },
-                                  { label: "Dialogue", body: videoPromptSections.dialogue },
-                                  { label: "Ambience", body: videoPromptSections.ambience },
-                                ]}
-                              />
-                            )
-                          ) : videoPromptIsLegacyBlob ? (
-                            <div className="space-y-2">
-                              <p className="px-1 text-[9px] font-semibold uppercase tracking-wide text-amber-200/75">
-                                Older prompt, regenerate the video prompt for Motion / Dialogue / Ambience
-                              </p>
-                              <div className="flex min-w-0 items-start gap-2">
-                                <button
-                                  type="button"
-                                  onClick={() =>
-                                    setVideoPromptExpandedKey((k) => (k === "legacy" ? null : "legacy"))
-                                  }
-                                  className="w-[4.75rem] shrink-0 pt-0.5 text-left text-[10px] font-semibold uppercase tracking-wide text-white/40 transition hover:text-white/60"
-                                >
-                                  Prompt
-                                </button>
-                                <div className="min-w-0 flex-1">
-                                  {videoPromptExpandedKey !== "legacy" ? (
-                                    <button
-                                      type="button"
-                                      onClick={() => setVideoPromptExpandedKey("legacy")}
-                                      className="w-full rounded-md px-1 py-0.5 text-left transition hover:bg-white/[0.03]"
-                                    >
-                                      <p className="line-clamp-3 whitespace-pre-wrap text-[11px] leading-snug text-white/60">
-                                        {videoPromptSections.motion.trim() || "Tap to edit…"}
-                                      </p>
-                                    </button>
-                                  ) : (
-                                    <Textarea
-                                      value={videoPromptSections.motion}
-                                      onChange={(e) => patchVideoPromptSection({ motion: e.target.value })}
-                                      rows={Math.max(
-                                        3,
-                                        Math.min(12, videoPromptSections.motion.split("\n").length + 2),
-                                      )}
-                                      spellCheck
-                                      onKeyDown={(e) => {
-                                        if (e.key === "Escape") {
-                                          e.preventDefault();
-                                          setVideoPromptExpandedKey(null);
-                                        }
-                                      }}
-                                      className="min-h-[4.5rem] w-full resize-y border-0 border-b border-white/[0.07] bg-transparent px-1 py-0.5 text-[11px] leading-snug text-white/80 shadow-none outline-none ring-0 focus-visible:border-violet-400/30 focus-visible:ring-0"
-                                    />
-                                  )}
-                                </div>
-                              </div>
-                            </div>
-                          ) : (
-                            <div className="mt-1.5 space-y-2.5 pb-0.5">
-                              {(
-                                [
-                                  { key: "motion" as const, label: "Motion" },
-                                  { key: "dialogue" as const, label: "Dialogue" },
-                                  { key: "ambience" as const, label: "Ambience" },
-                                ] as const
-                              ).map(({ key, label }) => {
-                                const value = videoPromptSections[key];
-                                const expanded = videoPromptExpandedKey === key;
-                                const display = value.trim();
-                                return (
-                                  <div key={key} className="flex min-w-0 items-start gap-2">
-                                    <button
-                                      type="button"
-                                      onClick={() =>
-                                        setVideoPromptExpandedKey((k) => (k === key ? null : key))
-                                      }
-                                      className="w-[4.75rem] shrink-0 pt-0.5 text-left text-[10px] font-semibold uppercase tracking-wide text-white/40 transition hover:text-white/60"
-                                    >
-                                      {label}
-                                    </button>
-                                    <div className="min-w-0 flex-1">
-                                      {!expanded ? (
-                                        <button
-                                          type="button"
-                                          onClick={() => setVideoPromptExpandedKey(key)}
-                                          className="w-full rounded-md px-1 py-0.5 text-left transition hover:bg-white/[0.03]"
-                                        >
-                                          <p className="line-clamp-3 whitespace-pre-wrap text-[11px] leading-snug text-white/60">
-                                            {display || "Tap to edit…"}
-                                          </p>
-                                        </button>
-                                      ) : (
-                                        <Textarea
-                                          value={value}
-                                          onChange={(e) => patchVideoPromptSection({ [key]: e.target.value })}
-                                          rows={Math.max(3, Math.min(12, value.split("\n").length + 2))}
-                                          spellCheck
-                                          onKeyDown={(e) => {
-                                            if (e.key === "Escape") {
-                                              e.preventDefault();
-                                              setVideoPromptExpandedKey(null);
-                                            }
-                                          }}
-                                          className="min-h-[4.5rem] w-full resize-y border-0 border-b border-white/[0.07] bg-transparent px-1 py-0.5 text-[11px] leading-snug text-white/80 shadow-none outline-none ring-0 focus-visible:border-violet-400/30 focus-visible:ring-0"
-                                        />
-                                      )}
-                                    </div>
-                                  </div>
-                                );
-                              })}
-                            </div>
-                          )}
-                        </div>
+                      {(mergedVideoPromptDraft.trim() || ugcVideoPromptGpt.trim()) &&
+                      !showKlingVideoGeneratingUi &&
+                      !klingVideoUrl ? (
+                        <LinkToAdVideoPromptPanel
+                          isVideoPromptLoading={isVideoPromptLoading}
+                          linkToAdTrialEconomy={linkToAdTrialEconomy}
+                          videoPromptIsLegacyBlob={videoPromptIsLegacyBlob}
+                          videoPromptSections={videoPromptSections}
+                          videoPromptExpandedKey={videoPromptExpandedKey}
+                          onToggleExpandedKey={setVideoPromptExpandedKey}
+                          onPatchSection={patchVideoPromptSection}
+                        />
                       ) : null}
                       <div className="rounded-xl border border-white/10 bg-black/20 p-4">
                         {isVideoPromptLoading &&
@@ -9324,6 +9356,19 @@ export default function LinkToAdUniverse({
                                   </Button>
                                 )}
                               </div>
+                              {(mergedVideoPromptDraft.trim() || ugcVideoPromptGpt.trim()) &&
+                              !showKlingVideoGeneratingUi ? (
+                                <LinkToAdVideoPromptPanel
+                                  className={cn(LTA_KLING_VIDEO_STAGE_CLASS, "w-full")}
+                                  isVideoPromptLoading={isVideoPromptLoading}
+                                  linkToAdTrialEconomy={linkToAdTrialEconomy}
+                                  videoPromptIsLegacyBlob={videoPromptIsLegacyBlob}
+                                  videoPromptSections={videoPromptSections}
+                                  videoPromptExpandedKey={videoPromptExpandedKey}
+                                  onToggleExpandedKey={setVideoPromptExpandedKey}
+                                  onPatchSection={patchVideoPromptSection}
+                                />
+                              ) : null}
                             </div>
                             {klingHistory.length > 0 &&
                             (nanoBananaSelectedImageIndex === 0 ||
