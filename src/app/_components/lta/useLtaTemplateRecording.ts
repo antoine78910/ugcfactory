@@ -58,7 +58,6 @@ export type UseLtaTemplateRecordingArgs = {
       | "ready"
       | "error",
   ) => void;
-  setShowUrlFlowProgressOverlay: (v: boolean) => void;
   setServerPipelineStepIndex: (v: number | null) => void;
   setIsNanoAllImagesSubmitting: (v: boolean) => void;
   setIsNanoPromptsLoading: (v: boolean) => void;
@@ -113,9 +112,6 @@ export function useLtaTemplateRecording(args: UseLtaTemplateRecordingArgs) {
 
   /** True while Link to Ad template replay is active (not normal LTA generation). */
   const isTemplateReplayActive = templateToggleOn && templateFlowInProgress;
-
-  /** Block the full-screen “Creating product” modal during template mode (toggle on). */
-  const suppressUrlFlowProgressOverlay = templateToggleOn;
 
   const locksSelection = isTemplateReplayActive;
   const active =
@@ -201,7 +197,6 @@ export function useLtaTemplateRecording(args: UseLtaTemplateRecordingArgs) {
       args.onAfterTemplateHydrate?.(extracted, run);
       args.setStage("ready");
       args.setIsWorking(false);
-      args.setShowUrlFlowProgressOverlay(false);
       args.setServerPipelineStepIndex(null);
       args.setIsNanoAllImagesSubmitting(false);
       args.setIsNanoPromptsLoading(false);
@@ -215,7 +210,6 @@ export function useLtaTemplateRecording(args: UseLtaTemplateRecordingArgs) {
     args.prepareBlankCanvas();
     args.setStoreUrl(runCacheRef.current?.store_url?.trim() ?? "");
     args.setIsWorking(true);
-    args.setShowUrlFlowProgressOverlay(false);
     const stages = ["scanning", "finding_image", "summarizing", "writing_scripts", "server_pipeline"] as const;
     const perStage = Math.max(2000, Math.floor(LTA_TEMPLATE_RECORDING_MIN_STEP_MS / stages.length));
     for (let i = 0; i < stages.length; i++) {
@@ -283,7 +277,6 @@ export function useLtaTemplateRecording(args: UseLtaTemplateRecordingArgs) {
         setFlowStage("idle");
         runCacheRef.current = null;
         args.setIsWorking(false);
-        args.setShowUrlFlowProgressOverlay(false);
         toast.error("Template failed to start", {
           description: e instanceof Error ? e.message : "Unknown error",
         });
@@ -314,7 +307,6 @@ export function useLtaTemplateRecording(args: UseLtaTemplateRecordingArgs) {
     setShowStartConfirm(false);
     setShowExitConfirm(false);
     args.setIsWorking(false);
-    args.setShowUrlFlowProgressOverlay(false);
     args.setIsNanoAllImagesSubmitting(false);
     args.setIsNanoPromptsLoading(false);
     args.setIsVideoPromptLoading(false);
@@ -470,7 +462,6 @@ export function useLtaTemplateRecording(args: UseLtaTemplateRecordingArgs) {
     active,
     locksSelection,
     isTemplateReplayActive,
-    suppressUrlFlowProgressOverlay,
     gateStep,
     gateLabel: gateStep ? LTA_TEMPLATE_RECORDING_STEP_LABELS[gateStep] : null,
     requestTemplateToggle,

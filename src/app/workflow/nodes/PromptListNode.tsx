@@ -93,8 +93,8 @@ const PromptListMediaGalleryCell = memo(function PromptListMediaGalleryCell({
   const pending = isPendingMediaToken(url);
   const errorToken = parseWorkflowErrorMediaToken(url);
   const isErrorToken = Boolean(errorToken);
-  const fetchPriority = slotIndex < 9 ? ("high" as const) : ("low" as const);
   const [videoDurationLabel, setVideoDurationLabel] = useState<string>("");
+  const videoRef = useRef<HTMLVideoElement | null>(null);
 
   useEffect(() => {
     if (pending || isErrorToken) return;
@@ -160,13 +160,15 @@ const PromptListMediaGalleryCell = memo(function PromptListMediaGalleryCell({
         </div>
       ) : isProbablyVideoUrl(url) ? (
         <video
+          ref={videoRef}
           src={renderUrl}
           className="h-full w-full min-h-0 object-cover transition group-hover:scale-[1.02]"
           muted
           loop
-          autoPlay
           playsInline
-          preload="metadata"
+          preload="none"
+          onMouseEnter={() => { void videoRef.current?.play(); }}
+          onMouseLeave={() => { videoRef.current?.pause(); }}
           onLoadedMetadata={(e) => {
             const d = e.currentTarget.duration;
             if (!Number.isFinite(d) || d <= 0) {
@@ -181,9 +183,8 @@ const PromptListMediaGalleryCell = memo(function PromptListMediaGalleryCell({
         <img
           src={renderUrl}
           alt=""
-          loading="eager"
+          loading="lazy"
           decoding="async"
-          fetchPriority={fetchPriority}
           className="h-full w-full min-h-0 object-cover transition group-hover:scale-[1.02]"
         />
       )}
@@ -265,6 +266,7 @@ function PromptListNodeBase({ id, data: rawData, selected }: NodeProps<PromptLis
   const [editorOpen, setEditorOpen] = useState(false);
   const [editingIndex, setEditingIndex] = useState<number | null>(null);
   const [previewMediaUrl, setPreviewMediaUrl] = useState<string | null>(null);
+  const [showAllGallery, setShowAllGallery] = useState(false);
   const [previewTextItem, setPreviewTextItem] = useState<string | null>(null);
   const [titleEditing, setTitleEditing] = useState(false);
   const [titleDraft, setTitleDraft] = useState(data.label || "List");
@@ -539,7 +541,7 @@ function PromptListNodeBase({ id, data: rawData, selected }: NodeProps<PromptLis
           <>
             <div className="p-2.5">
               <div className="grid grid-cols-3 gap-2">
-                {nonEmptyLines.map((u, i) => (
+                {(showAllGallery ? nonEmptyLines : nonEmptyLines.slice(0, 12)).map((u, i) => (
                   <PromptListMediaGalleryCell
                     key={`media-slot-${i}`}
                     listNodeId={id}
@@ -550,6 +552,24 @@ function PromptListNodeBase({ id, data: rawData, selected }: NodeProps<PromptLis
                   />
                 ))}
               </div>
+              {nonEmptyLines.length > 12 && !showAllGallery && (
+                <button
+                  type="button"
+                  className="nodrag nopan mt-2 w-full rounded-md border border-white/10 bg-white/[0.04] py-1.5 text-[11px] text-white/55 hover:bg-white/[0.08] hover:text-white/80"
+                  onClick={() => setShowAllGallery(true)}
+                >
+                  Show {nonEmptyLines.length - 12} more…
+                </button>
+              )}
+              {nonEmptyLines.length > 12 && showAllGallery && (
+                <button
+                  type="button"
+                  className="nodrag nopan mt-2 w-full rounded-md border border-white/10 bg-white/[0.04] py-1.5 text-[11px] text-white/55 hover:bg-white/[0.08] hover:text-white/80"
+                  onClick={() => setShowAllGallery(false)}
+                >
+                  Show less
+                </button>
+              )}
             </div>
             <div className="flex items-center justify-end border-t border-white/[0.08] px-2.5 py-2 text-[10px] text-white/55">
               <span>{nonEmptyLines.length} media</span>

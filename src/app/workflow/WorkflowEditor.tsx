@@ -4594,6 +4594,7 @@ function WorkflowFlowWorkspace({
           colorMode="dark"
           fitView={false}
           minZoom={0.05}
+          onlyRenderVisibleElements
           panOnDrag={readOnly ? true : tool === "pan"}
           selectionOnDrag={readOnly ? false : tool === "select"}
           selectionMode={SelectionMode.Partial}

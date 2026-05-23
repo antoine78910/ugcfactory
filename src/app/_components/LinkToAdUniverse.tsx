@@ -80,7 +80,6 @@ import { StudioBillingDialog } from "@/app/_components/StudioBillingDialog";
 import { LinkToAdUniverseStepper } from "@/app/_components/LinkToAdUniverseStepper";
 import { LINK_TO_AD_APP_OPTION_AVAILABLE, LinkToAdAssetTypeSwitch } from "@/app/_components/LinkToAdAssetTypeSwitch";
 import { LinkToAdProductSetupDialog } from "@/app/_components/LinkToAdProductSetupDialog";
-import { LinkToAdUrlFlowProgressOverlay } from "@/app/_components/LinkToAdUrlFlowProgressOverlay";
 import { WebsiteScanChecklist } from "@/app/_components/WebsiteScanChecklist";
 import { WebsiteScanLoader } from "@/app/_components/WebsiteScanLoader";
 import { TextShimmer } from "@/components/ui/text-shimmer";
@@ -1661,7 +1660,6 @@ export default function LinkToAdUniverse({
   /** Session-only display name override (shown in the brand header until you switch runs or reset). */
   const [userOverrideProductTitle, setUserOverrideProductTitle] = useState<string | null>(null);
   const [productSetupDialogOpen, setProductSetupDialogOpen] = useState(false);
-  const [showUrlFlowProgressOverlay, setShowUrlFlowProgressOverlay] = useState(false);
   const [ltaAppScreenshotPreferred, setLtaAppScreenshotPreferred] = useState<"desktop" | "mobile">("desktop");
   const ltaAppScreenshotPreferredRef = useRef(ltaAppScreenshotPreferred);
   useEffect(() => {
@@ -2189,7 +2187,6 @@ export default function LinkToAdUniverse({
     setLinkToAdAssetType("product");
     setUserOverrideProductTitle(null);
     setProductSetupDialogOpen(false);
-    setShowUrlFlowProgressOverlay(false);
     setLtaAppScreenshotPreferred("desktop");
     setCustomUgcTopic("");
     setCustomUgcOffer("");
@@ -3286,7 +3283,6 @@ export default function LinkToAdUniverse({
     hydrateVideoPromptFromStored("");
     setKlingByRef(createEmptyKlingByReference());
     setPipelineByAngle([emptyAnglePipeline(), emptyAnglePipeline(), emptyAnglePipeline()]);
-    setShowUrlFlowProgressOverlay(false);
     setIsNanoAllImagesSubmitting(false);
     setIsNanoPromptsLoading(false);
     setIsVideoPromptLoading(false);
@@ -3345,7 +3341,6 @@ export default function LinkToAdUniverse({
     setStoreUrl,
     setIsWorking,
     setStage,
-    setShowUrlFlowProgressOverlay,
     setServerPipelineStepIndex,
     setIsNanoAllImagesSubmitting,
     setIsNanoPromptsLoading,
@@ -3369,15 +3364,6 @@ export default function LinkToAdUniverse({
       setLtaFrozenCredits(null);
     }
   }, [templateRecording.isTemplateReplayActive]);
-
-  useEffect(() => {
-    if (templateRecording.suppressUrlFlowProgressOverlay) {
-      setShowUrlFlowProgressOverlay(false);
-    }
-  }, [
-    templateRecording.suppressUrlFlowProgressOverlay,
-    templateRecording.flowStage,
-  ]);
 
   useEffect(() => {
     if (!resumeRunId) {
@@ -4187,7 +4173,6 @@ export default function LinkToAdUniverse({
       bypass_saved: opts?.bypassSavedProject ? "1" : "0",
       generation_mode: generationMode,
     });
-    setShowUrlFlowProgressOverlay(false);
     const epochAtStart = linkToAdFlowEpochRef.current;
     const runningToken = `${Date.now()}-${Math.random().toString(36).slice(2, 10)}`;
     activeRunTokenRef.current = runningToken;
@@ -4219,12 +4204,10 @@ export default function LinkToAdUniverse({
             if (linkToAdFlowEpochRef.current !== epochAtStart) {
               setIsWorking(false);
               setLtaVideoDurationLocked(false);
-              setShowUrlFlowProgressOverlay(false);
               return;
             }
             setStage("ready");
             setIsWorking(false);
-            setShowUrlFlowProgressOverlay(false);
             return;
           }
         }
@@ -4246,9 +4229,6 @@ export default function LinkToAdUniverse({
     }
     lastLtaUrlGenerateChargeRef.current = initialCharge;
     chargedFullBundle = true;
-    if (!templateRecording.suppressUrlFlowProgressOverlay) {
-      setShowUrlFlowProgressOverlay(true);
-    }
 
     const pipelineProductUrls = [...productOnlyImageUrls];
     const pipelinePersonaUrls = [...personaPhotoUrls];
@@ -4293,7 +4273,6 @@ export default function LinkToAdUniverse({
         setLtaVideoDurationLocked(false);
         removeRunningLinkToAdProject(runningToken);
         if (activeRunTokenRef.current === runningToken) activeRunTokenRef.current = null;
-        setShowUrlFlowProgressOverlay(false);
         chargedFullBundle = false;
         toast.error("Could not capture app preview", { description: msg });
         return;
@@ -4435,7 +4414,6 @@ export default function LinkToAdUniverse({
     } finally {
       setServerPipelineStepIndex(null);
       setIsWorking(false);
-      setShowUrlFlowProgressOverlay(false);
       removeRunningLinkToAdProject(runningToken);
       if (activeRunTokenRef.current === runningToken) activeRunTokenRef.current = null;
     }
@@ -9734,14 +9712,6 @@ export default function LinkToAdUniverse({
         </button>
       </div>
     ) : null}
-    <LinkToAdUrlFlowProgressOverlay
-      open={
-        showUrlFlowProgressOverlay && !templateRecording.suppressUrlFlowProgressOverlay
-      }
-      assetKind={linkToAdAssetType === "app" ? "app" : "product"}
-      stage={stage}
-      serverPipelineStepIndex={serverPipelineStepIndex}
-    />
     <LinkToAdTemplateRecordingButton recording={templateRecording} />
     <LinkToAdTemplateRecordingStartConfirm recording={templateRecording} />
     <LinkToAdTemplateRecordingExitConfirm recording={templateRecording} />
