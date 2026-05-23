@@ -118,6 +118,12 @@ import type { InternalFetch } from "@/lib/linkToAd/internalFetch";
 import { runInitialPipeline } from "@/lib/linkToAd/runInitialPipeline";
 import { proxiedMediaSrc } from "@/lib/mediaProxyUrl";
 import { loadAvatarUrls } from "@/lib/avatarLibrary";
+import { useLtaTemplateRecording } from "@/app/_components/lta/useLtaTemplateRecording";
+import {
+  LinkToAdTemplateBrandPicker,
+  LinkToAdTemplateRecordingButton,
+  LinkToAdTemplateRecordingGate,
+} from "@/app/_components/lta/LinkToAdTemplateRecordingUi";
 import { AvatarPickerDialog } from "@/app/_components/AvatarPickerDialog";
 import { clipboardImageFiles } from "@/lib/clipboardImage";
 import { uploadFileToCdn } from "@/lib/uploadBlobUrlToCdn";
@@ -1150,6 +1156,7 @@ function PersonaPhotoSection({
   pendingPersonaUploads,
   isUploading,
   isWorking,
+  selectionLocked,
   onUploadClick,
   onAvatarPickerOpen,
   avatarUrlsCount,
@@ -1159,11 +1166,13 @@ function PersonaPhotoSection({
   pendingPersonaUploads: { id: string; blob: string }[];
   isUploading: boolean;
   isWorking: boolean;
+  selectionLocked?: boolean;
   onUploadClick: () => void;
   onAvatarPickerOpen: () => void;
   avatarUrlsCount: number;
   onRemove: (url: string) => void;
 }) {
+  const personaDisabled = isWorking || isUploading || Boolean(selectionLocked);
   return (
     <div className="mt-3 space-y-2">
       <div className="flex flex-wrap items-center justify-between gap-2">
@@ -1171,13 +1180,13 @@ function PersonaPhotoSection({
           <User className="h-3 w-3" />
           Persona / Avatar
           <span className="rounded bg-white/5 px-1.5 py-0.5 text-[9px] font-medium normal-case tracking-normal text-white/30">
-            Optional
+            {selectionLocked ? "Locked (template)" : "Optional"}
           </span>
         </span>
         <div className="flex flex-wrap items-center gap-2">
           <button
             type="button"
-            disabled={isWorking || isUploading}
+            disabled={personaDisabled}
             className="flex items-center gap-1 rounded-md bg-white/5 px-2 py-1 text-[10px] font-medium text-white/60 transition hover:bg-white/10 hover:text-white/80 disabled:opacity-50"
             onClick={onUploadClick}
           >
@@ -1186,7 +1195,7 @@ function PersonaPhotoSection({
           </button>
           <button
             type="button"
-            disabled={isWorking || isUploading}
+            disabled={personaDisabled}
             className="rounded-md bg-white/5 px-2 py-1 text-[10px] font-medium text-white/60 transition hover:bg-white/10 hover:text-white/80 disabled:opacity-50"
             onClick={onAvatarPickerOpen}
             title={avatarUrlsCount === 0 ? "Studio → Avatar: generate an avatar first" : undefined}
@@ -1221,8 +1230,9 @@ function PersonaPhotoSection({
               </div>
               <button
                 type="button"
+                disabled={personaDisabled}
                 onClick={() => onRemove(url)}
-                className="absolute -right-1 -top-1 z-10 flex h-5 w-5 items-center justify-center rounded-full border border-white/20 bg-black/85 text-white/70 opacity-0 shadow-[0_2px_8px_rgba(0,0,0,0.45)] transition hover:text-red-400 group-hover/persona:opacity-100"
+                className="absolute -right-1 -top-1 z-10 flex h-5 w-5 items-center justify-center rounded-full border border-white/20 bg-black/85 text-white/70 opacity-0 shadow-[0_2px_8px_rgba(0,0,0,0.45)] transition hover:text-red-400 group-hover/persona:opacity-100 disabled:pointer-events-none"
                 aria-label="Remove"
               >
                 <X className="h-3 w-3" />
@@ -1231,7 +1241,7 @@ function PersonaPhotoSection({
           ))}
           <button
             type="button"
-            disabled={isWorking || isUploading}
+            disabled={personaDisabled}
             onClick={onUploadClick}
             className="flex h-14 w-14 shrink-0 items-center justify-center rounded-full border-2 border-dashed border-white/15 bg-white/[0.02] text-white/30 transition hover:border-violet-400/40 hover:text-violet-300 disabled:opacity-50"
             aria-label="Add persona photo"
@@ -1242,7 +1252,7 @@ function PersonaPhotoSection({
       ) : (
         <button
           type="button"
-          disabled={isWorking || isUploading}
+          disabled={personaDisabled}
           onClick={onUploadClick}
           className="flex w-full items-center justify-center gap-2 rounded-xl border border-dashed border-white/10 bg-white/[0.02] px-4 py-3 text-xs text-white/35 transition hover:border-violet-400/30 hover:text-white/50 disabled:opacity-50"
         >
@@ -1348,6 +1358,8 @@ export default function LinkToAdUniverse({
   const [ltaFrozenCredits, setLtaFrozenCredits] = useState<number | null>(null);
   const creditsBalanceRef = useRef(creditsBalance);
   creditsBalanceRef.current = creditsBalance;
+  /** Template screen-recording mode: skip credit charges while replaying a saved brand. */
+  const ltaTemplateLocksRef = useRef(false);
   /** When true, we already charged the three-image batch price once for regenerating the Nano references. */
   const [ltaPrepaidThreeImagesRegen, setLtaPrepaidThreeImagesRegen] = useState(false);
   /** Previous images kept “warm” on the left when regenerating angles without recreating visuals. */
@@ -1383,6 +1395,7 @@ export default function LinkToAdUniverse({
   /** Deduct from wallet once on URL Generate; keep ref/frozen in sync with that charge. */
   const spendLtaCreditsIfEnough = useCallback(
     (cost: number, opts?: { presentation?: "studio_billing" }): boolean => {
+      if (ltaTemplateLocksRef.current) return true;
       if (!hasLtaCreditsFor(cost, opts)) return false;
       if (isPlatformCreditBypassActive()) return true;
       const k = Math.max(0, Math.floor(cost));
@@ -3105,6 +3118,52 @@ export default function LinkToAdUniverse({
     [],
   );
 
+  const prepareBlankCanvasForTemplate = useCallback(() => {
+    linkToAdFlowEpochRef.current += 1;
+    cancelCurrentGeneration({ silent: true });
+    setIsWorking(false);
+    setStage("idle");
+    setServerPipelineStepIndex(null);
+    setSummaryText("");
+    setScriptsText("");
+    setSelectedAngleIndex(null);
+    setAngleLabels(["", "", ""]);
+    setUniverseRunId(null);
+    setLastExtractedJson(null);
+    setExtractedTitle(null);
+    setCleanCandidate(null);
+    setFallbackImageUrl(null);
+    setProductOnlyImageUrls([]);
+    setPersonaPhotoUrls([]);
+    setNanoBananaImageUrls([]);
+    setNanoBananaImageUrl(null);
+    setUgcVideoPromptGpt("");
+    hydrateVideoPromptFromStored("");
+    setKlingByRef(createEmptyKlingByReference());
+    setPipelineByAngle([emptyAnglePipeline(), emptyAnglePipeline(), emptyAnglePipeline()]);
+    setShowUrlFlowProgressOverlay(false);
+    setIsNanoAllImagesSubmitting(false);
+    setIsVideoPromptLoading(false);
+    setIsKlingSubmitting(false);
+  }, [cancelCurrentGeneration, hydrateVideoPromptFromStored]);
+
+  const templateRecording = useLtaTemplateRecording({
+    hydrateFromRun,
+    prepareBlankCanvas: prepareBlankCanvasForTemplate,
+    setStoreUrl,
+    setIsWorking,
+    setStage,
+    setShowUrlFlowProgressOverlay,
+    setServerPipelineStepIndex,
+    setIsNanoAllImagesSubmitting,
+    setIsVideoPromptLoading,
+    setIsKlingSubmitting,
+  });
+
+  useEffect(() => {
+    ltaTemplateLocksRef.current = templateRecording.locksSelection;
+  }, [templateRecording.locksSelection]);
+
   useEffect(() => {
     if (!resumeRunId) {
       setIsResumeHydrating(false);
@@ -3325,6 +3384,10 @@ export default function LinkToAdUniverse({
   }, []);
 
   function addAvatarAsPersonaPhoto(avatarUrl: string) {
+    if (templateRecording.locksSelection) {
+      toast.message("Persona locked", { description: "Template recording uses the saved avatar." });
+      return;
+    }
     const u = avatarUrl.trim();
     if (!u) return;
     setPersonaPhotoUrls((prev) => (prev.includes(u) ? prev : [...prev, u]));
@@ -3494,6 +3557,10 @@ export default function LinkToAdUniverse({
     index: number,
     opts?: { scriptsText?: string; angleLabels?: string[] },
   ) {
+    if (templateRecording.locksSelection) {
+      toast.message("Angle locked", { description: "Template recording uses the pre-selected angle." });
+      return;
+    }
     const url = storeUrl.trim();
     if (!url || !lastExtractedJson) return;
 
@@ -3895,6 +3962,7 @@ export default function LinkToAdUniverse({
   }
 
   async function onRun(opts?: { bypassSavedProject?: boolean }) {
+    if (templateRecording.interceptPaidAction()) return;
     const url = storeUrl.trim();
     if (!url) {
       toast.error("Missing URL");
@@ -4160,6 +4228,7 @@ export default function LinkToAdUniverse({
     angleIdx?: number | null,
     opts?: { keepThreeImagesSubmitting?: boolean },
   ): Promise<string | null> {
+    if (templateRecording.interceptPaidAction()) return null;
     const url = storeUrl.trim();
     const idx = angleIdx !== undefined && angleIdx !== null ? angleIdx : selectedAngleIndex;
     const selectedScript = selectedScriptOptionByIndex(scriptsText, idx);
@@ -4270,6 +4339,7 @@ export default function LinkToAdUniverse({
   }
 
   async function onGenerateNanoBananaImage() {
+    if (templateRecording.interceptPaidAction()) return;
     const url = storeUrl.trim();
     const idx = selectedAngleIndex === 0 || selectedAngleIndex === 1 || selectedAngleIndex === 2 ? selectedAngleIndex : 0;
     const productRefs = resolveNanoProductImageUrls();
@@ -4795,6 +4865,7 @@ export default function LinkToAdUniverse({
   }
 
   async function onGenerateNanoBananaImagesFromAllPrompts(opts?: { forceRegenerateCharge?: boolean }) {
+    if (templateRecording.interceptPaidAction()) return;
     const url = storeUrl.trim();
     const idx = selectedAngleIndex;
     // Beacon to server logs: lets us trace whether the click reached the handler and which exit path it took.
@@ -5338,6 +5409,7 @@ export default function LinkToAdUniverse({
   }, [nanoPollTaskId]);
 
   async function onGenerateUgcVideoPrompt(): Promise<string | null> {
+    if (templateRecording.interceptPaidAction()) return null;
     const url = storeUrl.trim();
     const script = selectedScriptOptionByIndex(scriptsText, selectedAngleIndex);
     if (!url || !lastExtractedJson || selectedAngleIndex === null || !script.trim()) {
@@ -5475,6 +5547,7 @@ export default function LinkToAdUniverse({
     chainPart2Prompt?: string,
     opts?: { forceRegenerateCharge?: boolean },
   ) {
+    if (templateRecording.interceptPaidAction()) return;
     const url = storeUrl.trim();
     const img = nanoBananaImageUrl;
     const idx = nanoBananaSelectedImageIndex;
@@ -7249,6 +7322,7 @@ export default function LinkToAdUniverse({
                       pendingPersonaUploads={pendingPersonaUploads}
                       isUploading={isUploadingPersonaPhotos}
                       isWorking={isWorking}
+                      selectionLocked={templateRecording.locksSelection}
                       onUploadClick={() => personaPhotoInputRef.current?.click()}
                       onAvatarPickerOpen={() => setAvatarPickerOpen(true)}
                       avatarUrlsCount={avatarUrls.length}
@@ -7537,6 +7611,7 @@ export default function LinkToAdUniverse({
                       pendingPersonaUploads={pendingPersonaUploads}
                       isUploading={isUploadingPersonaPhotos}
                       isWorking={isWorking}
+                      selectionLocked={templateRecording.locksSelection}
                       onUploadClick={() => personaPhotoInputRef.current?.click()}
                       onAvatarPickerOpen={() => setAvatarPickerOpen(true)}
                       avatarUrlsCount={avatarUrls.length}
@@ -7581,9 +7656,11 @@ export default function LinkToAdUniverse({
                   <button
                     key={card.index}
                     type="button"
+                    disabled={templateRecording.locksSelection}
                     onClick={() => void onSelectAngle(card.index)}
                     className={cn(
                       "group/angle relative rounded-xl border px-3 py-3 text-left transition-all duration-200 sm:rounded-2xl sm:px-4 sm:py-4",
+                      templateRecording.locksSelection && "cursor-default opacity-90",
                       selectedAngleIndex === card.index
                         ? "border-violet-400/60 bg-violet-500/[0.12] shadow-[0_0_20px_rgba(139,92,246,0.15)]"
                         : "border-white/8 bg-white/[0.03] hover:border-violet-400/30 hover:bg-white/[0.06]",
@@ -8006,6 +8083,7 @@ export default function LinkToAdUniverse({
                     pendingPersonaUploads={pendingPersonaUploads}
                     isUploading={isUploadingPersonaPhotos}
                     isWorking={isWorking}
+                    selectionLocked={templateRecording.locksSelection}
                     onUploadClick={() => personaPhotoInputRef.current?.click()}
                     onAvatarPickerOpen={() => setAvatarPickerOpen(true)}
                     avatarUrlsCount={avatarUrls.length}
@@ -9531,11 +9609,14 @@ export default function LinkToAdUniverse({
       </div>
     ) : null}
     <LinkToAdUrlFlowProgressOverlay
-      open={false}
+      open={showUrlFlowProgressOverlay}
       assetKind={linkToAdAssetType === "app" ? "app" : "product"}
       stage={stage}
       serverPipelineStepIndex={serverPipelineStepIndex}
     />
+    <LinkToAdTemplateRecordingButton recording={templateRecording} />
+    <LinkToAdTemplateBrandPicker recording={templateRecording} />
+    <LinkToAdTemplateRecordingGate recording={templateRecording} />
     <LinkToAdProductSetupDialog
       open={productSetupDialogOpen}
       onOpenChange={setProductSetupDialogOpen}

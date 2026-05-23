@@ -22,13 +22,28 @@ import {
   X,
   Zap,
   MousePointerClick,
+  Clapperboard,
 } from "lucide-react";
 import type { StartLinkStatsPayload, StartLinkStatsPeriod } from "@/lib/analytics/startLinkStats";
 import { cn } from "@/lib/utils";
 import { ledgerTicksToDisplayCredits } from "@/lib/creditLedgerTicks";
 import { detectInputMediaType, type InputMediaType } from "@/lib/admin/detectInputMediaType";
 
-type Tab = "generations" | "runs" | "credits" | "onboarding" | "feedback" | "templates" | "start-link";
+type Tab =
+  | "generations"
+  | "runs"
+  | "credits"
+  | "onboarding"
+  | "feedback"
+  | "templates"
+  | "lta-recording"
+  | "start-link";
+
+type LtaTemplateRecordingUserRow = {
+  email: string;
+  created_at: string;
+  builtin: boolean;
+};
 
 type OnboardingAdminRow = {
   user_id: string;
@@ -473,6 +488,12 @@ export default function AdminPage() {
   const [startLinkLoading, setStartLinkLoading] = useState(false);
   const [startLinkError, setStartLinkError] = useState<string | null>(null);
 
+  const [ltaRecordingUsers, setLtaRecordingUsers] = useState<LtaTemplateRecordingUserRow[]>([]);
+  const [ltaRecordingLoading, setLtaRecordingLoading] = useState(false);
+  const [ltaRecordingError, setLtaRecordingError] = useState<string | null>(null);
+  const [ltaRecordingEmailInput, setLtaRecordingEmailInput] = useState("");
+  const [ltaRecordingSaving, setLtaRecordingSaving] = useState(false);
+
   const perPage = 50;
   const creditLogPerPage = 50;
 
@@ -699,6 +720,69 @@ export default function AdminPage() {
     }
   }, [startLinkPeriod]);
 
+  const fetchLtaRecordingUsers = useCallback(async () => {
+    setLtaRecordingLoading(true);
+    setLtaRecordingError(null);
+    try {
+      const r = await fetch("/api/admin/lta-template-recording-users");
+      const d = (await r.json()) as { rows?: LtaTemplateRecordingUserRow[]; error?: string; warning?: string };
+      if (!r.ok) throw new Error(d.error ?? `HTTP ${r.status}`);
+      setLtaRecordingUsers(Array.isArray(d.rows) ? d.rows : []);
+      if (d.warning) setLtaRecordingError(d.warning);
+    } catch (e) {
+      setLtaRecordingError(e instanceof Error ? e.message : "Failed to load");
+      setLtaRecordingUsers([]);
+    } finally {
+      setLtaRecordingLoading(false);
+    }
+  }, []);
+
+  const addLtaRecordingUser = useCallback(async () => {
+    const email = ltaRecordingEmailInput.trim().toLowerCase();
+    if (!email.includes("@")) {
+      setLtaRecordingError("Enter a valid email");
+      return;
+    }
+    setLtaRecordingSaving(true);
+    setLtaRecordingError(null);
+    try {
+      const r = await fetch("/api/admin/lta-template-recording-users", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ email }),
+      });
+      const d = (await r.json()) as { error?: string };
+      if (!r.ok) throw new Error(d.error ?? `HTTP ${r.status}`);
+      setLtaRecordingEmailInput("");
+      await fetchLtaRecordingUsers();
+    } catch (e) {
+      setLtaRecordingError(e instanceof Error ? e.message : "Could not add user");
+    } finally {
+      setLtaRecordingSaving(false);
+    }
+  }, [fetchLtaRecordingUsers, ltaRecordingEmailInput]);
+
+  const removeLtaRecordingUser = useCallback(
+    async (email: string) => {
+      setLtaRecordingSaving(true);
+      setLtaRecordingError(null);
+      try {
+        const r = await fetch(
+          `/api/admin/lta-template-recording-users?email=${encodeURIComponent(email)}`,
+          { method: "DELETE" },
+        );
+        const d = (await r.json()) as { error?: string };
+        if (!r.ok) throw new Error(d.error ?? `HTTP ${r.status}`);
+        await fetchLtaRecordingUsers();
+      } catch (e) {
+        setLtaRecordingError(e instanceof Error ? e.message : "Could not remove user");
+      } finally {
+        setLtaRecordingSaving(false);
+      }
+    },
+    [fetchLtaRecordingUsers],
+  );
+
   useEffect(() => {
     if (tab === "generations") void fetchGenerations();
     else if (tab === "runs") void fetchRuns();
@@ -706,7 +790,17 @@ export default function AdminPage() {
     else if (tab === "onboarding") void fetchOnboarding();
     else if (tab === "feedback") void fetchFeedback();
     else if (tab === "templates") void fetchWorkflowTemplates();
-  }, [tab, fetchGenerations, fetchRuns, fetchCreditRedeems, fetchOnboarding, fetchFeedback, fetchWorkflowTemplates]);
+    else if (tab === "lta-recording") void fetchLtaRecordingUsers();
+  }, [
+    tab,
+    fetchGenerations,
+    fetchRuns,
+    fetchCreditRedeems,
+    fetchOnboarding,
+    fetchFeedback,
+    fetchWorkflowTemplates,
+    fetchLtaRecordingUsers,
+  ]);
 
   useEffect(() => {
     if (tab === "start-link") void fetchStartLinkStats();
@@ -855,6 +949,8 @@ export default function AdminPage() {
                   ? "Credit gift links & redemption audit"
                   : tab === "templates"
                     ? "Manage workflow community templates (review and delete)"
+                  : tab === "lta-recording"
+                    ? "Who sees the Link to Ad Template button (screen recording, no API generation)"
                   : tab === "onboarding"
                     ? "Onboarding answers, emails, and subscription status after checkout"
                     : tab === "feedback"
@@ -929,6 +1025,16 @@ export default function AdminPage() {
               )}
             >
               Templates
+            </button>
+            <button
+              type="button"
+              onClick={() => setTab("lta-recording")}
+              className={cn(
+                "rounded-lg px-3 py-1.5 text-xs font-semibold transition",
+                tab === "lta-recording" ? "bg-violet-500 text-white" : "bg-white/5 text-white/60 hover:bg-white/10",
+              )}
+            >
+              LTA Template
             </button>
             <button
               type="button"
@@ -2075,6 +2181,102 @@ export default function AdminPage() {
                 </button>
               </div>
             </div>
+          </div>
+        ) : tab === "lta-recording" ? (
+          <div className="mt-4 space-y-4">
+            {ltaRecordingError ? (
+              <div className="rounded-lg border border-amber-500/30 bg-amber-500/10 px-4 py-3 text-sm text-amber-100">
+                {ltaRecordingError}
+              </div>
+            ) : null}
+            <div className="rounded-xl border border-white/10 bg-white/[0.03] p-4">
+              <div className="flex items-start gap-3">
+                <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-violet-500/20 text-violet-200">
+                  <Clapperboard className="h-5 w-5" />
+                </div>
+                <div className="min-w-0 flex-1">
+                  <p className="text-sm font-semibold text-white">Link to Ad — Template recording</p>
+                  <p className="mt-1 text-xs leading-relaxed text-white/50">
+                    Allowed users get a bottom-left Template button on Link to Ad. They pick a brand
+                    from clipping templates (synced when you mark a project as Template). Replay uses
+                    saved results only — no backend generation. Minimum 10s loading per step with
+                    Continue / Previous dialogs.
+                  </p>
+                </div>
+              </div>
+              <div className="mt-4 flex flex-wrap items-end gap-2">
+                <label className="flex min-w-[220px] flex-1 flex-col gap-1">
+                  <span className="text-[10px] font-semibold uppercase tracking-wide text-white/40">Email</span>
+                  <input
+                    type="email"
+                    value={ltaRecordingEmailInput}
+                    onChange={(e) => setLtaRecordingEmailInput(e.target.value)}
+                    placeholder="user@example.com"
+                    className="h-9 rounded-lg border border-white/10 bg-black/30 px-3 text-sm text-white outline-none focus:border-violet-400/40"
+                  />
+                </label>
+                <button
+                  type="button"
+                  disabled={ltaRecordingSaving}
+                  onClick={() => void addLtaRecordingUser()}
+                  className="h-9 rounded-lg bg-violet-600 px-4 text-xs font-semibold text-white transition hover:bg-violet-500 disabled:opacity-50"
+                >
+                  {ltaRecordingSaving ? "Saving…" : "Add user"}
+                </button>
+              </div>
+            </div>
+            {ltaRecordingLoading && ltaRecordingUsers.length === 0 ? (
+              <div className="flex items-center justify-center gap-2 py-10 text-white/40">
+                <Loader2 className="h-5 w-5 animate-spin" />
+                Loading…
+              </div>
+            ) : (
+              <div className="overflow-x-auto rounded-xl border border-white/[0.08]">
+                <table className="w-full min-w-[480px] text-left text-xs">
+                  <thead>
+                    <tr className="border-b border-white/10 text-[10px] uppercase tracking-wide text-white/40">
+                      <th className="px-3 py-2.5 font-semibold">Email</th>
+                      <th className="px-3 py-2.5 font-semibold">Added</th>
+                      <th className="px-3 py-2.5 font-semibold">Action</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {ltaRecordingUsers.map((row) => (
+                      <tr key={row.email} className="border-b border-white/5 hover:bg-white/[0.02]">
+                        <td className="px-3 py-2.5 font-medium text-white/85">
+                          {row.email}
+                          {row.builtin ? (
+                            <span className="ml-2 rounded bg-white/10 px-1.5 py-0.5 text-[9px] uppercase text-white/45">
+                              default
+                            </span>
+                          ) : null}
+                        </td>
+                        <td className="px-3 py-2.5 text-white/45">
+                          {row.created_at ? new Date(row.created_at).toLocaleString() : "—"}
+                        </td>
+                        <td className="px-3 py-2.5">
+                          {row.builtin ? (
+                            <span className="text-white/30">—</span>
+                          ) : (
+                            <button
+                              type="button"
+                              disabled={ltaRecordingSaving}
+                              onClick={() => void removeLtaRecordingUser(row.email)}
+                              className="rounded-md border border-red-500/35 bg-red-500/10 px-2 py-1 text-[10px] font-semibold text-red-200 hover:bg-red-500/20 disabled:opacity-50"
+                            >
+                              Remove
+                            </button>
+                          )}
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+                {ltaRecordingUsers.length === 0 ? (
+                  <p className="py-8 text-center text-sm text-white/30">No users yet</p>
+                ) : null}
+              </div>
+            )}
           </div>
         ) : loading && genRows.length === 0 && runRows.length === 0 ? (
           <div className="mt-12 flex items-center justify-center gap-2 text-white/40">

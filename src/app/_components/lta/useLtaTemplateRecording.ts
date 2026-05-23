@@ -1,0 +1,320 @@
+"use client";
+
+import { useCallback, useEffect, useRef, useState } from "react";
+import { toast } from "sonner";
+import {
+  LTA_TEMPLATE_RECORDING_MIN_STEP_MS,
+  LTA_TEMPLATE_RECORDING_STEP_LABELS,
+  type LtaTemplateBrandSummary,
+  type LtaTemplateRecordingGateStep,
+} from "@/lib/ltaTemplateRecording";
+import { buildExtractedForTemplateStep } from "@/lib/ltaTemplateRecordingSnapshot";
+
+export type TemplateRunCache = {
+  id: string;
+  store_url?: string | null;
+  title?: string | null;
+  extracted?: unknown;
+  video_prompt?: string | null;
+};
+
+type FlowStage =
+  | "idle"
+  | "picking_brand"
+  | "step1_loading"
+  | "step1_gate"
+  | "step2_loading"
+  | "step2_gate"
+  | "step3_loading"
+  | "step3_gate"
+  | "step4_loading"
+  | "step4_gate"
+  | "finished";
+
+export type UseLtaTemplateRecordingArgs = {
+  hydrateFromRun: (
+    run: TemplateRunCache,
+    opts?: { silent?: boolean; preserveVideoDuration?: boolean },
+  ) => void;
+  prepareBlankCanvas: () => void;
+  setStoreUrl: (url: string) => void;
+  setIsWorking: (v: boolean) => void;
+  setStage: (
+    v:
+      | "idle"
+      | "scanning"
+      | "finding_image"
+      | "summarizing"
+      | "writing_scripts"
+      | "server_pipeline"
+      | "ready"
+      | "error",
+  ) => void;
+  setShowUrlFlowProgressOverlay: (v: boolean) => void;
+  setServerPipelineStepIndex: (v: number | null) => void;
+  setIsNanoAllImagesSubmitting: (v: boolean) => void;
+  setIsVideoPromptLoading: (v: boolean) => void;
+  setIsKlingSubmitting: (v: boolean) => void;
+};
+
+function delay(ms: number): Promise<void> {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+function gateStepForStage(stage: FlowStage): LtaTemplateRecordingGateStep | null {
+  if (stage === "step1_gate") return 1;
+  if (stage === "step2_gate") return 2;
+  if (stage === "step3_gate") return 3;
+  if (stage === "step4_gate") return 4;
+  return null;
+}
+
+export function useLtaTemplateRecording(args: UseLtaTemplateRecordingArgs) {
+  const [featureEnabled, setFeatureEnabled] = useState(false);
+  const [brands, setBrands] = useState<LtaTemplateBrandSummary[]>([]);
+  const [brandsLoading, setBrandsLoading] = useState(false);
+  const [flowStage, setFlowStage] = useState<FlowStage>("idle");
+  const runCacheRef = useRef<TemplateRunCache | null>(null);
+  const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const flowActiveRef = useRef(false);
+
+  const locksSelection =
+    flowStage !== "idle" && flowStage !== "picking_brand" && flowStage !== "finished";
+  const active =
+    locksSelection &&
+    flowStage !== "step1_gate" &&
+    flowStage !== "step2_gate" &&
+    flowStage !== "step3_gate" &&
+    flowStage !== "step4_gate";
+
+  useEffect(() => {
+    let cancelled = false;
+    void fetch("/api/me/lta-template-recording", { cache: "no-store" })
+      .then((r) => r.json())
+      .then((j: { enabled?: boolean }) => {
+        if (!cancelled) setFeatureEnabled(Boolean(j.enabled));
+      })
+      .catch(() => {});
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  const loadBrands = useCallback(async () => {
+    setBrandsLoading(true);
+    try {
+      const res = await fetch("/api/link-to-ad/template-brands", { cache: "no-store" });
+      const json = (await res.json()) as { brands?: LtaTemplateBrandSummary[]; error?: string };
+      if (!res.ok) throw new Error(json.error || "Could not load template brands");
+      setBrands(Array.isArray(json.brands) ? json.brands : []);
+    } catch (e) {
+      toast.error("Could not load template brands", {
+        description: e instanceof Error ? e.message : "Unknown error",
+      });
+      setBrands([]);
+    } finally {
+      setBrandsLoading(false);
+    }
+  }, []);
+
+  const clearTimer = useCallback(() => {
+    if (timerRef.current) clearTimeout(timerRef.current);
+    timerRef.current = null;
+  }, []);
+
+  const applyCachedStep = useCallback(
+    (step: LtaTemplateRecordingGateStep) => {
+      const run = runCacheRef.current;
+      if (!run) return;
+      const extracted = buildExtractedForTemplateStep(run.extracted, step);
+      args.hydrateFromRun(
+        { ...run, extracted },
+        { silent: true, preserveVideoDuration: true },
+      );
+      args.setStage("ready");
+      args.setIsWorking(false);
+      args.setShowUrlFlowProgressOverlay(false);
+      args.setServerPipelineStepIndex(null);
+      args.setIsNanoAllImagesSubmitting(false);
+      args.setIsVideoPromptLoading(false);
+      args.setIsKlingSubmitting(false);
+    },
+    [args],
+  );
+
+  const runStep1Loading = useCallback(async () => {
+    args.prepareBlankCanvas();
+    args.setStoreUrl(runCacheRef.current?.store_url?.trim() ?? "");
+    args.setIsWorking(true);
+    args.setShowUrlFlowProgressOverlay(true);
+    const stages = ["scanning", "finding_image", "summarizing", "writing_scripts", "server_pipeline"] as const;
+    const perStage = Math.max(2000, Math.floor(LTA_TEMPLATE_RECORDING_MIN_STEP_MS / stages.length));
+    for (let i = 0; i < stages.length; i++) {
+      args.setStage(stages[i]!);
+      if (stages[i] === "server_pipeline") args.setServerPipelineStepIndex(Math.min(i, 4));
+      await delay(perStage);
+    }
+    applyCachedStep(1);
+    setFlowStage("step1_gate");
+  }, [applyCachedStep, args]);
+
+  const runStep2Loading = useCallback(async () => {
+    args.setIsWorking(true);
+    args.setStage("writing_scripts");
+    await delay(LTA_TEMPLATE_RECORDING_MIN_STEP_MS);
+    applyCachedStep(2);
+    setFlowStage("step2_gate");
+  }, [applyCachedStep, args]);
+
+  const runStep3Loading = useCallback(async () => {
+    args.setIsNanoAllImagesSubmitting(true);
+    args.setIsWorking(true);
+    await delay(LTA_TEMPLATE_RECORDING_MIN_STEP_MS);
+    applyCachedStep(3);
+    setFlowStage("step3_gate");
+  }, [applyCachedStep, args]);
+
+  const runStep4Loading = useCallback(async () => {
+    args.setIsVideoPromptLoading(true);
+    args.setIsWorking(true);
+    await delay(Math.floor(LTA_TEMPLATE_RECORDING_MIN_STEP_MS / 2));
+    args.setIsVideoPromptLoading(false);
+    args.setIsKlingSubmitting(true);
+    await delay(Math.ceil(LTA_TEMPLATE_RECORDING_MIN_STEP_MS / 2));
+    applyCachedStep(4);
+    setFlowStage("step4_gate");
+  }, [applyCachedStep, args]);
+
+  const startBrandFlow = useCallback(
+    async (brand: LtaTemplateBrandSummary) => {
+      flowActiveRef.current = true;
+      setFlowStage("step1_loading");
+      try {
+        const res = await fetch(`/api/runs/get?runId=${encodeURIComponent(brand.runId)}`, {
+          cache: "no-store",
+        });
+        const json = (await res.json()) as {
+          data?: TemplateRunCache;
+          error?: string;
+        };
+        if (!res.ok || !json.data) throw new Error(json.error || "Could not load template run");
+        runCacheRef.current = json.data;
+        await runStep1Loading();
+      } catch (e) {
+        flowActiveRef.current = false;
+        setFlowStage("idle");
+        runCacheRef.current = null;
+        args.setIsWorking(false);
+        args.setShowUrlFlowProgressOverlay(false);
+        toast.error("Template failed to start", {
+          description: e instanceof Error ? e.message : "Unknown error",
+        });
+      }
+    },
+    [args, runStep1Loading],
+  );
+
+  const openBrandPicker = useCallback(() => {
+    setFlowStage("picking_brand");
+    void loadBrands();
+  }, [loadBrands]);
+
+  const exitTemplateMode = useCallback(() => {
+    clearTimer();
+    flowActiveRef.current = false;
+    runCacheRef.current = null;
+    setFlowStage("idle");
+    args.setIsWorking(false);
+    args.setShowUrlFlowProgressOverlay(false);
+    args.setIsNanoAllImagesSubmitting(false);
+    args.setIsVideoPromptLoading(false);
+    args.setIsKlingSubmitting(false);
+    args.setStage("ready");
+  }, [args, clearTimer]);
+
+  const gateStep = gateStepForStage(flowStage);
+
+  const continueFromGate = useCallback(() => {
+    if (flowStage === "step1_gate") {
+      setFlowStage("step2_loading");
+      void runStep2Loading();
+      return;
+    }
+    if (flowStage === "step2_gate") {
+      setFlowStage("step3_loading");
+      void runStep3Loading();
+      return;
+    }
+    if (flowStage === "step3_gate") {
+      setFlowStage("step4_loading");
+      void runStep4Loading();
+      return;
+    }
+    if (flowStage === "step4_gate") {
+      setFlowStage("finished");
+      flowActiveRef.current = false;
+      toast.success("Template recording complete");
+      return;
+    }
+  }, [flowStage, runStep2Loading, runStep3Loading, runStep4Loading]);
+
+  const previousFromGate = useCallback(() => {
+    if (flowStage === "step2_gate") {
+      applyCachedStep(1);
+      setFlowStage("step1_gate");
+      return;
+    }
+    if (flowStage === "step3_gate") {
+      applyCachedStep(2);
+      setFlowStage("step2_gate");
+      return;
+    }
+    if (flowStage === "step4_gate") {
+      applyCachedStep(3);
+      setFlowStage("step3_gate");
+    }
+  }, [applyCachedStep, flowStage]);
+
+  const interceptPaidAction = useCallback((): boolean => {
+    if (flowStage === "idle" || flowStage === "finished") return false;
+    if (flowStage === "picking_brand") return true;
+    toast.message("Template mode", {
+      description:
+        flowStage.endsWith("_gate") || flowStage.endsWith("_loading")
+          ? "Use Continue on the step dialog when you are ready to film the next step."
+          : "Template recording is in progress.",
+    });
+    return true;
+  }, [flowStage]);
+
+  const interceptOnRun = useCallback(
+    async (storeUrl: string, realOnRun: () => Promise<void>) => {
+      if (!flowActiveRef.current) {
+        await realOnRun();
+        return;
+      }
+      toast.message("Template mode", { description: "Pick a brand with the Template button (bottom left)." });
+    },
+    [],
+  );
+
+  return {
+    featureEnabled,
+    brands,
+    brandsLoading,
+    flowStage,
+    active,
+    locksSelection,
+    gateStep,
+    gateLabel: gateStep ? LTA_TEMPLATE_RECORDING_STEP_LABELS[gateStep] : null,
+    openBrandPicker,
+    startBrandFlow,
+    exitTemplateMode,
+    continueFromGate,
+    previousFromGate,
+    interceptPaidAction,
+    interceptOnRun,
+    pickingBrand: flowStage === "picking_brand",
+    closeBrandPicker: () => setFlowStage("idle"),
+  };
+}

@@ -2140,6 +2140,11 @@ export default function AppBrandWizard() {
     if (isTemplate) {
       const { rows, persisted } = removeLinkToAdTemplate(normalized);
       setLinkToAdTemplateUrls(rows.map((t) => t.normalizedUrl));
+      void fetch("/api/link-to-ad/template-brands/sync", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ runId: latestRun.id, remove: true }),
+      }).catch(() => {});
       if (!persisted) {
         toast.error("Could not update templates (local storage unavailable).");
         return;
@@ -2158,6 +2163,17 @@ export default function AppBrandWizard() {
       createdAt: new Date().toISOString(),
     });
     setLinkToAdTemplateUrls(rows.map((t) => t.normalizedUrl));
+    void fetch("/api/link-to-ad/template-brands/sync", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        runId: latestRun.id,
+        normalizedUrl: normalized,
+        storeUrl: project.storeUrl,
+        title: project.title ?? null,
+        thumbUrl: thumb,
+      }),
+    }).catch(() => {});
     if (!persisted) {
       toast.error("Template not saved (local storage unavailable).");
       return;
