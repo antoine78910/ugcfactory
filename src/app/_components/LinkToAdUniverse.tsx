@@ -517,6 +517,10 @@ function NanoThreeImageGenerationGrid({
   );
 }
 
+/** 9:16 feed stage width — shared by Kling loading placeholder and finished video preview. */
+const LTA_KLING_VIDEO_STAGE_CLASS =
+  "relative mx-auto w-full max-w-[min(22rem,94vw)] sm:max-w-[24rem]";
+
 /** Large 9:16 stage while Kling renders, same visual language as Nano image generation (feed-ready). */
 function KlingVideoGenerationPlaceholder({
   posterUrl,
@@ -528,7 +532,7 @@ function KlingVideoGenerationPlaceholder({
   const reduceMotion = useReducedMotion();
   const poster = posterUrl?.trim();
   return (
-    <div className="relative mx-auto mt-4 w-full max-w-[min(22rem,94vw)] sm:max-w-[24rem]">
+    <div className={cn(LTA_KLING_VIDEO_STAGE_CLASS, "mt-4")}>
       <div
         className="relative aspect-[9/16] overflow-hidden rounded-2xl border border-white/12 bg-black/45 shadow-[0_24px_64px_-16px_rgba(0,0,0,0.75)]"
         role="status"
@@ -1283,13 +1287,13 @@ function LinkToAdFullSequencePlayer({
   const [phase, setPhase] = useState<0 | 1>(0);
   const src = phase === 0 ? part1Url : part2Url;
   return (
-    <div className="mx-auto w-[11.5rem] max-w-full shrink-0 sm:w-[12.5rem]">
+    <div className="w-full">
       <p className="mb-2 text-center text-[10px] font-semibold uppercase tracking-wide text-white/50">
         Full sequence (30s)
       </p>
       <video
         key={phase}
-        className="aspect-[9/16] w-full rounded-lg bg-black object-cover"
+        className="aspect-[9/16] w-full rounded-2xl border border-white/12 bg-black object-cover"
         src={proxiedMediaSrc(src)}
         poster={posterUrl?.trim() ? proxiedMediaSrc(posterUrl) : undefined}
         controls
@@ -9181,30 +9185,35 @@ export default function LinkToAdUniverse({
                           />
                         ) : klingVideoUrl ? (
                           <>
-                            <div className="mt-4 flex flex-col gap-4 sm:flex-row sm:items-start sm:gap-5">
+                            <div className="mt-4 flex flex-col items-center gap-4">
                               {activeSlotIs30s && klingVideoUrlPart2 ? (
-                                <div className="flex w-full flex-col gap-6 lg:flex-row lg:items-start lg:gap-6">
-                                  <div className="flex flex-col items-center">
-                                    <p className="mb-1 text-[10px] font-semibold uppercase tracking-wide text-white/50">
+                                <div
+                                  className={cn(
+                                    LTA_KLING_VIDEO_STAGE_CLASS,
+                                    "flex flex-col gap-6",
+                                  )}
+                                >
+                                  <div className="flex w-full flex-col">
+                                    <p className="mb-1 text-center text-[10px] font-semibold uppercase tracking-wide text-white/50">
                                       Part 1 (15s)
                                     </p>
-                                    <div className="w-[11.5rem] max-w-full shrink-0 sm:w-[12.5rem]">
-                                      <VideoCard
-                                        src={klingVideoUrl}
-                                        poster={nanoBananaImageUrl ?? undefined}
-                                      />
-                                    </div>
+                                    <VideoCard
+                                      src={klingVideoUrl}
+                                      poster={nanoBananaImageUrl ?? undefined}
+                                      className="rounded-2xl"
+                                      eager
+                                    />
                                   </div>
-                                  <div className="flex flex-col items-center">
-                                    <p className="mb-1 text-[10px] font-semibold uppercase tracking-wide text-white/50">
+                                  <div className="flex w-full flex-col">
+                                    <p className="mb-1 text-center text-[10px] font-semibold uppercase tracking-wide text-white/50">
                                       Part 2 (15s)
                                     </p>
-                                    <div className="w-[11.5rem] max-w-full shrink-0 sm:w-[12.5rem]">
-                                      <VideoCard
-                                        src={klingVideoUrlPart2}
-                                        poster={nanoBananaImageUrl ?? undefined}
-                                      />
-                                    </div>
+                                    <VideoCard
+                                      src={klingVideoUrlPart2}
+                                      poster={nanoBananaImageUrl ?? undefined}
+                                      className="rounded-2xl"
+                                      eager
+                                    />
                                   </div>
                                   <LinkToAdFullSequencePlayer
                                     part1Url={klingVideoUrl}
@@ -9213,7 +9222,7 @@ export default function LinkToAdUniverse({
                                   />
                                 </div>
                               ) : (
-                                <div className="mx-auto w-[11.5rem] max-w-full shrink-0 sm:mx-0 sm:w-[12.5rem]">
+                                <div className={LTA_KLING_VIDEO_STAGE_CLASS}>
                                   {activeSlotIs30s && !klingVideoUrlPart2 ? (
                                     <p className="mb-1 text-center text-[10px] font-semibold uppercase tracking-wide text-amber-200/75">
                                       Part 1 (15s)
@@ -9222,13 +9231,20 @@ export default function LinkToAdUniverse({
                                   <VideoCard
                                     src={klingVideoUrl}
                                     poster={nanoBananaImageUrl ?? undefined}
+                                    className="rounded-2xl"
+                                    eager
                                   />
                                 </div>
                               )}
-                              <div className="flex w-full flex-col justify-center gap-2 sm:w-auto sm:min-w-[11rem] sm:flex-1">
+                              <div
+                                className={cn(
+                                  LTA_KLING_VIDEO_STAGE_CLASS,
+                                  "flex w-full flex-col gap-2",
+                                )}
+                              >
                                 <Button
                                   type="button"
-                                  className={`h-auto min-h-10 w-full px-3 py-2 sm:w-full ${primaryBtnClass}`}
+                                  className={`h-auto min-h-10 w-full px-3 py-2 ${primaryBtnClass}`}
                                   disabled={
                                     isKlingSubmitting ||
                                     Boolean(klingPollTaskId) ||
@@ -9265,7 +9281,7 @@ export default function LinkToAdUniverse({
                                     <Button
                                       variant="secondary"
                                       size="sm"
-                                      className="h-10 w-full justify-center border border-white/15 bg-white/5 text-white hover:bg-white/10 sm:w-full"
+                                      className="h-10 w-full justify-center border border-white/15 bg-white/5 text-white hover:bg-white/10"
                                       asChild
                                     >
                                       <a
@@ -9279,7 +9295,7 @@ export default function LinkToAdUniverse({
                                     <Button
                                       variant="secondary"
                                       size="sm"
-                                      className="h-10 w-full justify-center border border-white/15 bg-white/5 text-white hover:bg-white/10 sm:w-full"
+                                      className="h-10 w-full justify-center border border-white/15 bg-white/5 text-white hover:bg-white/10"
                                       asChild
                                     >
                                       <a
@@ -9295,7 +9311,7 @@ export default function LinkToAdUniverse({
                                   <Button
                                     variant="secondary"
                                     size="sm"
-                                    className="h-10 w-full justify-center border border-white/15 bg-white/5 text-white hover:bg-white/10 sm:w-full"
+                                    className="h-10 w-full justify-center border border-white/15 bg-white/5 text-white hover:bg-white/10"
                                     asChild
                                   >
                                     <a
