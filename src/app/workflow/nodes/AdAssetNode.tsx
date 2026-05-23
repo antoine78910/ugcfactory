@@ -270,6 +270,7 @@ const VIDEO_MODELS: { value: string; label: string }[] = [
   { value: "veo3_lite", label: "Veo 3.1 Lite" },
   { value: "veo3_fast", label: "Veo 3.1 Fast" },
   { value: "veo3", label: "Veo 3.1 Quality" },
+  { value: "gemini-omni-video", label: "Gemini Omni Video" },
 ];
 const VIDEO_CHAIN_SEEDANCE_MODELS: { value: string; label: string }[] = [
   { value: "bytedance/seedance-2-fast", label: "Seedance 2.0 Fast" },
@@ -1763,6 +1764,13 @@ function AdAssetNodeBase({ id, data, selected }: NodeProps<AdAssetNodeType>) {
     [data.kind, model],
   );
 
+  const videoResolutions = useMemo(() => {
+    if (data.kind !== "video") return resolutions;
+    return resolvedVideoModelId === "gemini-omni-video"
+      ? (["720p", "1080p", "4k"] as const)
+      : VIDEO_RESOLUTIONS;
+  }, [data.kind, resolutions, resolvedVideoModelId]);
+
   /** UI gates derived from the picker capabilities — Seedance has no first/last frame ports. */
   const videoModelHasStartFrame = useMemo(
     () => (data.kind === "video" ? workflowVideoModelHasStartFrame(resolvedVideoModelId) : true),
@@ -1792,14 +1800,20 @@ function AdAssetNodeBase({ id, data, selected }: NodeProps<AdAssetNodeType>) {
   const videoModelSeedance2ProLike = useMemo(
     () =>
       data.kind === "video" &&
-      (resolvedVideoModelId === "bytedance/seedance-2" || resolvedVideoModelId === "bytedance/seedance-2-fast"),
+      (resolvedVideoModelId === "bytedance/seedance-2" ||
+        resolvedVideoModelId === "bytedance/seedance-2-fast" ||
+        resolvedVideoModelId === "gemini-omni-video"),
     [data.kind, resolvedVideoModelId],
   );
 
-  /** Seedance 2 / Fast: supports omni reference video uploads (`referenceVideoUrls`). */
+  /** Seedance 2 / Fast / Gemini Omni: supports omni reference video uploads (`referenceVideoUrls`). */
   const seedance2ProLike = useMemo(() => {
     if (data.kind !== "video") return false;
-    return resolvedVideoModelId === "bytedance/seedance-2" || resolvedVideoModelId === "bytedance/seedance-2-fast";
+    return (
+      resolvedVideoModelId === "bytedance/seedance-2" ||
+      resolvedVideoModelId === "bytedance/seedance-2-fast" ||
+      resolvedVideoModelId === "gemini-omni-video"
+    );
   }, [data.kind, resolvedVideoModelId]);
 
   /**
@@ -5505,7 +5519,7 @@ function AdAssetNodeBase({ id, data, selected }: NodeProps<AdAssetNodeType>) {
                     <SelectValue placeholder="Res" />
                   </SelectTrigger>
                   <SelectContent className={selectContentClass} position="popper">
-                    {resolutions.map((r) => (
+                    {(data.kind === "video" ? videoResolutions : resolutions).map((r) => (
                       <SelectItem key={r} value={r} className="text-[12px] focus:bg-violet-500/20">
                         {r}
                       </SelectItem>

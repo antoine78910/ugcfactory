@@ -28,6 +28,7 @@ import {
   calculateMargin,
   calculateVideoCreditsFromDuration,
 } from "@/lib/pricing";
+import { calculateGeminiOmniVideoCredits } from "@/lib/geminiOmniVideo";
 
 /**
  * Public read-only pricing config for dashboards, webhooks, or internal tools.
@@ -90,6 +91,20 @@ export async function GET() {
         high_15s: SORA_2_PRO_HIGH_15S,
         standard_10s: SORA_2_PRO_STANDARD_10S,
         standard_15s: SORA_2_PRO_STANDARD_15S,
+      },
+      gemini_omni_video: {
+        formula:
+          "fixed credits: duration (4/6/8/10s) × resolution when no video input; with video_list, flat by resolution",
+        example_no_video_8s_1080p: calculateGeminiOmniVideoCredits({
+          durationSec: 8,
+          resolution: "1080p",
+          hasVideoInput: false,
+        }),
+        example_with_video_4k: calculateGeminiOmniVideoCredits({
+          durationSec: 8,
+          resolution: "4k",
+          hasVideoInput: true,
+        }),
       },
     },
     ads: {

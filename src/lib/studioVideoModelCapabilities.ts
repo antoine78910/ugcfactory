@@ -5,6 +5,14 @@
  * @see ugc-automation/docs/PROVIDER_MODEL_API_INDEX.md
  */
 
+import {
+  GEMINI_OMNI_VIDEO_MODEL_ID,
+  geminiOmniDurationSecOptions,
+  studioVideoIsGeminiOmniPickerId,
+} from "@/lib/geminiOmniVideo";
+
+export { studioVideoIsGeminiOmniPickerId };
+
 export const STUDIO_VIDEO_PICKER_IDS = [
   "kling-3.0/video",
   "kling-2.5-turbo/video",
@@ -17,6 +25,7 @@ export const STUDIO_VIDEO_PICKER_IDS = [
   "veo3_lite",
   "veo3_fast",
   "veo3",
+  GEMINI_OMNI_VIDEO_MODEL_ID,
 ] as const;
 
 /**
@@ -106,6 +115,8 @@ export function studioVideoDurationSecOptions(pickerId: string): string[] {
     case "veo3_fast":
     case "veo3":
       return [];
+    case GEMINI_OMNI_VIDEO_MODEL_ID:
+      return geminiOmniDurationSecOptions();
     default:
       return ["5", "10"];
   }
@@ -128,6 +139,9 @@ export function studioVideoDurationRangeLabel(pickerId: string): string {
  * Returns `null` → caller keeps legacy 9:16 / 16:9 / 1:1 for other models.
  */
 export function studioVideoCreateAspectRatioOptions(pickerId: string): readonly string[] | null {
+  if (studioVideoIsGeminiOmniPickerId(pickerId)) {
+    return ["16:9", "9:16"];
+  }
   if (pickerId === "bytedance/seedance-1.5-pro") {
     return ["21:9", "16:9", "4:3", "1:1", "3:4", "9:16"];
   }
@@ -154,6 +168,11 @@ export function studioVideoSupportsSeedanceResolutionPicker(pickerId: string): b
     pickerId === "bytedance/seedance-2" ||
     pickerId === "bytedance/seedance-2-fast"
   );
+}
+
+/** Gemini Omni Video: 720p / 1080p / 4k output resolution. */
+export function studioVideoSupportsGeminiOmniResolutionPicker(pickerId: string): boolean {
+  return studioVideoIsGeminiOmniPickerId(pickerId);
 }
 
 export function studioVideoSupportsNativeAudio(pickerId: string): boolean {
@@ -184,12 +203,18 @@ export function studioVideoUsesSeedanceProOmniMediaUploads(pickerId: string): bo
   return pickerId === "bytedance/seedance-2" || pickerId === "bytedance/seedance-2-fast";
 }
 
+/** Studio Create: Gemini Omni — reference images + optional source video (trimmed). */
+export function studioVideoUsesGeminiOmniMediaUploads(pickerId: string): boolean {
+  return studioVideoIsGeminiOmniPickerId(pickerId);
+}
+
 /** Create tab: show aspect ratio when the provider accepts it for the current frame setup. */
 export function studioVideoShowsAspectRatioCreate(pickerId: string, hasStartFrame: boolean): boolean {
   if (pickerId === "kling-3.0/video" || pickerId === "kling-2.5-turbo/video" || pickerId === "kling-2.6/video") {
     return !hasStartFrame;
   }
   if (pickerId.startsWith("bytedance/seedance")) return true;
+  if (studioVideoIsGeminiOmniPickerId(pickerId)) return true;
   if (pickerId === "openai/sora-2" || pickerId === "openai/sora-2-pro") return true;
   return false;
 }
@@ -266,6 +291,13 @@ export function validateStudioVideoJobDuration(
     const d = Number(duration);
     if (!Number.isFinite(d) || d < 4 || d > 15 || Math.round(d) !== d) {
       throw new Error("Invalid duration for Seedance 2. Must be an integer from 4 to 15 seconds.");
+    }
+    return;
+  }
+  if (resolvedModel === GEMINI_OMNI_VIDEO_MODEL_ID) {
+    const d = Number(duration);
+    if (d !== 4 && d !== 6 && d !== 8 && d !== 10) {
+      throw new Error("Invalid duration for Gemini Omni Video. Must be 4, 6, 8, or 10 seconds.");
     }
     return;
   }

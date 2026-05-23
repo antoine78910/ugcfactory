@@ -90,8 +90,9 @@ export function calculateVideoCredits(opts: {
   duration: number;
   audio: boolean;
   quality: string;
-  /** Seedance / PiAPI billing resolution when distinct from Kling `quality`. */
-  videoResolution?: "480p" | "720p" | "1080p";
+  /** Seedance / Gemini Omni billing resolution when distinct from Kling `quality`. */
+  videoResolution?: "480p" | "720p" | "1080p" | "4k";
+  hasVideoInput?: boolean;
 }): number {
   return calculateVideoCreditsForModel({
     modelId: opts.modelId,
@@ -99,6 +100,7 @@ export function calculateVideoCredits(opts: {
     audio: opts.audio,
     quality: opts.quality,
     videoResolution: opts.videoResolution,
+    hasVideoInput: opts.hasVideoInput,
   });
 }
 

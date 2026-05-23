@@ -9,6 +9,11 @@ import {
   isStudioSeedreamImagePickerId,
   isStudioUnifiedSeedreamPickerId,
 } from "@/lib/studioImageModels";
+import {
+  calculateGeminiOmniVideoCredits,
+  GEMINI_OMNI_VIDEO_MODEL_ID,
+  normalizeGeminiOmniResolution,
+} from "@/lib/geminiOmniVideo";
 import { normalizeLegacySeedanceMarketModelId } from "@/lib/studioVideoModelCapabilities";
 import { normalizeUgcScriptVideoDurationSec } from "@/lib/ugcAiScriptBrief";
 
@@ -1078,8 +1083,10 @@ export type VideoCreditOptions = {
   audio?: boolean;
   /** Kling studio: `std` = 720p, `pro` = 1080p. Motion: `720p` / `1080p`. Used as fallback when `videoResolution` is omitted (e.g. Studio). */
   quality?: string;
-  /** PiAPI Seedance output resolution — drives $/s from {@link SEEDANCE_2_PROVIDER_USD_PER_SECOND} / Fast. */
-  videoResolution?: "480p" | "720p" | "1080p";
+  /** PiAPI Seedance / Gemini Omni output resolution. */
+  videoResolution?: "480p" | "720p" | "1080p" | "4k";
+  /** Gemini Omni: `video_list` present → flat tier (duration ignored). */
+  hasVideoInput?: boolean;
 };
 
 /** Retail ×2 on provider $/s; credits = round(retail / $0.07) per second — same baseline as Kling 3.0 dynamic rows. */
@@ -1163,6 +1170,12 @@ export function calculateVideoCreditsForModel(opts: VideoCreditOptions): number 
   const quality = opts.quality;
 
   switch (opts.modelId) {
+    case GEMINI_OMNI_VIDEO_MODEL_ID:
+      return calculateGeminiOmniVideoCredits({
+        durationSec: d,
+        resolution: normalizeGeminiOmniResolution(opts.videoResolution),
+        hasVideoInput: Boolean(opts.hasVideoInput),
+      });
     case "veo3_lite":
       return calculateVeo31Credits("veo3_lite");
     case "veo3_fast":

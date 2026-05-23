@@ -39,6 +39,12 @@ import { AvatarInputCornerBadge } from "@/app/_components/AvatarInputCornerBadge
 import { StudioEmptyExamples, StudioOutputPane } from "@/app/_components/StudioEmptyExamples";
 import { StudioGenerationsHistory } from "@/app/_components/StudioGenerationsHistory";
 import { userMessageFromCaughtError } from "@/lib/generationUserMessage";
+import {
+  GEMINI_OMNI_MAX_IMAGE_URLS,
+  GEMINI_OMNI_MAX_VIDEO_CLIP_SEC,
+  GEMINI_OMNI_MAX_VIDEO_LIST_ITEMS,
+  GEMINI_OMNI_VIDEO_MODEL_ID,
+} from "@/lib/geminiOmniVideo";
 import { inferSeedanceReferenceKindFromUrl } from "@/lib/seedanceReferenceUrlKind";
 import {
   assertStudioAudioUpload,
@@ -115,8 +121,11 @@ import {
   studioVideoSupportsNativeAudio,
   studioVideoSupportsQualityPicker,
   studioVideoSupportsSeedanceResolutionPicker,
+  studioVideoSupportsGeminiOmniResolutionPicker,
   studioVideoUsesSeedanceCompactReferenceUploads,
   studioVideoUsesSeedanceProOmniMediaUploads,
+  studioVideoUsesGeminiOmniMediaUploads,
+  studioVideoIsGeminiOmniPickerId,
   studioVideoSupportsReferenceElements,
   normalizeLegacySeedanceStudioPickerId,
   STUDIO_VEO_DURATION_HINT,
@@ -136,6 +145,7 @@ const VIDEO_PAGE_LIMIT = 60;
 /** Seedance 2 Pro: reference videos must be MP4 or MOV (not WebM). */
 const SEEDANCE_PRO_OMNI_VIDEO_ACCEPT = "video/mp4,video/quicktime,.mp4,.mov";
 const SEEDANCE_PRO_OMNI_FILE_ACCEPT = `${STUDIO_IMAGE_FILE_ACCEPT},${SEEDANCE_PRO_OMNI_VIDEO_ACCEPT},${STUDIO_AUDIO_FILE_ACCEPT}`;
+const GEMINI_OMNI_FILE_ACCEPT = `${STUDIO_IMAGE_FILE_ACCEPT},${SEEDANCE_PRO_OMNI_VIDEO_ACCEPT}`;
 
 /** Kling 3.0 multi-shot: per-shot duration, Market API integer 1–12s each (see Kling 3.0 docs). */
 const KLING_MULTI_SHOT_SEC_MIN = 1;
@@ -398,7 +408,8 @@ type VideoModelId =
   | "bytedance/seedance-2-fast"
   | "veo3_lite"
   | "veo3_fast"
-  | "veo3";
+  | "veo3"
+  | "gemini-omni-video";
 
 type VideoFamily = "kie" | "veo" | "sora";
 
@@ -414,6 +425,7 @@ const MODEL_OPTIONS: { id: VideoModelId; label: string; family: VideoFamily }[] 
   { id: "veo3_lite", label: "Veo 3.1 Lite", family: "veo" },
   { id: "veo3_fast", label: "Veo 3.1 Fast", family: "veo" },
   { id: "veo3", label: "Veo 3.1 Quality", family: "veo" },
+  { id: "gemini-omni-video", label: "Gemini Omni Video", family: "kie" },
 ];
 
 const VIDEO_EDIT_MODEL_PICKER_ITEMS: StudioModelPickerItem[] = [
@@ -530,6 +542,16 @@ const VIDEO_MODEL_PICKER_ITEMS: StudioModelPickerItem[] = [
     searchText: "seedance 2 fast bytedance",
   },
   {
+    id: "gemini-omni-video",
+    label: "Gemini Omni Video",
+    subtitle: "Multimodal · Google",
+    icon: "veo",
+    newBadge: true,
+    resolution: "720p / 1080p / 4k · 16:9 / 9:16",
+    durationRange: studioVideoDurationRangeLabel("gemini-omni-video"),
+    searchText: "gemini omni google video",
+  },
+  {
     id: "veo3_lite",
     label: "Veo 3.1 Lite",
     subtitle: "Lowest cost",
@@ -570,6 +592,7 @@ const VIDEO_MODEL_ACCESS_ORDER: VideoModelId[] = [
   "veo3_lite",
   "veo3_fast",
   "veo3",
+  "gemini-omni-video",
   "openai/sora-2",
   "openai/sora-2-pro",
 ];
@@ -976,11 +999,13 @@ export default function StudioVideoPanel({
   const HIDE_VIDEO_EDIT_TAB = true;
   const FORCED_VIDEO_MODEL_ID: VideoModelId = "openai/sora-2";
   const [modelId, setModelId] = useState<VideoModelId>(VIDEO_MODEL_ACCESS_ORDER[0]!);
-  const elementPickerSupportsVideoAudio = studioVideoIsSeedance2ProPickerId(modelId);
+  const elementPickerSupportsVideoAudio =
+    studioVideoIsSeedance2ProPickerId(modelId) || studioVideoIsGeminiOmniPickerId(modelId);
   const [duration, setDuration] = useState("10");
   const [aspect, setAspect] = useState("9:16");
   const [klingMode, setKlingMode] = useState<"std" | "pro">("std");
   const [seedanceResolution, setSeedanceResolution] = useState<"480p" | "720p" | "1080p">("720p");
+  const [geminiOmniResolution, setGeminiOmniResolution] = useState<"720p" | "1080p" | "4k">("720p");
   const [veoAspect, setVeoAspect] = useState<"16:9" | "9:16" | "Auto">("9:16");
   /** Start/end frame uploads only; does not block Generate. */
   const [frameUploadBusy, setFrameUploadBusy] = useState(false);
@@ -1472,7 +1497,9 @@ export default function StudioVideoPanel({
 
   const meta = MODEL_OPTIONS.find((m) => m.id === modelId)!;
   const compactSeedanceRefUploads = studioVideoUsesSeedanceCompactReferenceUploads(modelId);
-  const seedanceProOmniRefUploads = studioVideoUsesSeedanceProOmniMediaUploads(modelId);
+  const seedanceProOmniRefUploads =
+    studioVideoUsesSeedanceProOmniMediaUploads(modelId) || studioVideoUsesGeminiOmniMediaUploads(modelId);
+  const geminiOmniRefUploads = studioVideoUsesGeminiOmniMediaUploads(modelId);
   const elementsUnsupportedHint =
     !studioVideoSupportsReferenceElements(modelId) && prompt.includes("@");
   /** Prompt @mention picker: saved Elements + live Seedance upload tags (@imageN/@videoN/@audioN). */
@@ -1598,11 +1625,17 @@ export default function StudioVideoPanel({
   );
   const billingDurationSec = klingCustomMulti ? klingMultiTotalSec : Number(duration);
 
-  const seedanceVideoResolution = useMemo((): "480p" | "720p" | "1080p" | undefined => {
+  const seedanceVideoResolution = useMemo((): "480p" | "720p" | "1080p" | "4k" | undefined => {
+    if (studioVideoSupportsGeminiOmniResolutionPicker(modelId)) return geminiOmniResolution;
     if (!studioVideoIsSeedanceBillingPickerId(modelId)) return undefined;
     if (modelId === "bytedance/seedance-2-fast" && seedanceResolution === "1080p") return "720p";
     return seedanceResolution;
-  }, [modelId, seedanceResolution]);
+  }, [modelId, seedanceResolution, geminiOmniResolution]);
+
+  const geminiHasVideoInput = useMemo(
+    () => geminiOmniRefUploads && seedanceProOmniItems.some((x) => x.kind === "video"),
+    [geminiOmniRefUploads, seedanceProOmniItems],
+  );
 
   const pricingModelIdForCredits = useMemo(
     () => normalizeLegacySeedanceStudioPickerId(modelId),
@@ -1617,8 +1650,17 @@ export default function StudioVideoPanel({
         audio: soundOn,
         quality: klingMode,
         videoResolution: seedanceVideoResolution,
+        hasVideoInput: geminiOmniRefUploads ? geminiHasVideoInput : undefined,
       }),
-    [pricingModelIdForCredits, billingDurationSec, soundOn, klingMode, seedanceVideoResolution],
+    [
+      pricingModelIdForCredits,
+      billingDurationSec,
+      soundOn,
+      klingMode,
+      seedanceVideoResolution,
+      geminiOmniRefUploads,
+      geminiHasVideoInput,
+    ],
   );
   const credits = baseCredits;
 
@@ -2403,6 +2445,10 @@ export default function StudioVideoPanel({
     e.target.value = "";
     if (!files.length) return;
 
+    const isGeminiOmni = studioVideoIsGeminiOmniPickerId(modelId);
+    const maxImages = isGeminiOmni ? GEMINI_OMNI_MAX_IMAGE_URLS : SEEDANCE_PRO_MAX_IMAGE_URLS;
+    const maxVideos = isGeminiOmni ? GEMINI_OMNI_MAX_VIDEO_LIST_ITEMS : SEEDANCE_PRO_MAX_VIDEO_URLS;
+
     setSeedanceProOmniUploadBusy(true);
     try {
       let added = 0;
@@ -2415,6 +2461,12 @@ export default function StudioVideoPanel({
         const inferred = inferStudioUploadKind(file);
         let kind: UploadFileKind = inferred;
         try {
+          if (inferred === "audio" && isGeminiOmni) {
+            toast.error("Audio not supported", {
+              description: "Gemini Omni Video accepts images and one source video only.",
+            });
+            continue;
+          }
           if (inferred === "image") {
             assertStudioImageUpload(file);
             if (file.size > KLING_ELEMENT_MEDIA_MAX_BYTES) {
@@ -2459,12 +2511,12 @@ export default function StudioVideoPanel({
           continue;
         }
 
-        if (kind === "image" && imgCount >= SEEDANCE_PRO_MAX_IMAGE_URLS) {
-          toast.error(`At most ${SEEDANCE_PRO_MAX_IMAGE_URLS} images.`);
+        if (kind === "image" && imgCount >= maxImages) {
+          toast.error(`At most ${maxImages} images.`);
           continue;
         }
-        if (kind === "video" && vidCount >= SEEDANCE_PRO_MAX_VIDEO_URLS) {
-          toast.error(`At most ${SEEDANCE_PRO_MAX_VIDEO_URLS} video.`);
+        if (kind === "video" && vidCount >= maxVideos) {
+          toast.error(`At most ${maxVideos} video.`);
           continue;
         }
         if (kind === "audio" && audCount >= SEEDANCE_PRO_MAX_AUDIO_URLS) {
@@ -2484,10 +2536,14 @@ export default function StudioVideoPanel({
           toast.error("Could not read media duration.");
           continue;
         }
-        const remaining = Math.max(0, 15 - usedDuration);
+        const remaining = isGeminiOmni
+          ? GEMINI_OMNI_MAX_VIDEO_CLIP_SEC
+          : Math.max(0, 15 - usedDuration);
         if (remaining <= 0) {
-          toast.error("15s budget reached", {
-            description: "Remove a video/audio reference or trim one before adding more.",
+          toast.error(isGeminiOmni ? "Video clip limit reached" : "15s budget reached", {
+            description: isGeminiOmni
+              ? "Remove the source video before adding another."
+              : "Remove a video/audio reference or trim one before adding more.",
           });
           break;
         }
@@ -2518,6 +2574,7 @@ export default function StudioVideoPanel({
     }
   }, [
     addSeedanceProOmniUploadedFile,
+    modelId,
     readMediaDurationSec,
     seedanceOmniUsedDurationSec,
     seedanceProOmniAudioCount,
@@ -3873,8 +3930,20 @@ export default function StudioVideoPanel({
       endUrl,
       seedanceCompactRefUrls: compactSeedanceRefUploads ? [...seedanceCompactRefUrls] : undefined,
       seedanceOmniMedia:
-        seedanceProOmniRefUploads && seedanceProOmniItems.length
+        seedanceProOmniRefUploads && seedanceProOmniItems.length && !geminiOmniRefUploads
           ? seedanceProOmniItems.map((x) => ({ type: x.kind, url: x.url }))
+          : undefined,
+      geminiOmniMedia:
+        geminiOmniRefUploads && seedanceProOmniItems.length
+          ? seedanceProOmniItems
+              .filter((x) => x.kind === "image" || x.kind === "video")
+              .map((x) => ({
+                type: x.kind,
+                url: x.url,
+                ...(x.kind === "video" && x.durationSec != null
+                  ? { trimStartSec: 0, trimEndSec: Math.min(x.durationSec, GEMINI_OMNI_MAX_VIDEO_CLIP_SEC) }
+                  : {}),
+              }))
           : undefined,
       duration,
       veoAspect,
@@ -3887,6 +3956,7 @@ export default function StudioVideoPanel({
       klingElementsPayload,
       historyAspect,
       seedanceResolution: studioVideoIsSeedanceBillingPickerId(modelId) ? seedanceResolution : undefined,
+      geminiOmniResolution: geminiOmniRefUploads ? geminiOmniResolution : undefined,
     };
 
     // Track the DB-registered generation id so the catch block can decide whether
@@ -4024,6 +4094,8 @@ export default function StudioVideoPanel({
           : Number(snap.duration);
         const compactSnapRefs = snap.seedanceCompactRefUrls;
         const omniSnap = snap.seedanceOmniMedia;
+        const geminiOmniSnap = snap.geminiOmniMedia;
+        const isGeminiOmni = snap.modelId === GEMINI_OMNI_VIDEO_MODEL_ID;
         const klingGenerateBody: Record<string, unknown> = {
           accountPlan: snap.planId,
           marketModel: normalizeLegacySeedanceStudioPickerId(snap.modelId),
@@ -4032,20 +4104,25 @@ export default function StudioVideoPanel({
           aspectRatio:
             (isKling30 || isKling25Turbo || isKling26) && !snap.startUrl
               ? snap.aspect
-              : studioVideoIsSeedancePickerId(snap.modelId) &&
-                  (Boolean(snap.startUrl) ||
-                    studioVideoIsSeedance2ProPickerId(snap.modelId) ||
-                    studioVideoIsSeedance15ProPickerId(snap.modelId) ||
-                    (Array.isArray(compactSnapRefs) && compactSnapRefs.length > 0) ||
-                    (Array.isArray(omniSnap) && omniSnap.length > 0))
-                ? snap.aspect
+              : isGeminiOmni ||
+                  (studioVideoIsSeedancePickerId(snap.modelId) &&
+                    (Boolean(snap.startUrl) ||
+                      studioVideoIsSeedance2ProPickerId(snap.modelId) ||
+                      studioVideoIsSeedance15ProPickerId(snap.modelId) ||
+                      (Array.isArray(compactSnapRefs) && compactSnapRefs.length > 0) ||
+                      (Array.isArray(omniSnap) && omniSnap.length > 0)))
+                ? snap.aspect === "16:9" || snap.aspect === "9:16"
+                  ? snap.aspect
+                  : "16:9"
                 : undefined,
           sound: studioVideoSupportsNativeAudio(snap.modelId) ? snap.soundOn : undefined,
           mode: isKling30 || isKling25Turbo || isKling26 || isSora2Pro ? snap.klingMode : undefined,
           personalApiKey: pKey,
           piapiApiKey: piKey,
         };
-        if (Array.isArray(omniSnap) && omniSnap.length) {
+        if (Array.isArray(geminiOmniSnap) && geminiOmniSnap.length) {
+          klingGenerateBody.geminiOmniMedia = geminiOmniSnap;
+        } else if (Array.isArray(omniSnap) && omniSnap.length) {
           klingGenerateBody.seedanceOmniMedia = omniSnap;
         } else if (compactSnapRefs?.length) {
           klingGenerateBody.seedancePreviewImageUrls = compactSnapRefs;
@@ -4069,6 +4146,9 @@ export default function StudioVideoPanel({
           const r = snap.seedanceResolution ?? "720p";
           klingGenerateBody.videoResolution =
             snap.modelId === "bytedance/seedance-2-fast" && r === "1080p" ? "720p" : r;
+        }
+        if (isGeminiOmni) {
+          klingGenerateBody.videoResolution = snap.geminiOmniResolution ?? "720p";
         }
         const { blocked, response: res } = await guardedFetch("/api/kling/generate", {
           method: "POST",
@@ -4696,7 +4776,7 @@ export default function StudioVideoPanel({
                   <input
                     ref={seedanceProOmniFileRef}
                     type="file"
-                    accept={SEEDANCE_PRO_OMNI_FILE_ACCEPT}
+                    accept={geminiOmniRefUploads ? GEMINI_OMNI_FILE_ACCEPT : SEEDANCE_PRO_OMNI_FILE_ACCEPT}
                     multiple
                     className="hidden"
                     onChange={onSeedanceProOmniFileChange}
@@ -5173,6 +5253,30 @@ export default function StudioVideoPanel({
                               {ar === "auto" ? "Auto" : ar}
                             </SelectItem>
                           ))}
+                        </SelectContent>
+                      </Select>
+                    </div>
+                  ) : null}
+                  {studioVideoSupportsGeminiOmniResolutionPicker(modelId) ? (
+                    <div>
+                      <Label className="text-xs text-white/45">Resolution</Label>
+                      <Select
+                        value={geminiOmniResolution}
+                        onValueChange={(v) => setGeminiOmniResolution(v as "720p" | "1080p" | "4k")}
+                      >
+                        <SelectTrigger className="mt-2 h-12 w-full rounded-xl border-white/12 bg-white/[0.04] text-white shadow-none hover:bg-white/[0.07]">
+                          <SelectValue />
+                        </SelectTrigger>
+                        <SelectContent position="popper" className={studioSelectContentClass}>
+                          <SelectItem value="720p" className={studioSelectItemClass}>
+                            720p
+                          </SelectItem>
+                          <SelectItem value="1080p" className={studioSelectItemClass}>
+                            1080p
+                          </SelectItem>
+                          <SelectItem value="4k" className={studioSelectItemClass}>
+                            4K
+                          </SelectItem>
                         </SelectContent>
                       </Select>
                     </div>

@@ -391,6 +391,7 @@ export function StudioGenerationsHistory({
       "bytedance/seedance-1.5-pro",
       "bytedance/seedance-2",
       "bytedance/seedance-2-fast",
+      "gemini-omni-video",
     ]);
     return allow.has(model);
   }, [isLightboxVideo, lightboxItem?.model]);

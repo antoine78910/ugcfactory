@@ -53,6 +53,7 @@ const VIDEO_MIN_RANK: Record<string, number> = {
   veo3_lite: 2,
   veo3_fast: 2,
   veo3: 2,
+  "gemini-omni-video": 2,
   // Starter should include Sora 2
   "openai/sora-2": 1,
   "openai/sora-2-pro": 2,
@@ -211,6 +212,7 @@ const STUDIO_VIDEO_LABELS: Record<string, string> = {
   veo3_lite: "Veo 3.1 Lite",
   veo3_fast: "Veo 3.1 Fast",
   veo3: "Veo 3.1 Quality",
+  "gemini-omni-video": "Gemini Omni Video",
 };
 
 const STUDIO_VIDEO_EDIT_PICKER_LABELS: Record<string, string> = {
@@ -232,6 +234,7 @@ export const STUDIO_VIDEO_IDS_ORDERED: readonly string[] = [
   "veo3_lite",
   "veo3_fast",
   "veo3",
+  "gemini-omni-video",
   "openai/sora-2",
   "openai/sora-2-pro",
 ];
@@ -388,6 +391,7 @@ export const SUBSCRIPTION_MODEL_MATRIX_ROWS: SubscriptionModelMatrixRow[] = [
   { label: "Veo 3.1 Lite", tiers: tierBools(VIDEO_MIN_RANK.veo3_lite) },
   { label: "Veo 3.1 Fast", tiers: tierBools(VIDEO_MIN_RANK.veo3_fast) },
   { label: "Veo 3.1 Quality", tiers: tierBools(VIDEO_MIN_RANK.veo3) },
+  { label: "Gemini Omni Video", tiers: tierBools(VIDEO_MIN_RANK["gemini-omni-video"]) },
   {
     label: "Sora 2",
     tiers: tierBools(VIDEO_MIN_RANK["openai/sora-2"]),

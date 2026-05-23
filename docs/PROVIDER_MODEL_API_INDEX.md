@@ -93,8 +93,11 @@ Several pickers use **one UI id**; the backend resolves to **two KIE `model` str
 | Sora 2 Pro text-to-video | [sora-2-pro-text-to-video](https://docs.kie.ai/market/sora2/sora-2-pro-text-to-video) |
 | Sora 2 Pro image-to-video | [sora-2-pro-image-to-video](https://docs.kie.ai/market/sora2/sora-2-pro-image-to-video) |
 | Veo 3.1 (`veo3` Quality, `veo3_fast` Fast, `veo3_lite` Lite — same credits for text- and image-to-video per tier) | [generate-veo-3-video](https://docs.kie.ai/veo3-api/generate-veo-3-video) |
+| Gemini Omni Video (`gemini-omni-video`) | [gemini-omni-video](https://docs.kie.ai/market/gemini-omni-video) |
 
-**Implementation:** `src/app/api/kie/veo/generate/route.ts`, `src/lib/kie.ts` (Veo payload), `src/lib/pricing.ts` (`VEO_3_1_*`, `calculateVeo31Credits`). Kling Market: `src/app/api/kling/generate/route.ts`, `src/lib/kieMarket.ts`, `kieVideoModelResolver.ts`.
+**Gemini Omni billing:** fixed credits per clip from duration (4/6/8/10s) × resolution (720p/1080p/4k) when no source video; with `video_list`, flat tier by resolution only. See `calculateGeminiOmniVideoCredits` in `src/lib/geminiOmniVideo.ts`.
+
+**Implementation:** `src/app/api/kie/veo/generate/route.ts`, `src/lib/kie.ts` (Veo payload), `src/lib/pricing.ts` (`VEO_3_1_*`, `calculateVeo31Credits`). Kling Market + Gemini Omni: `src/app/api/kling/generate/route.ts`, `src/lib/kieMarket.ts`, `src/lib/geminiOmniVideo.ts`, `kieVideoModelResolver.ts`.
 
 **Studio UI (duration / aspect / quality per picker):** `src/lib/studioVideoModelCapabilities.ts` — keep in sync with `validateStudioVideoJobDuration` and the generate route.
 

@@ -33,11 +33,25 @@ import {
   studioVideoIsSeedance2ProPickerId,
   studioVideoSupportsReferenceElements,
   normalizeLegacySeedanceMarketModelId,
+  studioVideoUsesGeminiOmniMediaUploads,
 } from "@/lib/studioVideoModelCapabilities";
 import { inferSeedanceReferenceKindFromUrl } from "@/lib/seedanceReferenceUrlKind";
 import { createSupabaseServiceClient } from "@/lib/supabase/admin";
 import { resolveAuthUserEmail } from "@/lib/sessionUserEmail";
 import { shouldChargePlatformCredits, assertSufficientCreditsResponse } from "@/lib/credits/metering";
+import {
+  GEMINI_OMNI_MAX_IMAGE_URLS,
+  GEMINI_OMNI_MAX_VIDEO_LIST_ITEMS,
+  GEMINI_OMNI_QUOTA_UNITS_MAX,
+  GEMINI_OMNI_VIDEO_MODEL_ID,
+  coerceGeminiOmniDurationSec,
+  geminiOmniQuotaUnitsUsed,
+  mapWorkflowAspectToGeminiOmni,
+  normalizeGeminiOmniResolution,
+  normalizeGeminiVideoListItem,
+  studioVideoIsGeminiOmniPickerId,
+  type GeminiOmniVideoAspectRatio,
+} from "@/lib/geminiOmniVideo";
 import { calculateVideoCreditsForModel } from "@/lib/pricing";
 
 type KlingAspectRatio = "16:9" | "9:16" | "1:1";
@@ -93,6 +107,13 @@ type Body = {
   webSearch?: boolean;
   /** When true, enable provider content checks (if supported). */
   nsfwChecker?: boolean;
+  /**
+   * Gemini Omni Video only: reference images and optional source video (with trim range).
+   * @see https://docs.kie.ai/market/gemini-omni-video
+   */
+  geminiOmniMedia?: { type: "image" | "video"; url: string; trimStartSec?: number; trimEndSec?: number }[];
+  geminiCharacterIds?: string[];
+  geminiAudioIds?: string[];
 };
 
 /** Per-shot length, Kling 3.0 Market API: integer 1–12 seconds each. @see https://docs.kie.ai/market/kling/kling-3-0 */
@@ -473,6 +494,31 @@ function isSora2Pro(model: string): boolean {
   );
 }
 
+function normalizeGeminiOmniMedia(
+  raw: unknown,
+): { ok: true; items: { type: "image" | "video"; url: string; trimStartSec?: number; trimEndSec?: number }[] } | { ok: false; error: string } {
+  if (raw == null) return { ok: true, items: [] };
+  if (!Array.isArray(raw)) return { ok: false, error: "`geminiOmniMedia` must be an array." };
+  const items: { type: "image" | "video"; url: string; trimStartSec?: number; trimEndSec?: number }[] = [];
+  for (let i = 0; i < raw.length; i++) {
+    const row = raw[i] as { type?: unknown; url?: unknown; trimStartSec?: unknown; trimEndSec?: unknown };
+    const type = row?.type === "image" || row?.type === "video" ? row.type : null;
+    const url = typeof row?.url === "string" ? row.url.trim() : "";
+    if (!type || !url) {
+      return { ok: false, error: `geminiOmniMedia[${i}]: type (image|video) and url are required.` };
+    }
+    const trimStartSec = row.trimStartSec != null ? Number(row.trimStartSec) : undefined;
+    const trimEndSec = row.trimEndSec != null ? Number(row.trimEndSec) : undefined;
+    items.push({
+      type,
+      url,
+      ...(Number.isFinite(trimStartSec) ? { trimStartSec } : {}),
+      ...(Number.isFinite(trimEndSec) ? { trimEndSec } : {}),
+    });
+  }
+  return { ok: true, items };
+}
+
 export async function POST(req: Request) {
   const { user, response } = await requireSupabaseUser();
   if (response) return response;
@@ -515,6 +561,28 @@ export async function POST(req: Request) {
     );
   }
   const useSeedanceProOmniRefs = studioVideoIsSeedance2ProPickerId(rawModel) && omniNorm.items.length > 0;
+
+  const geminiOmniNorm = normalizeGeminiOmniMedia(body.geminiOmniMedia);
+  if (!geminiOmniNorm.ok) {
+    return NextResponse.json({ error: geminiOmniNorm.error }, { status: 400 });
+  }
+  if (geminiOmniNorm.items.length > 0 && !studioVideoIsGeminiOmniPickerId(rawModel)) {
+    return NextResponse.json(
+      { error: "`geminiOmniMedia` is only valid for Gemini Omni Video." },
+      { status: 400 },
+    );
+  }
+  const useGeminiOmniRefs =
+    studioVideoUsesGeminiOmniMediaUploads(rawModel) && geminiOmniNorm.items.length > 0;
+  if (useGeminiOmniRefs && (hasKieReferenceImage || hasKieEndImage)) {
+    return NextResponse.json(
+      {
+        error: "When using `geminiOmniMedia`, omit `imageUrl` and `endImageUrl`.",
+      },
+      { status: 400 },
+    );
+  }
+
   if (useSeedanceProOmniRefs && (hasKieReferenceImage || hasKieEndImage)) {
     return NextResponse.json(
       {
@@ -613,14 +681,38 @@ export async function POST(req: Request) {
   const charges = shouldChargePlatformCredits({ usesPersonalApi, email });
   if (charges && admin) {
     // Compute cost server-side. Mirrors the client-side calc; differences would only block edge cases.
+    const geminiHasVideoInput =
+      rawModel === GEMINI_OMNI_VIDEO_MODEL_ID &&
+      (useGeminiOmniRefs
+        ? geminiOmniNorm.items.some((it) => it.type === "video")
+        : false);
+    const geminiResolution =
+      rawModel === GEMINI_OMNI_VIDEO_MODEL_ID
+        ? normalizeGeminiOmniResolution(body.videoResolution)
+        : undefined;
     const costDisplayCredits = calculateVideoCreditsForModel({
       modelId: model,
       duration:
         Number(body.duration) ||
-        (rawModel === "bytedance/seedance-1.5-pro" ? 8 : rawModel.startsWith("bytedance/seedance") ? 10 : 5),
+        (rawModel === GEMINI_OMNI_VIDEO_MODEL_ID
+          ? coerceGeminiOmniDurationSec(Number(body.duration))
+          : rawModel === "bytedance/seedance-1.5-pro"
+            ? 8
+            : rawModel.startsWith("bytedance/seedance")
+              ? 10
+              : 5),
       audio: body.sound ?? true,
       quality: body.mode,
-      videoResolution: body.videoResolution,
+      videoResolution:
+        geminiResolution ??
+        (body.videoResolution === "480p" ||
+        body.videoResolution === "720p" ||
+        body.videoResolution === "1080p"
+          ? body.videoResolution
+          : body.videoResolution === "4k"
+            ? "4k"
+            : undefined),
+      hasVideoInput: geminiHasVideoInput,
     });
     // Plan id for the modal: best-effort. Use the existing accountPlan if computed, else fetch fresh.
     const dbPlan = dbPlanResolved ?? (await getUserPlan(user.id));
@@ -1136,6 +1228,117 @@ export async function POST(req: Request) {
         taskId,
         provider: "kie-market",
         model,
+      });
+    } else if (rawModel === GEMINI_OMNI_VIDEO_MODEL_ID) {
+      const normalizedPrompt = normalizeSeedanceGeneratePrompt(prompt);
+      if (!normalizedPrompt) {
+        return NextResponse.json({ error: "Missing `prompt`." }, { status: 400 });
+      }
+
+      const imageUrlsFromFrames: string[] = [];
+      if (hasKieReferenceImage) imageUrlsFromFrames.push(imageUrlRaw);
+      if (hasKieEndImage) imageUrlsFromFrames.push(endImageUrlRaw);
+
+      const geminiImages: string[] = [];
+      const geminiVideoClips: { url: string; start: number; ends: number }[] = [];
+
+      if (useGeminiOmniRefs) {
+        for (const it of geminiOmniNorm.items) {
+          if (it.type === "image") geminiImages.push(it.url);
+          else {
+            const start = Number.isFinite(it.trimStartSec) ? Number(it.trimStartSec) : 0;
+            const ends = Number.isFinite(it.trimEndSec) ? Number(it.trimEndSec) : start + 10;
+            const norm = normalizeGeminiVideoListItem({ url: it.url, start, ends });
+            if (!norm.ok) {
+              return NextResponse.json({ error: norm.error }, { status: 400 });
+            }
+            geminiVideoClips.push(norm.item);
+          }
+        }
+      } else {
+        for (const u of imageUrlsFromFrames) geminiImages.push(u);
+      }
+
+      if (geminiVideoClips.length > GEMINI_OMNI_MAX_VIDEO_LIST_ITEMS) {
+        return NextResponse.json(
+          { error: `At most ${GEMINI_OMNI_MAX_VIDEO_LIST_ITEMS} source video is allowed.` },
+          { status: 400 },
+        );
+      }
+
+      const characterIds = Array.isArray(body.geminiCharacterIds)
+        ? body.geminiCharacterIds.map((id) => String(id ?? "").trim()).filter(Boolean).slice(0, 3)
+        : [];
+      const audioIds = Array.isArray(body.geminiAudioIds)
+        ? body.geminiAudioIds.map((id) => String(id ?? "").trim()).filter(Boolean).slice(0, 3)
+        : [];
+
+      const quotaUsed = geminiOmniQuotaUnitsUsed({
+        imageCount: geminiImages.length,
+        videoCount: geminiVideoClips.length,
+        characterIdCount: characterIds.length,
+      });
+      if (quotaUsed > GEMINI_OMNI_QUOTA_UNITS_MAX) {
+        return NextResponse.json(
+          {
+            error: `Too many Gemini Omni references (${quotaUsed} units). Maximum is ${GEMINI_OMNI_QUOTA_UNITS_MAX} (images×1, videos×2, character IDs×1).`,
+          },
+          { status: 400 },
+        );
+      }
+
+      const hasVideoInput = geminiVideoClips.length > 0;
+      const durationSec = coerceGeminiOmniDurationSec(Number(body.duration ?? 8));
+      const resolution = normalizeGeminiOmniResolution(body.videoResolution);
+      const aspectRatio: GeminiOmniVideoAspectRatio = mapWorkflowAspectToGeminiOmni(body.aspectRatio);
+
+      const kieInput: Record<string, unknown> = {
+        prompt: normalizedPrompt.slice(0, 20_000),
+        aspect_ratio: aspectRatio,
+        resolution,
+      };
+      if (!hasVideoInput) {
+        kieInput.duration = String(durationSec);
+      }
+
+      try {
+        const mirroredImages: string[] = [];
+        for (const u of geminiImages.slice(0, GEMINI_OMNI_MAX_IMAGE_URLS)) {
+          mirroredImages.push(await mirrorImageUrlForPiapiSeedance(u, user.id));
+        }
+        if (mirroredImages.length) kieInput.image_urls = mirroredImages;
+
+        if (geminiVideoClips.length) {
+          const mirroredVideos: { url: string; start: number; ends: number }[] = [];
+          for (const clip of geminiVideoClips) {
+            const url = await mirrorVideoUrlForPiapiSeedance(clip.url, user.id);
+            mirroredVideos.push({ url, start: clip.start, ends: clip.ends });
+          }
+          kieInput.video_list = mirroredVideos;
+        }
+        if (characterIds.length) kieInput.character_ids = characterIds;
+        if (audioIds.length) kieInput.audio_ids = audioIds;
+      } catch (mirrorErr) {
+        logGenerationFailure("kling/generate/mirror-gemini-omni", mirrorErr, { model });
+        return NextResponse.json(
+          {
+            error:
+              mirrorErr instanceof Error
+                ? mirrorErr.message
+                : "Could not prepare reference media for Gemini Omni Video.",
+          },
+          { status: 502 },
+        );
+      }
+
+      const taskId = await kieMarketCreateTask(
+        { model: GEMINI_OMNI_VIDEO_MODEL_ID, input: kieInput },
+        personalKey,
+      );
+      return NextResponse.json({
+        taskId,
+        provider: "kie-market",
+        model: rawModel,
       });
     } else {
       return NextResponse.json(

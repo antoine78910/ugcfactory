@@ -29,6 +29,11 @@ import {
 import { normalizeKieVeoModel, type KieVeoAspectRatio } from "@/lib/kie";
 import { pollKlingVideo, pollVeoVideo } from "@/lib/studioKlingClientPoll";
 import {
+  GEMINI_OMNI_MAX_VIDEO_CLIP_SEC,
+  GEMINI_OMNI_VIDEO_MODEL_ID,
+  normalizeGeminiOmniResolution,
+} from "@/lib/geminiOmniVideo";
+import {
   normalizeLegacySeedanceMarketModelId,
   studioVideoDurationSecOptions,
   validateStudioVideoJobDuration,
@@ -919,6 +924,8 @@ function workflowVideoDefaultDuration(modelId: string): number {
     case "veo3_fast":
     case "veo3":
       return 8;
+    case GEMINI_OMNI_VIDEO_MODEL_ID:
+      return 8;
     default:
       return 5;
   }
@@ -972,8 +979,10 @@ function resolveWorkflowKlingAspectForApi(
   const isKling25Turbo = modelId === "kling-2.5-turbo/video";
   const isKling26 = modelId === "kling-2.6/video";
   const isSora = modelId === "openai/sora-2" || modelId === "openai/sora-2-pro";
+  const isGemini = modelId === GEMINI_OMNI_VIDEO_MODEL_ID;
   const isSeedance = modelId.startsWith("bytedance/seedance");
 
+  if (isGemini) return clampVideoAspect3Way(rawAspect) === "9:16" ? "9:16" : "16:9";
   if (isSora) return clampSoraAspect(rawAspect);
   if (isKling30 || isSeedance) return clampVideoAspect3Way(rawAspect);
   if ((isKling25Turbo || isKling26) && !hasStartUrl) return clampVideoAspect3Way(rawAspect);
@@ -1301,6 +1310,7 @@ export function workflowVideoModelHasStartFrame(modelId: string): boolean {
   if (normalized === "bytedance/seedance-1.5-pro") return true;
   // Seedance 2 / Fast: we accept start/end frames as part of omni_reference media set.
   if (normalized === "bytedance/seedance-2" || normalized === "bytedance/seedance-2-fast") return true;
+  if (normalized === GEMINI_OMNI_VIDEO_MODEL_ID) return true;
   if (modelId.startsWith("bytedance/seedance")) return false;
   return true;
 }
@@ -1778,6 +1788,8 @@ async function runWorkflowVideoJobOnce(params: WorkflowRunVideoParams): Promise<
     seedanceResolvedModel === "bytedance/seedance-2-fast" && seedanceRes === "1080p"
       ? "720p"
       : seedanceRes;
+  const geminiKieEarly = seedanceResolvedModel === GEMINI_OMNI_VIDEO_MODEL_ID;
+  const geminiHasVideoInputEarly = geminiKieEarly && resolvedRefVideos.length > 0;
   const baseCredits = calculateVideoCredits({
     modelId: seedanceResolvedModel,
     duration,
@@ -1786,7 +1798,12 @@ async function runWorkflowVideoJobOnce(params: WorkflowRunVideoParams): Promise<
         ? params.nativeAudioEnabled ?? true
         : false,
     quality,
-    videoResolution: modelId.startsWith("bytedance/seedance") ? seedanceResForCredits : undefined,
+    videoResolution: geminiKieEarly
+      ? normalizeGeminiOmniResolution(params.resolution)
+      : modelId.startsWith("bytedance/seedance")
+        ? seedanceResForCredits
+        : undefined,
+    hasVideoInput: geminiKieEarly ? geminiHasVideoInputEarly : undefined,
   });
   const credits = baseCredits;
 
@@ -1813,6 +1830,27 @@ async function runWorkflowVideoJobOnce(params: WorkflowRunVideoParams): Promise<
   const seedanceMergedVideoUrls = seedanceKie
     ? dedupeKeepOrder(resolvedRefVideos.filter((u) => Boolean(u?.trim()))).slice(0, SEEDANCE_PRO_MAX_VIDEO_URLS)
     : [];
+  const geminiKie = seedanceResolvedModel === GEMINI_OMNI_VIDEO_MODEL_ID;
+  const geminiMergedImageUrls = geminiKie
+    ? dedupeKeepOrder(
+        [startUrl, endUrl, ...refUrls].filter((u): u is string => Boolean(u && u.trim())),
+      ).slice(0, 7)
+    : [];
+  const geminiMergedVideoUrls = geminiKie
+    ? dedupeKeepOrder(resolvedRefVideos.filter((u) => Boolean(u?.trim()))).slice(0, 1)
+    : [];
+  const geminiOmniMedia =
+    geminiKie && (geminiMergedImageUrls.length > 0 || geminiMergedVideoUrls.length > 0)
+      ? [
+          ...geminiMergedImageUrls.map((url) => ({ type: "image" as const, url })),
+          ...geminiMergedVideoUrls.map((url) => ({
+            type: "video" as const,
+            url,
+            trimStartSec: 0,
+            trimEndSec: GEMINI_OMNI_MAX_VIDEO_CLIP_SEC,
+          })),
+        ]
+      : undefined;
 
   // First/last frame routing (mutually exclusive with omni refs on the provider side).
   // We require either a startUrl or endUrl, AND no extra refs / videos so we don't lose
@@ -1986,13 +2024,16 @@ async function runWorkflowVideoJobOnce(params: WorkflowRunVideoParams): Promise<
           : endUrl,
       seedancePreviewImageUrls: undefined,
       seedanceOmniMedia,
+      geminiOmniMedia,
       klingElements,
       duration,
       aspectRatio: aspectForApi,
       /** Seedance — workflow resolution maps to provider tiers (Fast caps at 720p server-side). */
-      videoResolution: modelId.startsWith("bytedance/seedance")
-        ? workflowVideoResolutionToPiapiSeedance(params.resolution)
-        : undefined,
+      videoResolution: geminiKie
+        ? normalizeGeminiOmniResolution(params.resolution)
+        : modelId.startsWith("bytedance/seedance")
+          ? workflowVideoResolutionToPiapiSeedance(params.resolution)
+          : undefined,
       sound:
         modelId === "kling-3.0/video" || modelId === "kling-2.5-turbo/video" || modelId === "kling-2.6/video"
           ? (params.nativeAudioEnabled ?? true)
@@ -2073,6 +2114,9 @@ async function runWorkflowVideoJobOnce(params: WorkflowRunVideoParams): Promise<
   params.onTaskStarted?.(genJson.taskId);
 
   const registerInputUrls = (() => {
+    if (geminiKie && (geminiMergedImageUrls.length > 0 || geminiMergedVideoUrls.length > 0)) {
+      return [...geminiMergedImageUrls, ...geminiMergedVideoUrls];
+    }
     if (seedanceKie && (seedanceMergedImageUrls.length > 0 || seedanceMergedVideoUrls.length > 0)) {
       return [...seedanceMergedImageUrls, ...seedanceMergedVideoUrls];
     }
