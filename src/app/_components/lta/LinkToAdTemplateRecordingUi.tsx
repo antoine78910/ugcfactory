@@ -264,7 +264,6 @@ export function LinkToAdTemplateBrandPicker({
                   <button
                     type="button"
                     onClick={() => {
-                      recording.closeBrandPicker();
                       void recording.startBrandFlow(brand);
                     }}
                     className="flex w-full items-center gap-3 rounded-xl border border-white/10 bg-white/[0.03] p-2 text-left transition hover:border-violet-400/30 hover:bg-violet-500/[0.06]"

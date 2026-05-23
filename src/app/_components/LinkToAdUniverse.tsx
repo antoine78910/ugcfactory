@@ -3218,6 +3218,15 @@ export default function LinkToAdUniverse({
   }, [templateRecording.isTemplateReplayActive]);
 
   useEffect(() => {
+    if (templateRecording.suppressUrlFlowProgressOverlay) {
+      setShowUrlFlowProgressOverlay(false);
+    }
+  }, [
+    templateRecording.suppressUrlFlowProgressOverlay,
+    templateRecording.flowStage,
+  ]);
+
+  useEffect(() => {
     if (!resumeRunId) {
       setIsResumeHydrating(false);
       return;
@@ -4084,7 +4093,9 @@ export default function LinkToAdUniverse({
     }
     lastLtaUrlGenerateChargeRef.current = initialCharge;
     chargedFullBundle = true;
-    setShowUrlFlowProgressOverlay(true);
+    if (!templateRecording.suppressUrlFlowProgressOverlay) {
+      setShowUrlFlowProgressOverlay(true);
+    }
 
     const pipelineProductUrls = [...productOnlyImageUrls];
     const pipelinePersonaUrls = [...personaPhotoUrls];
@@ -9663,7 +9674,9 @@ export default function LinkToAdUniverse({
       </div>
     ) : null}
     <LinkToAdUrlFlowProgressOverlay
-      open={showUrlFlowProgressOverlay && !templateRecording.isTemplateReplayActive}
+      open={
+        showUrlFlowProgressOverlay && !templateRecording.suppressUrlFlowProgressOverlay
+      }
       assetKind={linkToAdAssetType === "app" ? "app" : "product"}
       stage={stage}
       serverPipelineStepIndex={serverPipelineStepIndex}

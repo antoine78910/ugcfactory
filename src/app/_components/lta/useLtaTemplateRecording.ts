@@ -114,6 +114,9 @@ export function useLtaTemplateRecording(args: UseLtaTemplateRecordingArgs) {
   /** True while Link to Ad template replay is active (not normal LTA generation). */
   const isTemplateReplayActive = templateToggleOn && templateFlowInProgress;
 
+  /** Block the full-screen “Creating product” modal during template mode (toggle on). */
+  const suppressUrlFlowProgressOverlay = templateToggleOn;
+
   const locksSelection = isTemplateReplayActive;
   const active =
     locksSelection &&
@@ -261,6 +264,7 @@ export function useLtaTemplateRecording(args: UseLtaTemplateRecordingArgs) {
   const startBrandFlow = useCallback(
     async (brand: LtaTemplateBrandSummary) => {
       flowActiveRef.current = true;
+      setTemplateToggleOn(true);
       setFlowStage("step1_loading");
       try {
         const res = await fetch(`/api/runs/get?runId=${encodeURIComponent(brand.runId)}`, {
@@ -359,11 +363,10 @@ export function useLtaTemplateRecording(args: UseLtaTemplateRecordingArgs) {
   }, []);
 
   const closeBrandPicker = useCallback(() => {
+    if (flowActiveRef.current) return;
     setFlowStage("idle");
-    if (!templateFlowInProgress && !flowActiveRef.current) {
-      setTemplateToggleOn(false);
-    }
-  }, [templateFlowInProgress]);
+    setTemplateToggleOn(false);
+  }, []);
 
   const gateStep = gateStepForStage(flowStage);
 
@@ -433,7 +436,7 @@ export function useLtaTemplateRecording(args: UseLtaTemplateRecordingArgs) {
   }, [flowStage, runStep1Loading, runStep2Loading, runStep3Loading, runStep4Loading]);
 
   const interceptPaidAction = useCallback((): boolean => {
-    if (!isTemplateReplayActive) return false;
+    if (!templateToggleOn && !isTemplateReplayActive) return false;
     toast.message("Template mode", {
       description:
         flowStage.endsWith("_gate") || flowStage.endsWith("_loading")
@@ -441,11 +444,11 @@ export function useLtaTemplateRecording(args: UseLtaTemplateRecordingArgs) {
           : "Template recording is in progress.",
     });
     return true;
-  }, [flowStage, isTemplateReplayActive]);
+  }, [flowStage, isTemplateReplayActive, templateToggleOn]);
 
   const interceptOnRun = useCallback(
     async (_storeUrl: string, realOnRun: () => Promise<void>) => {
-      if (isTemplateReplayActive) {
+      if (templateToggleOn || isTemplateReplayActive) {
         toast.message("Template mode", {
           description: "Turn off template mode or finish the replay before running a real generation.",
         });
@@ -453,7 +456,7 @@ export function useLtaTemplateRecording(args: UseLtaTemplateRecordingArgs) {
       }
       await realOnRun();
     },
-    [isTemplateReplayActive],
+    [isTemplateReplayActive, templateToggleOn],
   );
 
   return {
@@ -467,6 +470,7 @@ export function useLtaTemplateRecording(args: UseLtaTemplateRecordingArgs) {
     active,
     locksSelection,
     isTemplateReplayActive,
+    suppressUrlFlowProgressOverlay,
     gateStep,
     gateLabel: gateStep ? LTA_TEMPLATE_RECORDING_STEP_LABELS[gateStep] : null,
     requestTemplateToggle,
