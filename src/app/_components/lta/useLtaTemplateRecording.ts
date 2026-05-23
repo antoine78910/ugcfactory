@@ -92,14 +92,20 @@ export function useLtaTemplateRecording(args: UseLtaTemplateRecordingArgs) {
   const [brands, setBrands] = useState<LtaTemplateBrandSummary[]>([]);
   const [brandsLoading, setBrandsLoading] = useState(false);
   const [flowStage, setFlowStage] = useState<FlowStage>("idle");
+  /** User-facing on/off for template mode (armed after start confirmation). */
+  const [templateToggleOn, setTemplateToggleOn] = useState(false);
+  const [showStartConfirm, setShowStartConfirm] = useState(false);
+  const [showExitConfirm, setShowExitConfirm] = useState(false);
   const runCacheRef = useRef<TemplateRunCache | null>(null);
   const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const flowActiveRef = useRef(false);
 
   const effectiveEmail = resolveClientAllowlistEmail(args.clientEmail, sessionEmail);
 
-  const locksSelection =
+  const templateFlowInProgress =
     flowStage !== "idle" && flowStage !== "picking_brand" && flowStage !== "finished";
+
+  const locksSelection = templateToggleOn && templateFlowInProgress;
   const active =
     locksSelection &&
     flowStage !== "step1_gate" &&
@@ -282,6 +288,9 @@ export function useLtaTemplateRecording(args: UseLtaTemplateRecordingArgs) {
     flowActiveRef.current = false;
     runCacheRef.current = null;
     setFlowStage("idle");
+    setTemplateToggleOn(false);
+    setShowStartConfirm(false);
+    setShowExitConfirm(false);
     args.setIsWorking(false);
     args.setShowUrlFlowProgressOverlay(false);
     args.setIsNanoAllImagesSubmitting(false);
@@ -289,6 +298,53 @@ export function useLtaTemplateRecording(args: UseLtaTemplateRecordingArgs) {
     args.setIsKlingSubmitting(false);
     args.setStage("ready");
   }, [args, clearTimer]);
+
+  const requestTemplateToggle = useCallback(
+    (nextOn: boolean) => {
+      if (!featureEnabled) {
+        void refreshFeatureAccess();
+        return;
+      }
+      if (nextOn) {
+        if (templateFlowInProgress || flowStage === "picking_brand") return;
+        setShowStartConfirm(true);
+        return;
+      }
+      if (templateFlowInProgress || flowStage === "picking_brand") {
+        setShowExitConfirm(true);
+        return;
+      }
+      setTemplateToggleOn(false);
+    },
+    [featureEnabled, flowStage, refreshFeatureAccess, templateFlowInProgress],
+  );
+
+  const confirmTemplateStart = useCallback(() => {
+    setShowStartConfirm(false);
+    setTemplateToggleOn(true);
+    openBrandPicker();
+  }, [openBrandPicker]);
+
+  const cancelTemplateStart = useCallback(() => {
+    setShowStartConfirm(false);
+    setTemplateToggleOn(false);
+  }, []);
+
+  const confirmTemplateExit = useCallback(() => {
+    setShowExitConfirm(false);
+    exitTemplateMode();
+  }, [exitTemplateMode]);
+
+  const cancelTemplateExit = useCallback(() => {
+    setShowExitConfirm(false);
+  }, []);
+
+  const closeBrandPicker = useCallback(() => {
+    setFlowStage("idle");
+    if (!templateFlowInProgress && !flowActiveRef.current) {
+      setTemplateToggleOn(false);
+    }
+  }, [templateFlowInProgress]);
 
   const gateStep = gateStepForStage(flowStage);
 
@@ -311,6 +367,7 @@ export function useLtaTemplateRecording(args: UseLtaTemplateRecordingArgs) {
     if (flowStage === "step4_gate") {
       setFlowStage("finished");
       flowActiveRef.current = false;
+      setTemplateToggleOn(false);
       toast.success("Template recording complete");
       return;
     }
@@ -334,6 +391,7 @@ export function useLtaTemplateRecording(args: UseLtaTemplateRecordingArgs) {
   }, [applyCachedStep, flowStage]);
 
   const interceptPaidAction = useCallback((): boolean => {
+    if (!templateToggleOn) return false;
     if (flowStage === "idle" || flowStage === "finished") return false;
     if (flowStage === "picking_brand") return true;
     toast.message("Template mode", {
@@ -345,16 +403,28 @@ export function useLtaTemplateRecording(args: UseLtaTemplateRecordingArgs) {
     return true;
   }, [flowStage]);
 
-  const interceptOnRun = useCallback(async (_storeUrl: string, realOnRun: () => Promise<void>) => {
-    if (!flowActiveRef.current) {
+  const interceptOnRun = useCallback(
+    async (_storeUrl: string, realOnRun: () => Promise<void>) => {
+      if (
+        templateToggleOn &&
+        flowStage !== "idle" &&
+        flowStage !== "finished"
+      ) {
+        toast.message("Template mode", {
+          description: "Turn off template mode or finish the replay before running a real generation.",
+        });
+        return;
+      }
       await realOnRun();
-      return;
-    }
-    toast.message("Template mode", { description: "Pick a brand with the Template button (bottom right)." });
-  }, []);
+    },
+    [flowStage, templateToggleOn],
+  );
 
   return {
     featureEnabled,
+    templateToggleOn,
+    showStartConfirm,
+    showExitConfirm,
     brands,
     brandsLoading,
     flowStage,
@@ -362,7 +432,11 @@ export function useLtaTemplateRecording(args: UseLtaTemplateRecordingArgs) {
     locksSelection,
     gateStep,
     gateLabel: gateStep ? LTA_TEMPLATE_RECORDING_STEP_LABELS[gateStep] : null,
-    openBrandPicker,
+    requestTemplateToggle,
+    confirmTemplateStart,
+    cancelTemplateStart,
+    confirmTemplateExit,
+    cancelTemplateExit,
     startBrandFlow,
     exitTemplateMode,
     continueFromGate,
@@ -370,6 +444,6 @@ export function useLtaTemplateRecording(args: UseLtaTemplateRecordingArgs) {
     interceptPaidAction,
     interceptOnRun,
     pickingBrand: flowStage === "picking_brand",
-    closeBrandPicker: () => setFlowStage("idle"),
+    closeBrandPicker,
   };
 }

@@ -123,7 +123,9 @@ import { useLtaTemplateRecording } from "@/app/_components/lta/useLtaTemplateRec
 import {
   LinkToAdTemplateBrandPicker,
   LinkToAdTemplateRecordingButton,
+  LinkToAdTemplateRecordingExitConfirm,
   LinkToAdTemplateRecordingGate,
+  LinkToAdTemplateRecordingStartConfirm,
 } from "@/app/_components/lta/LinkToAdTemplateRecordingUi";
 import { AvatarPickerDialog } from "@/app/_components/AvatarPickerDialog";
 import { clipboardImageFiles } from "@/lib/clipboardImage";
@@ -9617,6 +9619,8 @@ export default function LinkToAdUniverse({
       serverPipelineStepIndex={serverPipelineStepIndex}
     />
     <LinkToAdTemplateRecordingButton recording={templateRecording} />
+    <LinkToAdTemplateRecordingStartConfirm recording={templateRecording} />
+    <LinkToAdTemplateRecordingExitConfirm recording={templateRecording} />
     <LinkToAdTemplateBrandPicker recording={templateRecording} />
     <LinkToAdTemplateRecordingGate recording={templateRecording} />
     <LinkToAdProductSetupDialog

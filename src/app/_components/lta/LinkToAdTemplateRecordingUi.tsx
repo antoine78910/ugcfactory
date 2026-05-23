@@ -15,7 +15,7 @@ function useDocumentPortal() {
   return mounted;
 }
 
-/** Bottom-right FAB; portaled to `document.body` so parent layout cannot hide it. */
+/** Bottom-right FAB with on/off toggle; portaled to `document.body`. */
 export function LinkToAdTemplateRecordingButton({
   recording,
 }: {
@@ -24,22 +24,125 @@ export function LinkToAdTemplateRecordingButton({
   const mounted = useDocumentPortal();
   if (!mounted || !recording.featureEnabled) return null;
 
+  const toggleDisabled =
+    recording.active ||
+    recording.pickingBrand ||
+    recording.flowStage === "step1_loading" ||
+    recording.flowStage === "step2_loading" ||
+    recording.flowStage === "step3_loading" ||
+    recording.flowStage === "step4_loading";
+
   return createPortal(
-    <button
-      type="button"
-      onClick={recording.openBrandPicker}
-      aria-label="Template mode — screen recording replay"
+    <div
       className={cn(
-        "fixed bottom-5 right-5 z-[10100] inline-flex items-center gap-2 rounded-full border px-4 py-2.5 text-xs font-semibold shadow-[0_8px_32px_rgba(0,0,0,0.55)] backdrop-blur-md transition",
+        "fixed bottom-5 right-5 z-[10100] flex items-center gap-2.5 rounded-full border px-3 py-2 shadow-[0_8px_32px_rgba(0,0,0,0.55)] backdrop-blur-md transition",
         "ring-2 ring-violet-400/25",
-        recording.active
-          ? "border-amber-400/50 bg-amber-500/25 text-amber-50"
-          : "border-violet-300/45 bg-violet-600/35 text-white hover:bg-violet-600/50",
+        recording.templateToggleOn
+          ? "border-amber-400/45 bg-amber-500/20"
+          : "border-violet-300/40 bg-violet-600/30",
       )}
     >
-      <Clapperboard className="h-4 w-4 shrink-0" aria-hidden />
-      Template
-    </button>,
+      <button
+        type="button"
+        role="switch"
+        aria-checked={recording.templateToggleOn}
+        aria-label="Template mode on/off"
+        disabled={toggleDisabled}
+        onClick={() => recording.requestTemplateToggle(!recording.templateToggleOn)}
+        className={cn(
+          "relative h-6 w-11 shrink-0 rounded-full transition disabled:cursor-not-allowed disabled:opacity-60",
+          recording.templateToggleOn ? "bg-violet-500" : "bg-white/20",
+        )}
+      >
+        <span
+          className={cn(
+            "absolute top-0.5 left-0.5 h-5 w-5 rounded-full bg-white shadow transition-transform",
+            recording.templateToggleOn && "translate-x-5",
+          )}
+        />
+      </button>
+      <span className="flex items-center gap-1.5 pr-1 text-xs font-semibold text-white">
+        <Clapperboard className="h-4 w-4 shrink-0 text-violet-200" aria-hidden />
+        Template
+      </span>
+    </div>,
+    document.body,
+  );
+}
+
+export function LinkToAdTemplateRecordingStartConfirm({
+  recording,
+}: {
+  recording: TemplateRecording;
+}) {
+  const mounted = useDocumentPortal();
+  if (!mounted || !recording.showStartConfirm) return null;
+
+  return createPortal(
+    <div className="fixed inset-0 z-[10115] flex items-center justify-center bg-black/65 p-4">
+      <div className="w-full max-w-md rounded-2xl border border-violet-400/25 bg-[#0b0912] p-5 shadow-2xl">
+        <p className="text-[10px] font-bold uppercase tracking-widest text-violet-300/70">Template mode</p>
+        <h3 className="mt-1 text-[16px] font-semibold text-white">Start template recording?</h3>
+        <p className="mt-2 text-[13px] leading-relaxed text-white/60">
+          You will pick a saved brand and replay the full Link to Ad flow with fake loading. No credits are
+          spent and nothing is generated on the server.
+        </p>
+        <div className="mt-5 flex flex-wrap items-center justify-end gap-2">
+          <button
+            type="button"
+            className="inline-flex h-9 items-center rounded-full border border-white/15 px-4 text-[12px] font-semibold text-white/75 transition hover:bg-white/10"
+            onClick={recording.cancelTemplateStart}
+          >
+            Cancel
+          </button>
+          <button
+            type="button"
+            className="inline-flex h-9 items-center rounded-full border border-violet-400/40 bg-violet-500/25 px-4 text-[12px] font-semibold text-violet-50 transition hover:bg-violet-500/35"
+            onClick={recording.confirmTemplateStart}
+          >
+            Start template
+          </button>
+        </div>
+      </div>
+    </div>,
+    document.body,
+  );
+}
+
+export function LinkToAdTemplateRecordingExitConfirm({
+  recording,
+}: {
+  recording: TemplateRecording;
+}) {
+  const mounted = useDocumentPortal();
+  if (!mounted || !recording.showExitConfirm) return null;
+
+  return createPortal(
+    <div className="fixed inset-0 z-[10115] flex items-center justify-center bg-black/65 p-4">
+      <div className="w-full max-w-md rounded-2xl border border-amber-400/25 bg-[#0b0912] p-5 shadow-2xl">
+        <p className="text-[10px] font-bold uppercase tracking-widest text-amber-300/70">Template mode</p>
+        <h3 className="mt-1 text-[16px] font-semibold text-white">Turn off template mode?</h3>
+        <p className="mt-2 text-[13px] leading-relaxed text-white/60">
+          The replay in progress will stop and you will return to the normal Link to Ad flow.
+        </p>
+        <div className="mt-5 flex flex-wrap items-center justify-end gap-2">
+          <button
+            type="button"
+            className="inline-flex h-9 items-center rounded-full border border-white/15 px-4 text-[12px] font-semibold text-white/75 transition hover:bg-white/10"
+            onClick={recording.cancelTemplateExit}
+          >
+            Keep recording
+          </button>
+          <button
+            type="button"
+            className="inline-flex h-9 items-center rounded-full border border-amber-400/40 bg-amber-500/20 px-4 text-[12px] font-semibold text-amber-100 transition hover:bg-amber-500/30"
+            onClick={recording.confirmTemplateExit}
+          >
+            Turn off
+          </button>
+        </div>
+      </div>
+    </div>,
     document.body,
   );
 }
