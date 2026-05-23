@@ -27,6 +27,14 @@ import {
   removeMotionPendingJob,
   upsertMotionPendingJob,
 } from "@/lib/motionControlPendingSession";
+import {
+  clippingHookInter,
+  clippingHookMontserrat,
+  clippingHookPoppins,
+  ensureClippingHookTitleFont,
+  hookTitleCanvasFont,
+  preloadAllClippingHookTitleFonts,
+} from "./clippingHookTitleFonts";
 
 type MotionQuality = "720p" | "1080p";
 type MotionImageSource = "auto" | "upload";
@@ -77,13 +85,6 @@ const HOOK_TITLE_FONT_OPTIONS = [
   { value: "Arial", label: "Arial" },
   { value: "Helvetica Neue", label: "Helvetica Neue" },
 ] as const;
-
-/** Google Fonts families loaded for canvas hook titles (weight 900). */
-const HOOK_TITLE_GOOGLE_FONT_SPECS: Partial<Record<string, string>> = {
-  Montserrat: "Montserrat:wght@900",
-  Inter: "Inter:wght@900",
-  Poppins: "Poppins:wght@900",
-};
 
 /**
  * Suggested hook titles. Newlines split lines; users can edit freely after picking.
@@ -255,11 +256,6 @@ function drawCoverRounded(
   ctx.restore();
 }
 
-function hookTitleCanvasFont(fontSizePx: number, fontFamily: string): string {
-  const quoted = fontFamily.includes(" ") ? `"${fontFamily}"` : fontFamily;
-  return `900 ${fontSizePx}px ${quoted}, sans-serif`;
-}
-
 /** Wraps a single line to fit `maxWidth` without changing font size. */
 function wrapLineToWidth(
   ctx: CanvasRenderingContext2D,
@@ -365,29 +361,6 @@ function drawHookTitle(
     ctx.fillText(lines[i], centerX, y);
   }
   ctx.restore();
-}
-
-function ensureHookTitleFontsStylesheet(): void {
-  if (typeof document === "undefined") return;
-  const linkId = "clipping-hook-title-fonts";
-  if (document.getElementById(linkId)) return;
-  const families = Object.values(HOOK_TITLE_GOOGLE_FONT_SPECS).filter(Boolean).join("&family=");
-  if (!families) return;
-  const link = document.createElement("link");
-  link.id = linkId;
-  link.rel = "stylesheet";
-  link.href = `https://fonts.googleapis.com/css2?family=${families}&display=swap`;
-  document.head.appendChild(link);
-}
-
-async function loadHookTitleFont(fontFamily: string, fontSizePx: number): Promise<void> {
-  if (typeof document === "undefined") return;
-  ensureHookTitleFontsStylesheet();
-  try {
-    await document.fonts.load(hookTitleCanvasFont(fontSizePx, fontFamily));
-  } catch {
-    /* best-effort — canvas falls back to sans-serif */
-  }
 }
 
 function fitFullWidthRect(
@@ -504,7 +477,10 @@ export default function ClippingStudio() {
     hookTitleColorRef.current = hookTitleColor;
   }, [hookTitleColor]);
   useEffect(() => {
-    void loadHookTitleFont(hookTitleFont, HOOK_TITLE_BASE_FONT_PX);
+    void preloadAllClippingHookTitleFonts(HOOK_TITLE_BASE_FONT_PX);
+  }, []);
+  useEffect(() => {
+    void ensureClippingHookTitleFont(hookTitleFont, HOOK_TITLE_BASE_FONT_PX);
   }, [hookTitleFont]);
 
   /* ------------------------------ Cleanup ------------------------------ */
@@ -1074,6 +1050,11 @@ export default function ClippingStudio() {
   const startHookCountdown = useCallback(() => {
     setStage("countdown_hook");
     beginCountdownThen(() => {
+      void (async () => {
+        await ensureClippingHookTitleFont(
+          hookTitleFontRef.current,
+          HOOK_TITLE_BASE_FONT_PX,
+        );
       const ok = startMediaRecorder();
       if (!ok) return;
 
@@ -1139,6 +1120,7 @@ export default function ClippingStudio() {
           setPhaseSecondsLeft(left);
         }
       }, 1000);
+      })();
     });
   }, [beginCountdownThen, hookDuration, hookFrameBlob, startMediaRecorder]);
 
@@ -1566,6 +1548,12 @@ export default function ClippingStudio() {
 
   return (
     <div className="min-h-screen w-full bg-gradient-to-b from-[#06050a] via-[#0a0612] to-[#050307] text-white">
+      {/* Mount next/font faces in the DOM so canvas + export can use them. */}
+      <div aria-hidden className="pointer-events-none fixed h-0 w-0 overflow-hidden opacity-0">
+        <span className={clippingHookMontserrat.className}>Aa</span>
+        <span className={clippingHookInter.className}>Aa</span>
+        <span className={clippingHookPoppins.className}>Aa</span>
+      </div>
       <div className="mx-auto flex w-full max-w-6xl flex-col gap-6 px-4 py-8 sm:py-10">
         <header className="flex items-center justify-between gap-3">
           <div className="flex items-center gap-2">
