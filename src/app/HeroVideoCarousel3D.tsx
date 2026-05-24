@@ -2,7 +2,7 @@
 
 /**
  * 3D ring of hero clips for the marketing LP.
- * Front-facing panels play continuously (no mid-clip pause at zone boundaries).
+ * Clips play through without mid-play pauses while the carousel is on screen.
  */
 
 import { useEffect, useMemo, useRef } from 'react';
@@ -13,12 +13,8 @@ import styles from './HeroVideoCarousel3D.module.css';
 const DEFAULT_SRCS = HERO_STUDIO_VIDEOS;
 
 const MAX_UNIQUE_SRCS = 10;
-const RING_FULL_TURN_MS = 36_000;
-const REDUCED_MOTION_RING_ANGLE_DEG = -22;
-/** Enter “front” zone (wider). */
-const FRONT_ENTER_DEG = 108;
-/** Leave only when clearly on the back half (hysteresis avoids pause/play flicker). */
-const FRONT_EXIT_DEG = 128;
+/** Panels within this angle of “front” may play (wide — matches visible arc in the bowl). */
+const PLAY_ARC_DEG = 165;
 
 type Props = { srcs?: readonly string[] };
 
@@ -44,26 +40,13 @@ function uniqueCarouselSrcs(srcs: readonly string[]): string[] {
   return out;
 }
 
-/** Match the running CSS `@keyframes heroSpin` (0deg → -360deg). */
-function readRingRotateYDeg(ring: HTMLElement, reducedMotion: boolean): number {
-  if (reducedMotion) return REDUCED_MOTION_RING_ANGLE_DEG;
-  const anim = ring.getAnimations()[0];
-  if (anim) {
-    const timing = anim.effect?.getTiming();
-    const dur = Number(timing?.duration ?? RING_FULL_TURN_MS);
-    if (dur > 0) {
-      const t = Number(anim.currentTime ?? 0);
-      const progress = ((t % dur) + dur) % dur / dur;
-      return -360 * progress;
-    }
-  }
+/** Read the live rotateY from the composited ring transform (single source of truth). */
+function readRingRotateYDeg(ring: HTMLElement): number {
   const transform = getComputedStyle(ring).transform;
-  if (transform && transform !== 'none') {
-    const m = new DOMMatrixReadOnly(transform);
-    const angleRad = Math.atan2(m.m13, m.m33);
-    return (angleRad * 180) / Math.PI;
-  }
-  return 0;
+  if (!transform || transform === 'none') return 0;
+  const m = new DOMMatrixReadOnly(transform);
+  const angleRad = Math.atan2(m.m13, m.m33);
+  return (angleRad * 180) / Math.PI;
 }
 
 export function HeroVideoCarousel3D({ srcs = DEFAULT_SRCS }: Props) {
@@ -88,7 +71,7 @@ export function HeroVideoCarousel3D({ srcs = DEFAULT_SRCS }: Props) {
       return Number.isFinite(raw) ? raw : 0;
     });
 
-    const frontActive = videos.map(() => false);
+    const warmed = videos.map(() => false);
 
     for (const video of videos) {
       video.muted = true;
@@ -100,47 +83,30 @@ export function HeroVideoCarousel3D({ srcs = DEFAULT_SRCS }: Props) {
       video.setAttribute('webkit-playsinline', '');
     }
 
-    const prefersReducedMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
     let carouselActive = false;
     let rafId: number | null = null;
 
-    const playSafely = (v: HTMLVideoElement) => {
-      if (v.readyState === 0) v.preload = 'auto';
-      const promise = v.play();
-      if (promise && typeof promise.catch === 'function') promise.catch(() => {});
-    };
-
-    const ensureFrontPlayback = (v: HTMLVideoElement, index: number) => {
-      if (!frontActive[index]) {
-        frontActive[index] = true;
-        try {
-          v.currentTime = 0;
-        } catch {
-          /* ignore */
-        }
+    const playSafely = (v: HTMLVideoElement, index: number) => {
+      if (!warmed[index]) {
+        warmed[index] = true;
+        v.preload = 'auto';
       }
-      if (v.preload === 'none') v.preload = 'auto';
-      if (v.paused) playSafely(v);
+      if (v.paused) {
+        const promise = v.play();
+        if (promise && typeof promise.catch === 'function') promise.catch(() => {});
+      }
     };
 
     const sync = () => {
       if (!carouselActive || document.visibilityState !== 'visible') return;
 
-      const ringRot = readRingRotateYDeg(ring, prefersReducedMotion);
+      const ringRot = readRingRotateYDeg(ring);
 
       for (let i = 0; i < videos.length; i++) {
         const v = videos[i]!;
         const eff = normaliseDegrees(panelAngles[i]! + ringRot);
-        const absEff = Math.abs(eff);
-
-        if (!frontActive[i]) {
-          if (absEff <= FRONT_ENTER_DEG) ensureFrontPlayback(v, i);
-        } else if (absEff >= FRONT_EXIT_DEG) {
-          frontActive[i] = false;
-          if (!v.paused) v.pause();
-        } else {
-          ensureFrontPlayback(v, i);
-        }
+        if (Math.abs(eff) <= PLAY_ARC_DEG) playSafely(v, i);
+        // Never pause here — rotation used to pause “back” panels mid-clip while still visible.
       }
     };
 
@@ -150,9 +116,7 @@ export function HeroVideoCarousel3D({ srcs = DEFAULT_SRCS }: Props) {
     };
 
     const pauseAll = () => {
-      for (let i = 0; i < videos.length; i++) {
-        frontActive[i] = false;
-        const v = videos[i]!;
+      for (const v of videos) {
         if (!v.paused) v.pause();
       }
     };
@@ -173,15 +137,19 @@ export function HeroVideoCarousel3D({ srcs = DEFAULT_SRCS }: Props) {
       pauseAll();
     };
 
-    const onCanPlay = (e: Event) => {
+    const onStall = (e: Event) => {
       const v = e.currentTarget as HTMLVideoElement;
+      if (!carouselActive || v.paused) return;
       const i = videos.indexOf(v);
-      if (i < 0 || !carouselActive) return;
-      if (frontActive[i] && v.paused) playSafely(v);
+      if (i < 0) return;
+      const ringRot = readRingRotateYDeg(ring);
+      const eff = normaliseDegrees(panelAngles[i]! + ringRot);
+      if (Math.abs(eff) <= PLAY_ARC_DEG) playSafely(v, i);
     };
 
     for (const v of videos) {
-      v.addEventListener('canplay', onCanPlay);
+      v.addEventListener('waiting', onStall);
+      v.addEventListener('stalled', onStall);
     }
 
     const io = new IntersectionObserver(
@@ -215,7 +183,8 @@ export function HeroVideoCarousel3D({ srcs = DEFAULT_SRCS }: Props) {
       root.removeEventListener('touchstart', retryOnGesture);
       root.removeEventListener('pointerdown', retryOnGesture);
       for (const v of videos) {
-        v.removeEventListener('canplay', onCanPlay);
+        v.removeEventListener('waiting', onStall);
+        v.removeEventListener('stalled', onStall);
       }
     };
   }, [list.length]);
@@ -247,7 +216,7 @@ export function HeroVideoCarousel3D({ srcs = DEFAULT_SRCS }: Props) {
                 loop
                 playsInline
                 controls={false}
-                preload="metadata"
+                preload="none"
                 disableRemotePlayback
                 disablePictureInPicture
               />
