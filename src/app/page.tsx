@@ -169,7 +169,7 @@ export default function LandingPage() {
                   className="inline-flex items-center justify-center gap-1.5"
                 >
                   <Sparkles className="h-4 w-4 shrink-0 sm:h-4 sm:w-4" aria-hidden />
-                  <span className="text-balance">Start for Free</span>
+                  <span className="text-balance">Generate</span>
                 </Link>
               </Button>
             </div>
@@ -247,7 +247,7 @@ export default function LandingPage() {
         >
           <Link href={studioAppPath("/signup")} prefetch={false} className="inline-flex items-center justify-center gap-2">
             <Sparkles className="h-4 w-4 shrink-0" />
-            <span>Start for Free</span>
+            <span>Create your UGC</span>
             <ArrowRight className="h-4 w-4 shrink-0" />
           </Link>
         </Button>
@@ -314,7 +314,7 @@ export default function LandingPage() {
           >
             <Link href={studioAppPath("/signup")} prefetch={false} className="inline-flex items-center justify-center gap-1.5">
               <Sparkles className="h-4 w-4 shrink-0" />
-              <span className="inline">Start for Free</span>
+              <span className="inline">Generate your UGC</span>
             </Link>
           </Button>
         </div>
