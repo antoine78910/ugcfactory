@@ -26,7 +26,7 @@
  * instead of 10.
  */
 
-import { useEffect, useRef } from 'react';
+import { useEffect, useMemo, useRef } from 'react';
 import type { CSSProperties, SyntheticEvent } from 'react';
 import { HERO_STUDIO_VIDEOS, heroCarouselPosterUrl } from '@/lib/heroCarouselAssets';
 import styles from './HeroVideoCarousel3D.module.css';
@@ -60,9 +60,25 @@ function normaliseDegrees(deg: number): number {
   return mod > 180 ? mod - 360 : mod;
 }
 
+function uniqueCarouselSrcs(srcs: readonly string[]): string[] {
+  const seen = new Set<string>();
+  const out: string[] = [];
+  for (const src of srcs) {
+    const base = (src.split('?')[0] ?? src).trim();
+    if (!base || seen.has(base)) continue;
+    seen.add(base);
+    out.push(src);
+    if (out.length >= MAX_UNIQUE_SRCS) break;
+  }
+  return out;
+}
+
 export function HeroVideoCarousel3D({ srcs = DEFAULT_SRCS }: Props) {
   const rootRef = useRef<HTMLDivElement>(null);
-  const list = (srcs.length ? srcs : DEFAULT_SRCS).slice(0, MAX_UNIQUE_SRCS);
+  const list = useMemo(
+    () => uniqueCarouselSrcs(srcs.length ? srcs : DEFAULT_SRCS),
+    [srcs],
+  );
   const slice = 360 / list.length;
 
   useEffect(() => {
@@ -221,7 +237,7 @@ export function HeroVideoCarousel3D({ srcs = DEFAULT_SRCS }: Props) {
         <div className={styles.ring}>
           {panels.map(({ src, angle, poster }, i) => (
             <div
-              key={i}
+              key={src}
               className={styles.panel}
               style={{ '--angle': `${angle}deg` } as CSSProperties}
             >
@@ -231,6 +247,7 @@ export function HeroVideoCarousel3D({ srcs = DEFAULT_SRCS }: Props) {
                 that the poster JPEG is what the user sees.
               */}
               <video
+                key={src}
                 className={styles.video}
                 src={src}
                 poster={poster}

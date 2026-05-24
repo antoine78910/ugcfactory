@@ -1,18 +1,15 @@
-/** Bump when replacing `public/studio/0328(*).mp4` or posters so browsers skip stale immutable cache. */
-export const HERO_CAROUSEL_ASSET_VERSION = "20260524";
+/** Bump when replacing hero carousel files under `public/studio/hero-carousel/`. */
+export const HERO_CAROUSEL_ASSET_VERSION = "20260525";
 
-const HERO_STUDIO_VIDEO_PATHS = [
-  "/studio/0328(1).mp4",
-  "/studio/0328(2).mp4",
-  "/studio/0328(3).mp4",
-  "/studio/0328(4).mp4",
-  "/studio/0328(5).mp4",
-  "/studio/0328(6).mp4",
-  "/studio/0328(7).mp4",
-  "/studio/0328(8).mp4",
-  "/studio/0328(9).mp4",
-  "/studio/0328(10).mp4",
-] as const;
+/**
+ * Fixed order: alternating new UGC (0520) and legacy clips (0328), 10 unique files.
+ * Files live in `public/studio/hero-carousel/01.mp4` … `10.mp4` (no duplicate hashes).
+ */
+const HERO_CAROUSEL_SLOTS = ["01", "02", "03", "04", "05", "06", "07", "08", "09", "10"] as const;
+
+const HERO_STUDIO_VIDEO_PATHS = HERO_CAROUSEL_SLOTS.map(
+  (slot) => `/studio/hero-carousel/${slot}.mp4`,
+) as readonly string[];
 
 export function heroCarouselVideoUrl(path: string): string {
   const base = path.split("?")[0] ?? path;
