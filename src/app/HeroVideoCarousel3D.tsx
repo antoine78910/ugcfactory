@@ -28,20 +28,10 @@
 
 import { useEffect, useRef } from 'react';
 import type { CSSProperties, SyntheticEvent } from 'react';
+import { HERO_STUDIO_VIDEOS, heroCarouselPosterUrl } from '@/lib/heroCarouselAssets';
 import styles from './HeroVideoCarousel3D.module.css';
 
-const DEFAULT_SRCS = [
-  '/studio/0328(1).mp4',
-  '/studio/0328(2).mp4',
-  '/studio/0328(3).mp4',
-  '/studio/0328(4).mp4',
-  '/studio/0328(5).mp4',
-  '/studio/0328(6).mp4',
-  '/studio/0328(7).mp4',
-  '/studio/0328(8).mp4',
-  '/studio/0328(9).mp4',
-  '/studio/0328(10).mp4',
-];
+const DEFAULT_SRCS = HERO_STUDIO_VIDEOS;
 
 /** 10 clips, ~36° apart, about 5 readable in view; no duplicate `<video>` URLs. */
 const MAX_UNIQUE_SRCS = 10;
@@ -60,12 +50,8 @@ const ROTATION_SAMPLE_MS = 250;
 
 type Props = { srcs?: readonly string[] };
 
-/** Replace `0328(N).mp4` with `posters/0328(N).jpg`. Falls back to undefined for unknown paths. */
 function srcToPosterUrl(src: string): string | undefined {
-  const match = src.match(/^(.*\/)([^/]+)\.mp4$/i);
-  if (!match) return undefined;
-  const [, dir, base] = match;
-  return `${dir}posters/${base}.jpg`;
+  return heroCarouselPosterUrl(src);
 }
 
 /** Normalise an arbitrary degree value into the (-180, 180] range. */

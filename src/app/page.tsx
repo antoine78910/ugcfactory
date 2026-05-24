@@ -5,6 +5,7 @@ import { studioAppPath } from "@/lib/studioAppOrigin";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { HeroVideoCarousel3D } from "./HeroVideoCarousel3D";
+import { HERO_STUDIO_VIDEOS } from "@/lib/heroCarouselAssets";
 import { LandingSeedanceTopButton } from "./LandingSeedanceTopButton";
 import { ArrowRight, Sparkles } from "lucide-react";
 import { marketingPageRootClassName } from "@/lib/youryFonts";
@@ -51,20 +52,6 @@ const STEPS = [
     mediaAlt: "Generated ad video preview",
   },
 ];
-
-/** Hero 3D ring only (`public/studio/`). */
-const HERO_STUDIO_VIDEOS = [
-  "/studio/0328(1).mp4",
-  "/studio/0328(2).mp4",
-  "/studio/0328(3).mp4",
-  "/studio/0328(4).mp4",
-  "/studio/0328(5).mp4",
-  "/studio/0328(6).mp4",
-  "/studio/0328(7).mp4",
-  "/studio/0328(8).mp4",
-  "/studio/0328(9).mp4",
-  "/studio/0328(10).mp4",
-] as const;
 
 export default function LandingPage() {
   return (
