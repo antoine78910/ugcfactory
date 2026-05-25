@@ -77,6 +77,8 @@ function stripPipelineToStep(
     return {
       ...snap,
       phase: "after_scripts",
+      /** Force null so the angle-picker section renders (not the empty I2V pipeline). */
+      selectedAngleIndex: null,
       ugcVideoPromptGpt: "",
       klingTaskId: null,
       klingVideoUrl: null,

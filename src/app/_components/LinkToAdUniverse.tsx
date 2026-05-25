@@ -3972,6 +3972,7 @@ export default function LinkToAdUniverse({
 
   /** Resume after a save stopped at brand brief (scripts step failed or interrupted). Runs on the server so navigation does not cancel it. */
   async function onContinueScripts() {
+    if (templateRecording.templateToggleOn) return;
     const url = storeUrl.trim();
     if (!url || !lastExtractedJson || !summaryText.trim()) {
       toast.error("Incomplete data to generate scripts.");
@@ -6331,7 +6332,14 @@ export default function LinkToAdUniverse({
     setKlingQueuePosition(null);
   }, [klingPollTaskId]);
 
-  const showAnglePicker = Boolean(scriptsText && angleLabels[0] && angleLabels[1] && angleLabels[2]);
+  const showAnglePicker = Boolean(
+    scriptsText &&
+      (
+        (angleLabels[0] && angleLabels[1] && angleLabels[2]) ||
+        // Template mode: labels may be missing on older runs; derive from scripts
+        templateRecording.templateToggleOn
+      ),
+  );
   const showContinueScripts =
     Boolean(summaryText.trim() && !scriptsText && lastExtractedJson && stage === "ready" && !isWorking);
   const showI2vPipeline = selectedAngleIndex !== null && scriptsText.trim().length > 0;
