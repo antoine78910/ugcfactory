@@ -27,6 +27,8 @@ export type TemplateRunCache = {
 type FlowStage =
   | "idle"
   | "picking_brand"
+  /** Brand picked and run fetched; waiting for user to confirm URL and click Generate. */
+  | "brand_selected"
   | "step1_loading"
   | "step1_gate"
   | "step2_loading"
@@ -107,8 +109,12 @@ export function useLtaTemplateRecording(args: UseLtaTemplateRecordingArgs) {
 
   const effectiveEmail = resolveClientAllowlistEmail(args.clientEmail, sessionEmail);
 
+  /** True only during active fake-loading / gate steps — NOT during brand_selected waiting state. */
   const templateFlowInProgress =
-    flowStage !== "idle" && flowStage !== "picking_brand" && flowStage !== "finished";
+    flowStage !== "idle" &&
+    flowStage !== "picking_brand" &&
+    flowStage !== "brand_selected" &&
+    flowStage !== "finished";
 
   /** True while Link to Ad template replay is active (not normal LTA generation). */
   const isTemplateReplayActive = templateToggleOn && templateFlowInProgress;
@@ -255,11 +261,12 @@ export function useLtaTemplateRecording(args: UseLtaTemplateRecordingArgs) {
     setFlowStage("step4_gate");
   }, [applyCachedStep, args]);
 
+  /**
+   * Step 1 – fetch the template run and pre-fill the URL field.
+   * Does NOT start the replay; the user must review/edit the URL then click Generate.
+   */
   const startBrandFlow = useCallback(
     async (brand: LtaTemplateBrandSummary) => {
-      flowActiveRef.current = true;
-      setTemplateToggleOn(true);
-      setFlowStage("step1_loading");
       try {
         const res = await fetch(`/api/runs/get?runId=${encodeURIComponent(brand.runId)}`, {
           cache: "no-store",
@@ -271,16 +278,31 @@ export function useLtaTemplateRecording(args: UseLtaTemplateRecordingArgs) {
         };
         if (!res.ok || !json.data) throw new Error(json.error || "Could not load template run");
         runCacheRef.current = json.data;
-        await runStep1Loading();
+        args.setStoreUrl(json.data.store_url?.trim() ?? "");
+        setFlowStage("brand_selected");
       } catch (e) {
-        flowActiveRef.current = false;
         setFlowStage("idle");
         runCacheRef.current = null;
-        args.setIsWorking(false);
-        toast.error("Template failed to start", {
+        toast.error("Template failed to load", {
           description: e instanceof Error ? e.message : "Unknown error",
         });
       }
+    },
+    [args],
+  );
+
+  /**
+   * Step 2 – called when the user clicks Generate after reviewing the URL.
+   * Starts the fake-loading replay from step 1.
+   */
+  const beginTemplateReplay = useCallback(
+    async (urlOverride?: string) => {
+      if (!runCacheRef.current) return;
+      flowActiveRef.current = true;
+      setTemplateToggleOn(true);
+      if (urlOverride?.trim()) args.setStoreUrl(urlOverride.trim());
+      setFlowStage("step1_loading");
+      await runStep1Loading();
     },
     [args, runStep1Loading],
   );
@@ -321,14 +343,17 @@ export function useLtaTemplateRecording(args: UseLtaTemplateRecordingArgs) {
         return;
       }
       if (nextOn) {
-        if (templateFlowInProgress || flowStage === "picking_brand") return;
+        if (templateFlowInProgress || flowStage === "picking_brand" || flowStage === "brand_selected") return;
         setShowStartConfirm(true);
         return;
       }
-      if (templateFlowInProgress || flowStage === "picking_brand") {
+      if (templateFlowInProgress) {
         setShowExitConfirm(true);
         return;
       }
+      // picking_brand or brand_selected: just cancel cleanly (no generation started)
+      runCacheRef.current = null;
+      setFlowStage("idle");
       setTemplateToggleOn(false);
     },
     [featureEnabled, flowStage, refreshFeatureAccess, templateFlowInProgress],
@@ -356,6 +381,15 @@ export function useLtaTemplateRecording(args: UseLtaTemplateRecordingArgs) {
 
   const closeBrandPicker = useCallback(() => {
     if (flowActiveRef.current) return;
+    runCacheRef.current = null;
+    setFlowStage("idle");
+    setTemplateToggleOn(false);
+  }, []);
+
+  /** Cancel the brand_selected waiting state (user changed their mind before clicking Generate). */
+  const cancelBrandSelected = useCallback(() => {
+    if (flowActiveRef.current) return;
+    runCacheRef.current = null;
     setFlowStage("idle");
     setTemplateToggleOn(false);
   }, []);
@@ -428,7 +462,8 @@ export function useLtaTemplateRecording(args: UseLtaTemplateRecordingArgs) {
   }, [flowStage, runStep1Loading, runStep2Loading, runStep3Loading, runStep4Loading]);
 
   const interceptPaidAction = useCallback((): boolean => {
-    if (!templateToggleOn && !isTemplateReplayActive) return false;
+    // Don't block during brand_selected — the Generate button should trigger beginTemplateReplay.
+    if (!isTemplateReplayActive) return false;
     toast.message("Template mode", {
       description:
         flowStage.endsWith("_gate") || flowStage.endsWith("_loading")
@@ -436,7 +471,7 @@ export function useLtaTemplateRecording(args: UseLtaTemplateRecordingArgs) {
           : "Template recording is in progress.",
     });
     return true;
-  }, [flowStage, isTemplateReplayActive, templateToggleOn]);
+  }, [flowStage, isTemplateReplayActive]);
 
   const interceptOnRun = useCallback(
     async (_storeUrl: string, realOnRun: () => Promise<void>) => {
@@ -462,6 +497,8 @@ export function useLtaTemplateRecording(args: UseLtaTemplateRecordingArgs) {
     active,
     locksSelection,
     isTemplateReplayActive,
+    /** Brand selected and run cached; waiting for user to click Generate to start replay. */
+    isBrandSelected: flowStage === "brand_selected",
     gateStep,
     gateLabel: gateStep ? LTA_TEMPLATE_RECORDING_STEP_LABELS[gateStep] : null,
     requestTemplateToggle,
@@ -470,6 +507,8 @@ export function useLtaTemplateRecording(args: UseLtaTemplateRecordingArgs) {
     confirmTemplateExit,
     cancelTemplateExit,
     startBrandFlow,
+    beginTemplateReplay,
+    cancelBrandSelected,
     exitTemplateMode,
     continueFromGate,
     previousFromGate,

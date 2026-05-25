@@ -30,13 +30,34 @@ export function LinkToAdTemplateRecordingButton({
     recording.flowStage === "step3_loading" ||
     recording.flowStage === "step4_loading";
 
-  const toggleDisabled = recording.active || recording.pickingBrand || stepLoading;
+  const toggleDisabled = recording.active || recording.pickingBrand || stepLoading || recording.isBrandSelected;
 
   const showStepBar = Boolean(recording.gateStep && recording.gateLabel);
   const canGoBack = (recording.gateStep ?? 0) > 1;
 
   return createPortal(
     <div className="pointer-events-none fixed bottom-5 right-5 z-[10100] flex max-w-[min(92vw,22rem)] flex-col items-end gap-2">
+      {recording.isBrandSelected ? (
+        <div
+          className={cn(
+            "pointer-events-auto w-full rounded-2xl border p-3 shadow-[0_8px_32px_rgba(0,0,0,0.5)] backdrop-blur-md",
+            "border-violet-400/30 bg-[#0b0912]/95 ring-1 ring-violet-400/20",
+          )}
+        >
+          <p className="text-[10px] font-bold uppercase tracking-widest text-violet-300/70">Template ready</p>
+          <p className="mt-0.5 text-[12px] font-medium text-white/80">
+            Enter (or keep) the URL above, then click <span className="font-semibold text-violet-300">Generate</span> to start.
+          </p>
+          <button
+            type="button"
+            className="mt-2 inline-flex h-7 items-center gap-1 rounded-full border border-white/15 px-3 text-[10px] font-semibold text-white/60 transition hover:bg-white/10"
+            onClick={recording.cancelBrandSelected}
+          >
+            <X className="h-3 w-3" aria-hidden />
+            Cancel
+          </button>
+        </div>
+      ) : null}
       {stepLoading ? (
         <div
           className={cn(
@@ -228,6 +249,7 @@ export function LinkToAdTemplateBrandPicker({
   recording: TemplateRecording;
 }) {
   const mounted = useDocumentPortal();
+  const [loadingRunId, setLoadingRunId] = useState<string | null>(null);
   if (!mounted || !recording.pickingBrand) return null;
 
   return createPortal(
@@ -236,7 +258,7 @@ export function LinkToAdTemplateBrandPicker({
         <div className="flex items-center justify-between gap-3 border-b border-white/10 px-4 py-3">
           <div>
             <p className="text-sm font-semibold text-white">Template mode</p>
-            <p className="text-[11px] text-white/50">Pick a brand — replay only, no generation.</p>
+            <p className="text-[11px] text-white/50">Pick a brand — you will review the URL before starting.</p>
           </div>
           <button
             type="button"
@@ -263,12 +285,14 @@ export function LinkToAdTemplateBrandPicker({
                 <li key={brand.runId}>
                   <button
                     type="button"
+                    disabled={loadingRunId !== null}
                     onClick={() => {
-                      void recording.startBrandFlow(brand);
+                      setLoadingRunId(brand.runId);
+                      void recording.startBrandFlow(brand).finally(() => setLoadingRunId(null));
                     }}
-                    className="flex w-full items-center gap-3 rounded-xl border border-white/10 bg-white/[0.03] p-2 text-left transition hover:border-violet-400/30 hover:bg-violet-500/[0.06]"
+                    className="flex w-full items-center gap-3 rounded-xl border border-white/10 bg-white/[0.03] p-2 text-left transition hover:border-violet-400/30 hover:bg-violet-500/[0.06] disabled:cursor-wait disabled:opacity-60"
                   >
-                    <div className="h-14 w-14 shrink-0 overflow-hidden rounded-lg bg-[#100d17]">
+                    <div className="relative h-14 w-14 shrink-0 overflow-hidden rounded-lg bg-[#100d17]">
                       {brand.thumbUrl ? (
                         // eslint-disable-next-line @next/next/no-img-element
                         <img
@@ -281,6 +305,11 @@ export function LinkToAdTemplateBrandPicker({
                           —
                         </div>
                       )}
+                      {loadingRunId === brand.runId ? (
+                        <div className="absolute inset-0 flex items-center justify-center bg-black/60">
+                          <Loader2 className="h-5 w-5 animate-spin text-violet-300" />
+                        </div>
+                      ) : null}
                     </div>
                     <div className="min-w-0 flex-1">
                       <p className="truncate text-sm font-semibold text-white">

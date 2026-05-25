@@ -3762,7 +3762,8 @@ export default function LinkToAdUniverse({
     opts?: { scriptsText?: string; angleLabels?: string[] },
   ) {
     if (templateRecording.locksSelection) {
-      toast.message("Angle locked", { description: "Template recording uses the pre-selected angle." });
+      // Allow visual selection of angles during template replay (for filming purposes).
+      setSelectedAngleIndex(index);
       return;
     }
     const url = storeUrl.trim();
@@ -4166,6 +4167,11 @@ export default function LinkToAdUniverse({
   }
 
   async function onRun(opts?: { bypassSavedProject?: boolean }) {
+    // If a template brand is selected (waiting for Generate), start the replay instead of real generation.
+    if (templateRecording.isBrandSelected) {
+      void templateRecording.beginTemplateReplay(storeUrl);
+      return;
+    }
     if (templateRecording.interceptPaidAction()) return;
     const url = storeUrl.trim();
     if (!url) {
@@ -7854,11 +7860,9 @@ export default function LinkToAdUniverse({
                   <button
                     key={card.index}
                     type="button"
-                    disabled={templateRecording.locksSelection}
                     onClick={() => void onSelectAngle(card.index)}
                     className={cn(
                       "group/angle relative rounded-xl border px-3 py-3 text-left transition-all duration-200 sm:rounded-2xl sm:px-4 sm:py-4",
-                      templateRecording.locksSelection && "cursor-default opacity-90",
                       selectedAngleIndex === card.index
                         ? "border-violet-400/60 bg-violet-500/[0.12] shadow-[0_0_20px_rgba(139,92,246,0.15)]"
                         : "border-white/8 bg-white/[0.03] hover:border-violet-400/30 hover:bg-white/[0.06]",
@@ -8920,8 +8924,7 @@ export default function LinkToAdUniverse({
                     isNanoAllImagesSubmitting) ? (
                     <div className="shrink-0 rounded-xl border border-white/10 bg-black/25 px-4 pb-3 pt-2">
                       <div className="flex flex-col gap-2">
-                        {!templateRecording.isTemplateReplayActive &&
-                        !nanoBananaPromptsRaw.trim() &&
+                        {!nanoBananaPromptsRaw.trim() &&
                         !isNanoPromptsLoading &&
                         !isNanoAllImagesSubmitting &&
                         !nanoPollTaskId ? (
