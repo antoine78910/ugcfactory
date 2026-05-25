@@ -44,7 +44,7 @@ export type UseLtaTemplateRecordingArgs = {
   clientEmail?: string | null;
   hydrateFromRun: (
     run: TemplateRunCache,
-    opts?: { silent?: boolean; preserveVideoDuration?: boolean },
+    opts?: { silent?: boolean; preserveVideoDuration?: boolean; templateReplay?: boolean },
   ) => void;
   prepareBlankCanvas: () => void;
   setStoreUrl: (url: string) => void;
@@ -198,7 +198,7 @@ export function useLtaTemplateRecording(args: UseLtaTemplateRecordingArgs) {
       const extracted = buildExtractedForTemplateStep(run.extracted, step, buildOpts);
       args.hydrateFromRun(
         { ...run, extracted },
-        { silent: true, preserveVideoDuration: true },
+        { silent: true, preserveVideoDuration: true, templateReplay: true },
       );
       args.onAfterTemplateHydrate?.(extracted, run);
       args.setStage("ready");
@@ -212,9 +212,12 @@ export function useLtaTemplateRecording(args: UseLtaTemplateRecordingArgs) {
     [args],
   );
 
-  const runStep1Loading = useCallback(async () => {
-    args.prepareBlankCanvas();
-    args.setStoreUrl(runCacheRef.current?.store_url?.trim() ?? "");
+  /** Same stage sequence as a real URL Generate (scanning → … → server_pipeline). */
+  const runClassicLtaLoading = useCallback(async () => {
+    args.setIsNanoAllImagesSubmitting(false);
+    args.setIsNanoPromptsLoading(false);
+    args.setIsVideoPromptLoading(false);
+    args.setIsKlingSubmitting(false);
     args.setIsWorking(true);
     const stages = ["scanning", "finding_image", "summarizing", "writing_scripts", "server_pipeline"] as const;
     const perStage = Math.max(2000, Math.floor(LTA_TEMPLATE_RECORDING_MIN_STEP_MS / stages.length));
@@ -223,43 +226,36 @@ export function useLtaTemplateRecording(args: UseLtaTemplateRecordingArgs) {
       if (stages[i] === "server_pipeline") args.setServerPipelineStepIndex(Math.min(i, 4));
       await delay(perStage);
     }
+  }, [args]);
+
+  const runStep1Loading = useCallback(async () => {
+    args.prepareBlankCanvas();
+    args.setStoreUrl(runCacheRef.current?.store_url?.trim() ?? "");
+    await runClassicLtaLoading();
     applyCachedStep(1);
     setFlowStage("step1_gate");
-  }, [applyCachedStep, args]);
+  }, [applyCachedStep, args, runClassicLtaLoading]);
 
   const runStep2Loading = useCallback(async () => {
-    args.setIsWorking(true);
-    args.setStage("writing_scripts");
-    await delay(LTA_TEMPLATE_RECORDING_MIN_STEP_MS);
+    await runClassicLtaLoading();
     applyCachedStep(2);
     setFlowStage("step2_gate");
-  }, [applyCachedStep, args]);
+  }, [applyCachedStep, runClassicLtaLoading]);
 
   const runStep3Loading = useCallback(async () => {
-    args.setIsWorking(true);
-    args.setIsNanoPromptsLoading(true);
-    await delay(LTA_TEMPLATE_RECORDING_MIN_STEP_MS);
+    await runClassicLtaLoading();
     applyCachedStep(3, { step3Phase: "prompts" });
-    args.setIsNanoPromptsLoading(false);
-
-    args.setIsNanoAllImagesSubmitting(true);
-    await delay(LTA_TEMPLATE_RECORDING_MIN_STEP_MS);
+    await runClassicLtaLoading();
     applyCachedStep(3, { step3Phase: "full" });
-    args.setIsNanoAllImagesSubmitting(false);
     args.setIsWorking(false);
     setFlowStage("step3_gate");
-  }, [applyCachedStep, args]);
+  }, [applyCachedStep, args, runClassicLtaLoading]);
 
   const runStep4Loading = useCallback(async () => {
-    args.setIsVideoPromptLoading(true);
-    args.setIsWorking(true);
-    await delay(Math.floor(LTA_TEMPLATE_RECORDING_MIN_STEP_MS / 2));
-    args.setIsVideoPromptLoading(false);
-    args.setIsKlingSubmitting(true);
-    await delay(Math.ceil(LTA_TEMPLATE_RECORDING_MIN_STEP_MS / 2));
+    await runClassicLtaLoading();
     applyCachedStep(4);
     setFlowStage("step4_gate");
-  }, [applyCachedStep, args]);
+  }, [applyCachedStep, runClassicLtaLoading]);
 
   /**
    * Step 1 – fetch the template run and pre-fill the URL field.

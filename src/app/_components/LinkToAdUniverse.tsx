@@ -3154,7 +3154,13 @@ export default function LinkToAdUniverse({
         /** DB column; may hold the prompt when `extracted.__universe` was saved without it (legacy / edge cases). */
         video_prompt?: string | null;
       },
-      opts?: { silent?: boolean; preserveVideoDuration?: boolean; preserveScriptLanguage?: boolean },
+      opts?: {
+        silent?: boolean;
+        preserveVideoDuration?: boolean;
+        preserveScriptLanguage?: boolean;
+        /** Template replay: do not bind competitor run id (avoids /api/runs/get on Continue). */
+        templateReplay?: boolean;
+      },
     ) => {
       const snap0 = readUniverseFromExtracted(run.extracted);
       if (!snap0) {
@@ -3175,7 +3181,9 @@ export default function LinkToAdUniverse({
         nextTriple[pIdx] = { ...cloneAnglePipeline(tripleB[pIdx]), ugcVideoPromptGpt: colVp };
         snap = { ...snap, ugcVideoPromptGpt: colVp, linkToAdPipelineByAngle: nextTriple };
       }
-      setUniverseRunId(run.id);
+      if (!opts?.templateReplay) {
+        setUniverseRunId(run.id);
+      }
       setStoreUrl(typeof run.store_url === "string" ? run.store_url : "");
       setExtractedTitle(typeof run.title === "string" ? run.title : null);
       setUserOverrideProductTitle(null);
@@ -6543,7 +6551,7 @@ export default function LinkToAdUniverse({
       return;
     }
     if (isWorking) return;
-    if (showContinueScripts) {
+    if (showContinueScripts && !templateRecording.templateToggleOn) {
       void onContinueScripts();
       return;
     }
