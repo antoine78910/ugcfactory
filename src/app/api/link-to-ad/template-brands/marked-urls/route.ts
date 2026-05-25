@@ -1,12 +1,12 @@
 export const runtime = "nodejs";
 
 import { NextResponse } from "next/server";
-import { requireSupabaseUser } from "@/lib/supabase/requireUser";
+import { requireLtaTemplateRecordingUser } from "@/lib/ltaTemplateRecordingAccess";
 import { createSupabaseServiceClient } from "@/lib/supabase/admin";
 
-/** Normalized store URLs marked as Template in My Projects (any user, shared pool). */
+/** Normalized store URLs marked as Template in My Projects (template-recording users only). */
 export async function GET() {
-  const auth = await requireSupabaseUser();
+  const auth = await requireLtaTemplateRecordingUser();
   if (auth.response) return auth.response;
 
   const admin = createSupabaseServiceClient();

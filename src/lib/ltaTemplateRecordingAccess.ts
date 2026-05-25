@@ -1,6 +1,8 @@
 import type { User } from "@supabase/supabase-js";
 import type { SupabaseClient } from "@supabase/supabase-js";
+import { NextResponse } from "next/server";
 import { createSupabaseServiceClient } from "@/lib/supabase/admin";
+import { requireSupabaseUser } from "@/lib/supabase/requireUser";
 import { resolveAuthUserEmail } from "@/lib/sessionUserEmail";
 import {
   isDefaultTemplateRecordingEmail,
@@ -27,6 +29,33 @@ export async function resolveAllowlistEmail(
   } catch {
     return null;
   }
+}
+
+type TemplateRecordingAuthOk = { response: null; user: User; email: string | null; enabled: true };
+type TemplateRecordingAuthFail = { response: NextResponse; user: null; email: null; enabled: false };
+
+/** Authenticated user must be on the Link to Ad template-recording allowlist. */
+export async function requireLtaTemplateRecordingUser(): Promise<
+  TemplateRecordingAuthOk | TemplateRecordingAuthFail
+> {
+  const auth = await requireSupabaseUser();
+  if (auth.response) {
+    return { response: auth.response, user: null, email: null, enabled: false };
+  }
+
+  const admin = createSupabaseServiceClient();
+  const email = await resolveAllowlistEmail(auth.user, admin);
+  const enabled = await isLtaTemplateRecordingUser(email);
+  if (!enabled) {
+    return {
+      response: NextResponse.json({ error: "Template recording access required" }, { status: 403 }),
+      user: null,
+      email: null,
+      enabled: false,
+    };
+  }
+
+  return { response: null, user: auth.user, email, enabled: true };
 }
 
 export async function isLtaTemplateRecordingUser(email: string | null | undefined): Promise<boolean> {

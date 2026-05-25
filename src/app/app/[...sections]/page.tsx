@@ -104,6 +104,7 @@ import {
   removeLinkToAdTemplate,
   upsertLinkToAdTemplate,
 } from "@/lib/linkToAdTemplates";
+import { useLtaTemplateRecordingAccess } from "@/app/_components/lta/useLtaTemplateRecordingAccess";
 import { WAVESPEED_PROVIDER } from "@/lib/wavespeedChain";
 import {
   calculateWaveSpeedVideoTranslateCredits,
@@ -939,6 +940,10 @@ export default function AppBrandWizard() {
   const [selectedProjectNormalizedUrl, setSelectedProjectNormalizedUrl] = useState<string | null>(null);
   const [deleteProjectLoading, setDeleteProjectLoading] = useState(false);
   const [linkToAdTemplateUrls, setLinkToAdTemplateUrls] = useState<string[]>([]);
+  const {
+    enabled: canManageLinkToAdTemplates,
+    ready: linkToAdTemplateAccessReady,
+  } = useLtaTemplateRecordingAccess();
   const [runId, setRunId] = useState<string | null>(null);
   const [isLoadingRuns, setIsLoadingRuns] = useState(false);
   /** While set, ignore pathname→section sync so a stale URL cannot overwrite a sidebar click. */
@@ -1000,8 +1005,9 @@ export default function AppBrandWizard() {
   }, []);
 
   useEffect(() => {
+    if (!canManageLinkToAdTemplates) return;
     void refreshLinkToAdTemplateUrls();
-  }, [refreshLinkToAdTemplateUrls]);
+  }, [canManageLinkToAdTemplates, refreshLinkToAdTemplateUrls]);
 
   const imagePromptDisplayBlocks = useMemo(() => {
     const raw = imagePrompt.trim();
@@ -2147,6 +2153,7 @@ export default function AppBrandWizard() {
         extracted?: unknown;
       }>;
     }) => {
+      if (!canManageLinkToAdTemplates) return;
       const normalized = project.normalizedUrl.trim().toLowerCase();
       if (!normalized) return;
       const latestRun = project.runs[0];
@@ -2208,9 +2215,9 @@ export default function AppBrandWizard() {
         createdAt: new Date().toISOString(),
       });
       await refreshLinkToAdTemplateUrls();
-      toast.success("Added to Link to Ad templates (visible to everyone).");
+      toast.success("Added to Link to Ad template catalog.");
     },
-    [linkToAdTemplateUrls, refreshLinkToAdTemplateUrls],
+    [canManageLinkToAdTemplates, linkToAdTemplateUrls, refreshLinkToAdTemplateUrls],
   );
 
   function resetForNewProject() {
@@ -3502,36 +3509,38 @@ export default function AppBrandWizard() {
                                   : "border-white/[0.08] bg-[#0c0a14]/90 hover:border-white/15 hover:shadow-[0_8px_32px_rgba(0,0,0,0.3)]",
                               )}
                             >
-                              <span
-                                role="button"
-                                tabIndex={0}
-                                onClick={(e) => {
-                                  e.preventDefault();
-                                  e.stopPropagation();
-                                  toggleLinkToAdTemplate(proj);
-                                }}
-                                onKeyDown={(e) => {
-                                  if (e.key !== "Enter" && e.key !== " ") return;
-                                  e.preventDefault();
-                                  e.stopPropagation();
-                                  toggleLinkToAdTemplate(proj);
-                                }}
-                                className={cn(
-                                  "absolute right-2 top-2 z-20 inline-flex items-center gap-1 rounded-lg border px-2 py-1 text-[10px] font-semibold uppercase tracking-wide transition",
-                                  linkToAdTemplateUrls.includes(proj.normalizedUrl.trim().toLowerCase())
-                                    ? "border-violet-300/55 bg-violet-500/25 text-violet-100"
-                                    : "border-white/20 bg-black/55 text-white/70 hover:border-violet-400/45 hover:text-white",
-                                )}
-                                aria-label="Toggle Link to Ad template"
-                                title={
-                                  linkToAdTemplateUrls.includes(proj.normalizedUrl.trim().toLowerCase())
-                                    ? "Remove from Link to Ad templates"
-                                    : "Add as Link to Ad template"
-                                }
-                              >
-                                <Star className="h-3 w-3" />
-                                Template
-                              </span>
+                              {linkToAdTemplateAccessReady && canManageLinkToAdTemplates ? (
+                                <span
+                                  role="button"
+                                  tabIndex={0}
+                                  onClick={(e) => {
+                                    e.preventDefault();
+                                    e.stopPropagation();
+                                    toggleLinkToAdTemplate(proj);
+                                  }}
+                                  onKeyDown={(e) => {
+                                    if (e.key !== "Enter" && e.key !== " ") return;
+                                    e.preventDefault();
+                                    e.stopPropagation();
+                                    toggleLinkToAdTemplate(proj);
+                                  }}
+                                  className={cn(
+                                    "absolute right-2 top-2 z-20 inline-flex items-center gap-1 rounded-lg border px-2 py-1 text-[10px] font-semibold uppercase tracking-wide transition",
+                                    linkToAdTemplateUrls.includes(proj.normalizedUrl.trim().toLowerCase())
+                                      ? "border-violet-300/55 bg-violet-500/25 text-violet-100"
+                                      : "border-white/20 bg-black/55 text-white/70 hover:border-violet-400/45 hover:text-white",
+                                  )}
+                                  aria-label="Toggle Link to Ad template"
+                                  title={
+                                    linkToAdTemplateUrls.includes(proj.normalizedUrl.trim().toLowerCase())
+                                      ? "Remove from Link to Ad templates"
+                                      : "Add as Link to Ad template"
+                                  }
+                                >
+                                  <Star className="h-3 w-3" />
+                                  Template
+                                </span>
+                              ) : null}
                               {heroImg ? (
                                 <div className="relative h-36 w-full overflow-hidden bg-[#100d17]">
                                   <Image
@@ -3684,25 +3693,27 @@ export default function AppBrandWizard() {
                                   </div>
                                 </div>
                                 <div className="flex shrink-0 items-center gap-1">
-                                  <Button
-                                    type="button"
-                                    size="icon"
-                                    variant="secondary"
-                                    className={cn(
-                                      "h-9 w-9 border text-white transition",
-                                      linkToAdTemplateUrls.includes(proj.normalizedUrl.trim().toLowerCase())
-                                        ? "border-violet-300/55 bg-violet-500/25 hover:bg-violet-500/35"
-                                        : "border-white/15 bg-black/60 text-white/80 hover:bg-black/75",
-                                    )}
-                                    title={
-                                      linkToAdTemplateUrls.includes(proj.normalizedUrl.trim().toLowerCase())
-                                        ? "Remove from Link to Ad templates"
-                                        : "Add as Link to Ad template"
-                                    }
-                                    onClick={() => toggleLinkToAdTemplate(proj)}
-                                  >
-                                    <Star className="h-4 w-4" />
-                                  </Button>
+                                  {linkToAdTemplateAccessReady && canManageLinkToAdTemplates ? (
+                                    <Button
+                                      type="button"
+                                      size="icon"
+                                      variant="secondary"
+                                      className={cn(
+                                        "h-9 w-9 border text-white transition",
+                                        linkToAdTemplateUrls.includes(proj.normalizedUrl.trim().toLowerCase())
+                                          ? "border-violet-300/55 bg-violet-500/25 hover:bg-violet-500/35"
+                                          : "border-white/15 bg-black/60 text-white/80 hover:bg-black/75",
+                                      )}
+                                      title={
+                                        linkToAdTemplateUrls.includes(proj.normalizedUrl.trim().toLowerCase())
+                                          ? "Remove from Link to Ad templates"
+                                          : "Add as Link to Ad template"
+                                      }
+                                      onClick={() => toggleLinkToAdTemplate(proj)}
+                                    >
+                                      <Star className="h-4 w-4" />
+                                    </Button>
+                                  ) : null}
                                   {isUniverse ? (
                                     <Button
                                       type="button"

@@ -1,7 +1,7 @@
 export const runtime = "nodejs";
 
 import { NextResponse } from "next/server";
-import { requireSupabaseUser } from "@/lib/supabase/requireUser";
+import { requireLtaTemplateRecordingUser } from "@/lib/ltaTemplateRecordingAccess";
 import { createSupabaseServiceClient } from "@/lib/supabase/admin";
 
 type Body = {
@@ -14,7 +14,7 @@ type Body = {
 };
 
 export async function POST(req: Request) {
-  const auth = await requireSupabaseUser();
+  const auth = await requireLtaTemplateRecordingUser();
   if (auth.response) return auth.response;
 
   const body = (await req.json().catch(() => null)) as Body | null;
