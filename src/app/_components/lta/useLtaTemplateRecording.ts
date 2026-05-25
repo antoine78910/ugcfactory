@@ -1,4 +1,4 @@
-"use client";
+﻿"use client";
 
 import { useCallback, useEffect, useRef, useState } from "react";
 import { toast } from "sonner";
@@ -223,8 +223,20 @@ export function useLtaTemplateRecording(args: UseLtaTemplateRecordingArgs) {
     args.setIsKlingSubmitting(false);
     args.setServerPipelineStepIndex(null);
     args.setIsWorking(true);
-    args.setStage("scanning");
-    await delay(LTA_TEMPLATE_RECORDING_MIN_STEP_MS);
+
+    // Cycle through checklist stages so bullet-points complete progressively.
+    // WebsiteScanLoader label stays "Scanning" for all stages (handled in UI layer).
+    const total = LTA_TEMPLATE_RECORDING_MIN_STEP_MS;
+    const slices: Array<[Parameters<typeof args.setStage>[0], number]> = [
+      ["scanning",        Math.round(total * 0.20)],
+      ["finding_image",   Math.round(total * 0.25)],
+      ["summarizing",     Math.round(total * 0.25)],
+      ["writing_scripts", Math.round(total * 0.30)],
+    ];
+    for (const [stage, ms] of slices) {
+      args.setStage(stage);
+      await delay(ms);
+    }
   }, [args]);
 
   const runStep1Loading = useCallback(async () => {

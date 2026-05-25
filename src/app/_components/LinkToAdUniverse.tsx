@@ -7014,7 +7014,7 @@ export default function LinkToAdUniverse({
               <div className="flex min-w-0 flex-col gap-5 lg:flex-row lg:items-stretch lg:gap-8">
                 <WebsiteScanLoader
                   label={
-                    templateRecording.templateToggleOn && stage === "scanning"
+                    templateRecording.templateToggleOn
                       ? "Scanning"
                       : stage === "scanning"
                         ? "Scan site"
@@ -7036,14 +7036,12 @@ export default function LinkToAdUniverse({
                   }
                   className="min-w-0 flex-1"
                 />
-                {templateRecording.templateToggleOn && stage === "scanning" ? null : (
-                  <WebsiteScanChecklist
-                    stage={stage}
-                    isWorking={isWorking}
-                    serverPipelineStepIndex={serverPipelineStepIndex}
-                    className="shrink-0 lg:max-w-[min(100%,22rem)]"
-                  />
-                )}
+                <WebsiteScanChecklist
+                  stage={stage}
+                  isWorking={isWorking}
+                  serverPipelineStepIndex={serverPipelineStepIndex}
+                  className="shrink-0 lg:max-w-[min(100%,22rem)]"
+                />
               </div>
             ) : (
               <div className="flex min-w-0 items-start gap-3 sm:gap-4">
