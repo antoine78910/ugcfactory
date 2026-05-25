@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { createPortal } from "react-dom";
-import { Loader2, Clapperboard, X, ChevronDown, ChevronUp } from "lucide-react";
+import { Loader2, Clapperboard, X, Minimize2 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { proxiedMediaSrc } from "@/lib/mediaProxyUrl";
 import type { useLtaTemplateRecording } from "@/app/_components/lta/useLtaTemplateRecording";
@@ -22,7 +22,8 @@ export function LinkToAdTemplateRecordingButton({
   recording: TemplateRecording;
 }) {
   const mounted = useDocumentPortal();
-  const [minimized, setMinimized] = useState(false);
+  const [stepBarMinimized, setStepBarMinimized] = useState(false);
+  const [readyHintHidden, setReadyHintHidden] = useState(false);
 
   if (!mounted || !recording.featureEnabled) return null;
 
@@ -32,8 +33,13 @@ export function LinkToAdTemplateRecordingButton({
     recording.flowStage === "step3_loading" ||
     recording.flowStage === "step4_loading";
 
-  // Expand automatically when loading starts so user doesn't miss it
-  if (stepLoading && minimized) setMinimized(false);
+  useEffect(() => {
+    if (stepLoading) setStepBarMinimized(false);
+  }, [stepLoading]);
+
+  useEffect(() => {
+    if (!recording.isBrandSelected) setReadyHintHidden(false);
+  }, [recording.isBrandSelected]);
 
   const toggleDisabled = recording.active || recording.pickingBrand || stepLoading || recording.isBrandSelected;
 
@@ -41,40 +47,58 @@ export function LinkToAdTemplateRecordingButton({
   const canGoBack = (recording.gateStep ?? 0) > 1;
 
   return createPortal(
-    <div className="pointer-events-none fixed bottom-5 right-5 z-[10100] flex max-w-[min(92vw,22rem)] flex-col items-end gap-2">
+    <div className="pointer-events-none fixed bottom-5 right-5 z-[10100] flex max-w-[min(92vw,15rem)] flex-col items-end gap-1.5">
       {/* Brand selected — waiting for Generate */}
-      {recording.isBrandSelected && !minimized ? (
+      {recording.isBrandSelected && !readyHintHidden ? (
         <div
           className={cn(
-            "pointer-events-auto w-full rounded-2xl border p-3 shadow-[0_8px_32px_rgba(0,0,0,0.5)] backdrop-blur-md",
+            "pointer-events-auto w-full rounded-xl border px-2.5 py-2 shadow-[0_6px_24px_rgba(0,0,0,0.45)] backdrop-blur-md",
             "border-violet-400/30 bg-[#0b0912]/95 ring-1 ring-violet-400/20",
           )}
         >
-          <p className="text-[10px] font-bold uppercase tracking-widest text-violet-300/70">Template ready</p>
-          <p className="mt-0.5 text-[12px] font-medium text-white/80">
-            Enter (or keep) the URL above, then click <span className="font-semibold text-violet-300">Generate</span> to start.
+          <div className="flex items-start justify-between gap-1.5">
+            <p className="text-[9px] font-bold uppercase tracking-widest text-violet-300/70">Template ready</p>
+            <button
+              type="button"
+              className="shrink-0 rounded-md p-0.5 text-white/40 transition hover:bg-white/10 hover:text-white/70"
+              aria-label="Minimize"
+              onClick={() => setReadyHintHidden(true)}
+            >
+              <Minimize2 className="h-3.5 w-3.5" aria-hidden />
+            </button>
+          </div>
+          <p className="mt-0.5 text-[10px] leading-snug text-white/75">
+            URL above, then <span className="font-semibold text-violet-300">Generate</span>.
           </p>
           <button
             type="button"
-            className="mt-2 inline-flex h-7 items-center gap-1 rounded-full border border-white/15 px-3 text-[10px] font-semibold text-white/60 transition hover:bg-white/10"
+            className="mt-1.5 inline-flex h-6 items-center gap-1 rounded-full border border-white/15 px-2.5 text-[9px] font-semibold text-white/55 transition hover:bg-white/10"
             onClick={recording.cancelBrandSelected}
           >
-            <X className="h-3 w-3" aria-hidden />
+            <X className="h-2.5 w-2.5" aria-hidden />
             Cancel
           </button>
         </div>
+      ) : recording.isBrandSelected && readyHintHidden ? (
+        <button
+          type="button"
+          className="pointer-events-auto rounded-full border border-violet-400/25 bg-[#0b0912]/90 px-2.5 py-1 text-[9px] font-semibold text-violet-200/90 shadow-md backdrop-blur-md transition hover:bg-violet-500/15"
+          onClick={() => setReadyHintHidden(false)}
+        >
+          Template ready
+        </button>
       ) : null}
 
       {/* Step loading indicator — always visible even when minimized */}
       {stepLoading ? (
         <div
           className={cn(
-            "pointer-events-auto w-full rounded-2xl border px-3 py-2.5 shadow-[0_8px_32px_rgba(0,0,0,0.45)] backdrop-blur-md",
+            "pointer-events-auto w-full rounded-xl border px-2.5 py-2 shadow-[0_6px_24px_rgba(0,0,0,0.45)] backdrop-blur-md",
             "border-violet-400/30 bg-[#0b0912]/95 ring-1 ring-violet-400/20",
           )}
         >
-          <div className="flex items-center gap-2 text-[11px] font-medium text-violet-200/90">
-            <Loader2 className="h-3.5 w-3.5 shrink-0 animate-spin" aria-hidden />
+          <div className="flex items-center gap-1.5 text-[10px] font-medium text-violet-200/90">
+            <Loader2 className="h-3 w-3 shrink-0 animate-spin" aria-hidden />
             Loading step…
           </div>
         </div>
@@ -84,61 +108,58 @@ export function LinkToAdTemplateRecordingButton({
       {showStepBar ? (
         <div
           className={cn(
-            "pointer-events-auto w-full rounded-2xl border shadow-[0_8px_32px_rgba(0,0,0,0.5)] backdrop-blur-md",
-            "border-violet-400/30 bg-[#0b0912]/95 ring-2 ring-violet-400/20",
-            minimized ? "px-3 py-2" : "p-3",
+            "pointer-events-auto w-full rounded-xl border shadow-[0_6px_24px_rgba(0,0,0,0.5)] backdrop-blur-md",
+            "border-violet-400/30 bg-[#0b0912]/95 ring-1 ring-violet-400/20",
+            stepBarMinimized ? "px-2.5 py-1.5" : "px-2.5 py-2",
           )}
           role="region"
           aria-label="Template mode step controls"
         >
-          {/* Header row — always visible; click to toggle */}
-          <button
-            type="button"
-            onClick={() => setMinimized((v) => !v)}
-            className="flex w-full items-center justify-between gap-2 text-left"
-            aria-expanded={!minimized}
-          >
+          <div className="flex w-full items-center justify-between gap-1.5">
             <div className="min-w-0">
-              <p className="text-[10px] font-bold uppercase tracking-widest text-violet-300/70">Template mode</p>
-              <p className={cn("font-semibold text-white", minimized ? "text-[11px]" : "mt-0.5 text-[13px]")}>
-                Step {recording.gateStep} — {recording.gateLabel}
+              <p className="text-[8px] font-bold uppercase tracking-widest text-violet-300/65">Template</p>
+              <p className={cn("font-semibold text-white", stepBarMinimized ? "text-[10px]" : "text-[11px]")}>
+                {recording.gateStep}. {recording.gateLabel}
               </p>
             </div>
-            <span className="shrink-0 text-white/40">
-              {minimized
-                ? <ChevronUp className="h-4 w-4" aria-hidden />
-                : <ChevronDown className="h-4 w-4" aria-hidden />}
-            </span>
-          </button>
+            <button
+              type="button"
+              className="inline-flex shrink-0 items-center gap-0.5 rounded-md border border-white/10 px-1.5 py-0.5 text-[9px] font-semibold text-white/50 transition hover:bg-white/10 hover:text-white/75"
+              aria-expanded={!stepBarMinimized}
+              onClick={() => setStepBarMinimized((v) => !v)}
+            >
+              <Minimize2 className="h-3 w-3" aria-hidden />
+              {stepBarMinimized ? "Show" : "Minimize"}
+            </button>
+          </div>
 
-          {/* Expanded body */}
-          {!minimized ? (
+          {!stepBarMinimized ? (
             <>
-              <p className="mt-1 text-[11px] leading-snug text-white/50">
-                Film this step, then continue. Loading is done — the page stays visible.
+              <p className="mt-1 text-[9px] leading-snug text-white/45">
+                Film this step, then Continue.
               </p>
-              <div className="mt-2.5 flex flex-col gap-1.5">
+              <div className="mt-1.5 flex flex-col gap-1">
                 <button
                   type="button"
-                  className="inline-flex h-8 w-full items-center justify-center rounded-full border border-white/15 text-[11px] font-semibold text-white/80 transition hover:bg-white/10"
+                  className="inline-flex h-7 w-full items-center justify-center rounded-full border border-white/15 text-[10px] font-semibold text-white/80 transition hover:bg-white/10"
                   onClick={recording.retakeCurrentStepFromGate}
                 >
-                  Retake the step
+                  Retake
                 </button>
-                <div className="flex flex-wrap items-center gap-1.5">
+                <div className="flex flex-wrap items-center gap-1">
                   {canGoBack ? (
                     <button
                       type="button"
-                      className="inline-flex h-8 flex-1 items-center justify-center rounded-full border border-white/10 text-[10px] font-medium text-white/55 transition hover:bg-white/10 hover:text-white/75"
+                      className="inline-flex h-7 flex-1 items-center justify-center rounded-full border border-white/10 text-[9px] font-medium text-white/55 transition hover:bg-white/10 hover:text-white/75"
                       onClick={recording.previousFromGate}
                     >
-                      Previous
+                      Prev
                     </button>
                   ) : null}
                   <button
                     type="button"
                     className={cn(
-                      "inline-flex h-8 items-center justify-center rounded-full border border-violet-400/40 bg-violet-500/25 px-3 text-[11px] font-semibold text-violet-50 transition hover:bg-violet-500/35",
+                      "inline-flex h-7 items-center justify-center rounded-full border border-violet-400/40 bg-violet-500/25 px-2.5 text-[10px] font-semibold text-violet-50 transition hover:bg-violet-500/35",
                       canGoBack ? "flex-1" : "flex-[2]",
                     )}
                     onClick={recording.continueFromGate}
@@ -147,7 +168,7 @@ export function LinkToAdTemplateRecordingButton({
                   </button>
                   <button
                     type="button"
-                    className="inline-flex h-8 items-center justify-center rounded-full border border-white/15 px-3 text-[11px] font-semibold text-white/70 transition hover:bg-white/10"
+                    className="inline-flex h-7 items-center justify-center rounded-full border border-white/15 px-2 text-[9px] font-semibold text-white/65 transition hover:bg-white/10"
                     onClick={() => recording.requestTemplateToggle(false)}
                   >
                     Exit
@@ -156,12 +177,11 @@ export function LinkToAdTemplateRecordingButton({
               </div>
             </>
           ) : (
-            /* Minimized: inline action buttons */
-            <div className="mt-1.5 flex items-center gap-1.5">
+            <div className="mt-1 flex items-center gap-1">
               {canGoBack ? (
                 <button
                   type="button"
-                  className="inline-flex h-7 flex-1 items-center justify-center rounded-full border border-white/10 text-[10px] font-medium text-white/55 transition hover:bg-white/10 hover:text-white/75"
+                  className="inline-flex h-6 flex-1 items-center justify-center rounded-full border border-white/10 text-[9px] font-medium text-white/55 transition hover:bg-white/10"
                   onClick={recording.previousFromGate}
                 >
                   Prev
@@ -170,19 +190,12 @@ export function LinkToAdTemplateRecordingButton({
               <button
                 type="button"
                 className={cn(
-                  "inline-flex h-7 items-center justify-center rounded-full border border-violet-400/40 bg-violet-500/25 px-3 text-[10px] font-semibold text-violet-50 transition hover:bg-violet-500/35",
+                  "inline-flex h-6 items-center justify-center rounded-full border border-violet-400/40 bg-violet-500/25 px-2 text-[9px] font-semibold text-violet-50 transition hover:bg-violet-500/35",
                   canGoBack ? "flex-1" : "flex-[2]",
                 )}
                 onClick={recording.continueFromGate}
               >
                 Continue
-              </button>
-              <button
-                type="button"
-                className="inline-flex h-7 items-center justify-center rounded-full border border-white/15 px-2.5 text-[10px] font-semibold text-white/60 transition hover:bg-white/10"
-                onClick={() => recording.requestTemplateToggle(false)}
-              >
-                Exit
               </button>
             </div>
           )}
@@ -234,31 +247,59 @@ export function LinkToAdTemplateRecordingStartConfirm({
   recording: TemplateRecording;
 }) {
   const mounted = useDocumentPortal();
+  const [minimized, setMinimized] = useState(false);
+
+  useEffect(() => {
+    if (!recording.showStartConfirm) setMinimized(false);
+  }, [recording.showStartConfirm]);
+
   if (!mounted || !recording.showStartConfirm) return null;
 
+  if (minimized) {
+    return createPortal(
+      <button
+        type="button"
+        className="fixed bottom-[4.75rem] right-5 z-[10115] rounded-full border border-violet-400/30 bg-[#0b0912]/95 px-3 py-1.5 text-[10px] font-semibold text-violet-200 shadow-lg backdrop-blur-md transition hover:bg-violet-500/15"
+        onClick={() => setMinimized(false)}
+      >
+        Template start
+      </button>,
+      document.body,
+    );
+  }
+
   return createPortal(
-    <div className="fixed inset-0 z-[10115] flex items-center justify-center bg-black/65 p-4">
-      <div className="w-full max-w-md rounded-2xl border border-violet-400/25 bg-[#0b0912] p-5 shadow-2xl">
-        <p className="text-[10px] font-bold uppercase tracking-widest text-violet-300/70">Template mode</p>
-        <h3 className="mt-1 text-[16px] font-semibold text-white">Start template recording?</h3>
-        <p className="mt-2 text-[13px] leading-relaxed text-white/60">
-          You will pick a saved brand and replay the full Link to Ad flow with fake loading. No credits are
-          spent and nothing is generated on the server.
-        </p>
-        <div className="mt-5 flex flex-wrap items-center justify-end gap-2">
+    <div className="pointer-events-none fixed bottom-[4.75rem] right-5 z-[10115] flex max-w-[min(92vw,14rem)] flex-col items-end">
+      <div className="pointer-events-auto w-full rounded-xl border border-violet-400/25 bg-[#0b0912]/95 px-2.5 py-2 shadow-lg ring-1 ring-violet-400/15 backdrop-blur-md">
+        <div className="flex items-start justify-between gap-1">
+          <p className="text-[9px] font-bold uppercase tracking-widest text-violet-300/70">Template mode</p>
           <button
             type="button"
-            className="inline-flex h-9 items-center rounded-full border border-white/15 px-4 text-[12px] font-semibold text-white/75 transition hover:bg-white/10"
+            className="shrink-0 rounded-md p-0.5 text-white/40 transition hover:bg-white/10 hover:text-white/70"
+            aria-label="Minimize"
+            onClick={() => setMinimized(true)}
+          >
+            <Minimize2 className="h-3.5 w-3.5" aria-hidden />
+          </button>
+        </div>
+        <p className="mt-0.5 text-[11px] font-semibold text-white">Start recording?</p>
+        <p className="mt-1 text-[9px] leading-snug text-white/50">
+          Pick a brand, enter URL, Generate. No credits.
+        </p>
+        <div className="mt-2 flex flex-wrap items-center justify-end gap-1">
+          <button
+            type="button"
+            className="inline-flex h-7 items-center rounded-full border border-white/15 px-2.5 text-[10px] font-semibold text-white/70 transition hover:bg-white/10"
             onClick={recording.cancelTemplateStart}
           >
             Cancel
           </button>
           <button
             type="button"
-            className="inline-flex h-9 items-center rounded-full border border-violet-400/40 bg-violet-500/25 px-4 text-[12px] font-semibold text-violet-50 transition hover:bg-violet-500/35"
+            className="inline-flex h-7 items-center rounded-full border border-violet-400/40 bg-violet-500/25 px-2.5 text-[10px] font-semibold text-violet-50 transition hover:bg-violet-500/35"
             onClick={recording.confirmTemplateStart}
           >
-            Start template
+            Start
           </button>
         </div>
       </div>

@@ -268,10 +268,13 @@ export function useLtaTemplateRecording(args: UseLtaTemplateRecordingArgs) {
   const startBrandFlow = useCallback(
     async (brand: LtaTemplateBrandSummary) => {
       try {
-        const res = await fetch(`/api/runs/get?runId=${encodeURIComponent(brand.runId)}`, {
-          cache: "no-store",
-          credentials: "include",
-        });
+        const res = await fetch(
+          `/api/link-to-ad/template-runs/get?runId=${encodeURIComponent(brand.runId)}`,
+          {
+            cache: "no-store",
+            credentials: "include",
+          },
+        );
         const json = (await res.json()) as {
           data?: TemplateRunCache;
           error?: string;
