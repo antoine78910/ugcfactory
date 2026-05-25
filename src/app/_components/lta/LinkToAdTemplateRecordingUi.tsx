@@ -25,8 +25,6 @@ export function LinkToAdTemplateRecordingButton({
   const [stepBarMinimized, setStepBarMinimized] = useState(false);
   const [readyHintHidden, setReadyHintHidden] = useState(false);
 
-  if (!mounted || !recording.featureEnabled) return null;
-
   const stepLoading =
     recording.flowStage === "step1_loading" ||
     recording.flowStage === "step2_loading" ||
@@ -40,6 +38,8 @@ export function LinkToAdTemplateRecordingButton({
   useEffect(() => {
     if (!recording.isBrandSelected) setReadyHintHidden(false);
   }, [recording.isBrandSelected]);
+
+  if (!mounted || !recording.featureEnabled) return null;
 
   const toggleDisabled = recording.active || recording.pickingBrand || stepLoading || recording.isBrandSelected;
 
