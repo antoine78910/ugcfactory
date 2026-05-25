@@ -7006,15 +7006,17 @@ export default function LinkToAdUniverse({
               <div className="flex min-w-0 flex-col gap-5 lg:flex-row lg:items-stretch lg:gap-8">
                 <WebsiteScanLoader
                   label={
-                    stage === "scanning"
-                      ? "Scan site"
-                      : stage === "finding_image"
-                        ? "Scan images"
-                        : stage === "summarizing"
-                          ? "Brand"
-                          : stage === "writing_scripts"
-                            ? "Scripts"
-                            : "Scanning…"
+                    templateRecording.templateToggleOn && stage === "scanning"
+                      ? "Scanning"
+                      : stage === "scanning"
+                        ? "Scan site"
+                        : stage === "finding_image"
+                          ? "Scan images"
+                          : stage === "summarizing"
+                            ? "Brand"
+                            : stage === "writing_scripts"
+                              ? "Scripts"
+                              : "Scanning…"
                   }
                   subtitle={
                     universeLoadingState.message ? (
@@ -7026,12 +7028,14 @@ export default function LinkToAdUniverse({
                   }
                   className="min-w-0 flex-1"
                 />
-                <WebsiteScanChecklist
-                  stage={stage}
-                  isWorking={isWorking}
-                  serverPipelineStepIndex={serverPipelineStepIndex}
-                  className="shrink-0 lg:max-w-[min(100%,22rem)]"
-                />
+                {templateRecording.templateToggleOn && stage === "scanning" ? null : (
+                  <WebsiteScanChecklist
+                    stage={stage}
+                    isWorking={isWorking}
+                    serverPipelineStepIndex={serverPipelineStepIndex}
+                    className="shrink-0 lg:max-w-[min(100%,22rem)]"
+                  />
+                )}
               </div>
             ) : (
               <div className="flex min-w-0 items-start gap-3 sm:gap-4">
@@ -7566,7 +7570,7 @@ export default function LinkToAdUniverse({
         {selectedAngleIndex === null &&
         (summaryText.trim() ||
           scriptsText.trim() ||
-          showContinueScripts ||
+          (showContinueScripts && !templateRecording.templateToggleOn) ||
           (isWorking && stage === "writing_scripts")) ? (
           <div className="rounded-xl border border-violet-500/25 bg-violet-500/[0.06] p-4">
             {isWorking && stage === "writing_scripts" ? (
@@ -8038,7 +8042,7 @@ export default function LinkToAdUniverse({
                   ) : null}
                 </div>
               </div>
-            ) : (
+            ) : templateRecording.templateToggleOn ? null : (
               <div className="flex min-h-[80px] items-center justify-center rounded-lg border border-white/10 bg-black/20 px-4 text-center text-sm text-white/35">
                 Waiting for scripts…
               </div>

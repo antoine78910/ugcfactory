@@ -195,7 +195,10 @@ export function useLtaTemplateRecording(args: UseLtaTemplateRecordingArgs) {
     (step: LtaTemplateRecordingGateStep, buildOpts?: BuildExtractedForTemplateStepOpts) => {
       const run = runCacheRef.current;
       if (!run) return;
-      const extracted = buildExtractedForTemplateStep(run.extracted, step, buildOpts);
+      const extracted = buildExtractedForTemplateStep(run.extracted, step, {
+        ...buildOpts,
+        storeUrl: run.store_url ?? "",
+      });
       args.hydrateFromRun(
         { ...run, extracted },
         { silent: true, preserveVideoDuration: true, templateReplay: true },
@@ -212,20 +215,16 @@ export function useLtaTemplateRecording(args: UseLtaTemplateRecordingArgs) {
     [args],
   );
 
-  /** Same stage sequence as a real URL Generate (scanning → … → server_pipeline). */
+  /** Template demo: keep the same “Scanning the store page…” UI for the full step duration. */
   const runClassicLtaLoading = useCallback(async () => {
     args.setIsNanoAllImagesSubmitting(false);
     args.setIsNanoPromptsLoading(false);
     args.setIsVideoPromptLoading(false);
     args.setIsKlingSubmitting(false);
+    args.setServerPipelineStepIndex(null);
     args.setIsWorking(true);
-    const stages = ["scanning", "finding_image", "summarizing", "writing_scripts", "server_pipeline"] as const;
-    const perStage = Math.max(2000, Math.floor(LTA_TEMPLATE_RECORDING_MIN_STEP_MS / stages.length));
-    for (let i = 0; i < stages.length; i++) {
-      args.setStage(stages[i]!);
-      if (stages[i] === "server_pipeline") args.setServerPipelineStepIndex(Math.min(i, 4));
-      await delay(perStage);
-    }
+    args.setStage("scanning");
+    await delay(LTA_TEMPLATE_RECORDING_MIN_STEP_MS);
   }, [args]);
 
   const runStep1Loading = useCallback(async () => {

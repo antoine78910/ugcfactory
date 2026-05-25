@@ -2,12 +2,12 @@ import {
   cloneExtractedBase,
   createEmptyKlingByReference,
   emptyAnglePipeline,
-  normalizePipelineByAngle,
   readUniverseFromExtracted,
   type LinkToAdAnglePipelineV1,
   type LinkToAdUniverseSnapshotV1,
 } from "@/lib/linkToAdUniverse";
 import type { LtaTemplateRecordingGateStep } from "@/lib/ltaTemplateRecording";
+import { pickBestProductUrlForNanoBanana } from "@/lib/productReferenceImages";
 
 export type LtaTemplateStep3Phase = "prompts" | "full";
 
@@ -118,44 +118,60 @@ function stripPipelineToStep(
 export type BuildExtractedForTemplateStepOpts = {
   /** Step 3 only: show saved prompts without images, then full images on `"full"`. */
   step3Phase?: LtaTemplateStep3Phase;
+  storeUrl?: string;
 };
 
-/** Prefer the Nano reference frame used for image generation (not the scraper pick). */
-function resolveTemplateProductPhotoUrl(snap: LinkToAdUniverseSnapshotV1): string | null {
-  const triple = normalizePipelineByAngle(snap);
-  const sel = snap.selectedAngleIndex;
-  const slot = sel === 0 || sel === 1 || sel === 2 ? sel : sel === 3 ? 2 : 0;
-  const pipe = triple[slot];
-  const fromSelectedIdx = pipe?.nanoBananaSelectedImageIndex;
-  if (fromSelectedIdx === 0 || fromSelectedIdx === 1 || fromSelectedIdx === 2) {
-    const picked = pipe?.nanoBananaImageUrls?.[fromSelectedIdx]?.trim();
-    if (picked) return picked;
+/** Product refs sent to Nano (same priority as Link to Ad “Generate 3 images”), not generated outputs. */
+function buildNanoInputCandidateUrls(snap: LinkToAdUniverseSnapshotV1): string[] {
+  const out: string[] = [];
+  const seen = new Set<string>();
+  const push = (raw: string | null | undefined) => {
+    const t = (raw ?? "").trim();
+    if (!t || seen.has(t)) return;
+    seen.add(t);
+    out.push(t);
+  };
+  const list = snap.productOnlyImageUrls;
+  if (list?.length) {
+    for (let i = list.length - 1; i >= 0; i--) push(list[i]);
   }
-  const fromPipeUrl = pipe?.nanoBananaImageUrl?.trim();
-  if (fromPipeUrl) return fromPipeUrl;
-  const fromPipeList = pipe?.nanoBananaImageUrls?.find((u) => typeof u === "string" && u.trim());
-  if (fromPipeList?.trim()) return fromPipeList.trim();
-
-  const topIdx = snap.nanoBananaSelectedImageIndex;
-  if (topIdx === 0 || topIdx === 1 || topIdx === 2) {
-    const picked = snap.nanoBananaImageUrls?.[topIdx]?.trim();
-    if (picked) return picked;
-  }
-  const topUrl = snap.nanoBananaImageUrl?.trim();
-  if (topUrl) return topUrl;
-  const topList = snap.nanoBananaImageUrls?.find((u) => typeof u === "string" && u.trim());
-  if (topList?.trim()) return topList.trim();
-
-  return null;
+  push(snap.cleanCandidate?.url);
+  return out;
 }
 
-function applyTemplateProductPhotoDisplay(snap: LinkToAdUniverseSnapshotV1, source: LinkToAdUniverseSnapshotV1): LinkToAdUniverseSnapshotV1 {
-  const genUrl = resolveTemplateProductPhotoUrl(source);
-  if (!genUrl) return snap;
+function resolveTemplateNanoInputProductUrl(
+  source: LinkToAdUniverseSnapshotV1,
+  storeUrl: string,
+): string | null {
+  const pageUrl = storeUrl.trim();
+  if (!pageUrl) {
+    return (
+      source.neutralUploadUrl?.trim() ||
+      buildNanoInputCandidateUrls(source)[0] ||
+      source.fallbackImageUrl?.trim() ||
+      null
+    );
+  }
+  return pickBestProductUrlForNanoBanana({
+    pageUrl,
+    neutralUploadUrl: source.neutralUploadUrl,
+    candidateUrls: buildNanoInputCandidateUrls(source),
+    fallbackUrl: source.fallbackImageUrl,
+  });
+}
+
+function applyTemplateProductPhotoDisplay(
+  snap: LinkToAdUniverseSnapshotV1,
+  source: LinkToAdUniverseSnapshotV1,
+  storeUrl: string,
+): LinkToAdUniverseSnapshotV1 {
+  const inputUrl = resolveTemplateNanoInputProductUrl(source, storeUrl);
+  if (!inputUrl) return snap;
   return {
     ...snap,
-    cleanCandidate: { url: genUrl, reason: "Reference used for image generation" },
-    productOnlyImageUrls: [genUrl],
+    cleanCandidate: { url: inputUrl, reason: "Product reference for image generation" },
+    productOnlyImageUrls: [inputUrl],
+    neutralUploadUrl: source.neutralUploadUrl?.trim() === inputUrl ? source.neutralUploadUrl : snap.neutralUploadUrl,
   };
 }
 
@@ -169,9 +185,10 @@ export function buildExtractedForTemplateStep(
   if (!snap0) return extracted;
   const base = cloneExtractedBase(extracted);
   const step3Phase = maxStep === 3 ? (opts?.step3Phase ?? "full") : "full";
+  const storeUrl = typeof opts?.storeUrl === "string" ? opts.storeUrl : "";
   let snap = stripPipelineToStep(snap0, maxStep, step3Phase);
   if (maxStep >= 1) {
-    snap = applyTemplateProductPhotoDisplay(snap, snap0);
+    snap = applyTemplateProductPhotoDisplay(snap, snap0, storeUrl);
   }
   return { ...base, __universe: snap };
 }
