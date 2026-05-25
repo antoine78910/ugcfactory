@@ -3357,9 +3357,12 @@ export default function LinkToAdUniverse({
     },
   });
 
-  /** Hide credit pills and skip wallet charges during template replay. */
+  /** Hide credit pills (incl. Generate) whenever template mode is on; skip charges during replay. */
   const hideLtaCreditsUi =
-    manualHideCredits || templateRecording.isTemplateReplayActive;
+    manualHideCredits ||
+    templateRecording.templateToggleOn ||
+    templateRecording.isBrandSelected ||
+    templateRecording.isTemplateReplayActive;
 
   useEffect(() => {
     ltaTemplateLocksRef.current = templateRecording.isTemplateReplayActive;
