@@ -489,16 +489,14 @@ export function useLtaTemplateRecording(args: UseLtaTemplateRecordingArgs) {
   }, [flowStage, runStep1Loading, showStep2Gate, runStep3Loading, runStep4Loading]);
 
   const interceptPaidAction = useCallback((): boolean => {
-    // Don't block during brand_selected — the Generate button should trigger beginTemplateReplay.
+    // Never block paid actions during template replay — the user clicks Generate buttons naturally
+    // to progress through the steps. Just advance the gate and let the action run.
     if (!isTemplateReplayActive) return false;
-    toast.message("Template mode", {
-      description:
-        flowStage.endsWith("_gate") || flowStage.endsWith("_loading")
-          ? "Use Continue on the template bar (bottom-right) when you are ready for the next step."
-          : "Template recording is in progress.",
-    });
-    return true;
-  }, [flowStage, isTemplateReplayActive]);
+    if (flowStage.endsWith("_gate")) {
+      continueFromGate();
+    }
+    return false;
+  }, [continueFromGate, flowStage, isTemplateReplayActive]);
 
   const interceptOnRun = useCallback(
     async (_storeUrl: string, realOnRun: () => Promise<void>) => {
