@@ -2156,8 +2156,17 @@ export default function AppBrandWizard() {
       if (!canManageLinkToAdTemplates) return;
       const normalized = project.normalizedUrl.trim().toLowerCase();
       if (!normalized) return;
-      const latestRun = project.runs[0];
-      if (!latestRun?.id) {
+      // Prefer the most complete run: one that has scripts ready for template replay.
+      // Falls back to any universe run, then the bare latest run.
+      const bestRunForTemplate =
+        project.runs.find((r) => {
+          if (!runHasLinkToAdUniverse(r.extracted)) return false;
+          const s = readUniverseFromExtracted(r.extracted);
+          return Boolean(s?.scriptsText?.trim());
+        }) ??
+        project.runs.find((r) => runHasLinkToAdUniverse(r.extracted)) ??
+        project.runs[0];
+      if (!bestRunForTemplate?.id) {
         toast.error("No run found for this project.");
         return;
       }
@@ -2168,7 +2177,8 @@ export default function AppBrandWizard() {
             method: "POST",
             headers: { "Content-Type": "application/json" },
             credentials: "include",
-            body: JSON.stringify({ runId: latestRun.id, remove: true }),
+            // Send normalizedUrl so the API can delete all entries for this brand
+            body: JSON.stringify({ runId: bestRunForTemplate.id, normalizedUrl: normalized, remove: true }),
           });
           const json = (await res.json().catch(() => ({}))) as { error?: string };
           if (!res.ok) throw new Error(json.error || "Could not remove template");
@@ -2184,14 +2194,14 @@ export default function AppBrandWizard() {
         return;
       }
       const thumb =
-        universeThumbFromExtracted(latestRun.extracted) ?? latestRun.selected_image_url ?? null;
+        universeThumbFromExtracted(bestRunForTemplate.extracted) ?? bestRunForTemplate.selected_image_url ?? null;
       try {
         const res = await fetch("/api/link-to-ad/template-brands/sync", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           credentials: "include",
           body: JSON.stringify({
-            runId: latestRun.id,
+            runId: bestRunForTemplate.id,
             normalizedUrl: normalized,
             storeUrl: project.storeUrl,
             title: project.title ?? null,
@@ -2211,7 +2221,7 @@ export default function AppBrandWizard() {
         storeUrl: project.storeUrl,
         title: project.title ?? null,
         thumbUrl: thumb,
-        sourceRunId: latestRun.id,
+        sourceRunId: bestRunForTemplate.id,
         createdAt: new Date().toISOString(),
       });
       await refreshLinkToAdTemplateUrls();
