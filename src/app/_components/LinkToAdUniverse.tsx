@@ -286,6 +286,14 @@ function extractPartOneAndTwoForDisplay(editable: string): string | null {
   return slice;
 }
 
+/** Card title only: ANGLE_HEADLINE when present, else derived marketing angle label (not script body). */
+function marketingAngleTitleFromScript(raw: string, angleIndex: 0 | 1 | 2): string {
+  const { headline } = angleBlockForEditing(raw);
+  const h = headline.replace(/\s+/g, " ").trim();
+  if (h) return h;
+  return teaserFromScriptBlock(raw, angleIndex);
+}
+
 function angleBriefPartsFromScriptOption(
   raw: string,
   angleIndex: 0 | 1 | 2,
@@ -1748,7 +1756,6 @@ export default function LinkToAdUniverse({
   /** Manual edit of headline + script before "Add to my angles". */
   const [pendingCustomAngleEditing, setPendingCustomAngleEditing] = useState(false);
   const [editableScript, setEditableScript] = useState("");
-  const [expandedAngleScripts, setExpandedAngleScripts] = useState<Record<number, boolean>>({});
   const [angleScriptDrafts, setAngleScriptDrafts] = useState<Record<number, string>>({});
   const [scriptEditVisible, setScriptEditVisible] = useState(false);
   const [scriptFactors, setScriptFactors] = useState<ScriptFactorBlocks>({ ...EMPTY_SCRIPT_FACTORS });
@@ -1810,7 +1817,6 @@ export default function LinkToAdUniverse({
   /** Lightbox: full reference image (source is often 9:16; grid shows 3:4 crop). */
   const [nanoImageLightboxUrl, setNanoImageLightboxUrl] = useState<string | null>(null);
   const [productImageLightboxUrl, setProductImageLightboxUrl] = useState<string | null>(null);
-  const [expandedAngleBriefs, setExpandedAngleBriefs] = useState<Record<number, boolean>>({});
   const [angleSummaryDrafts, setAngleSummaryDrafts] = useState<Record<number, string>>({});
   /** Screen-recording: hide recent-generation chips (stored in localStorage). */
   const [hidePreviousLtaGenerations, setHidePreviousLtaGenerations] = useState(false);
@@ -2178,8 +2184,6 @@ export default function LinkToAdUniverse({
     setScriptFactors({ ...EMPTY_SCRIPT_FACTORS });
     setScriptHasEdits(false);
     setScriptEditVisible(false);
-    setExpandedAngleScripts({});
-    setExpandedAngleBriefs({});
     setAngleSummaryDrafts({});
     setAngleScriptDrafts({});
     setNanoImageLightboxUrl(null);
@@ -2706,28 +2710,15 @@ export default function LinkToAdUniverse({
   const angleOptionCards = useMemo(() => {
     const count = Math.max(3, scriptOptionBodiesAll.length);
     return Array.from({ length: count }, (_, i) => {
-      const explicit = angleLabels[i]?.trim() ?? "";
       const body = scriptOptionBodiesAll[i] ?? "";
-      const parts = body
-        ? angleBriefPartsFromScriptOption(body, (i === 0 ? 0 : i === 1 ? 1 : 2) as 0 | 1 | 2)
-        : { brief: "", full: "", canExpand: false };
-      const shouldSanitize = hasAvatarPhoto || hasPersonaPhoto;
-      const explicitSafe = shouldSanitize ? sanitizeAngleLabelForAvatar(explicit) : explicit;
-      const fallbackSafe = shouldSanitize ? sanitizeAngleLabelForAvatar(parts.brief) : parts.brief;
-      const fullSafe = shouldSanitize ? sanitizeAngleLabelForAvatar(parts.full) : parts.full;
-      const fallback = fallbackSafe;
-      const label = explicitSafe || fallback || "…";
-      const fullLabel =
-        explicitSafe && fullSafe && fullSafe.trim() !== explicitSafe.trim()
-          ? `${explicitSafe}\n\n${fullSafe}`
-          : explicitSafe || fullSafe || fallback || "…";
+      const slot = (i === 0 ? 0 : i === 1 ? 1 : 2) as 0 | 1 | 2;
+      let title = body ? marketingAngleTitleFromScript(body, slot) : (angleLabels[i]?.trim() ?? "");
+      if (hasAvatarPhoto || hasPersonaPhoto) {
+        title = sanitizeAngleLabelForAvatar(title);
+      }
       return {
         index: i,
-        label,
-        fullLabel,
-        canExpand: Boolean(
-          parts.canExpand && fullLabel.trim() !== label.trim(),
-        ),
+        label: title || "…",
       };
     });
   }, [angleLabels, hasAvatarPhoto, hasPersonaPhoto, sanitizeAngleLabelForAvatar, scriptOptionBodiesAll]);
@@ -7905,45 +7896,17 @@ export default function LinkToAdUniverse({
                         Angle {card.index + 1}
                       </span>
                     </div>
-                    {expandedAngleBriefs[card.index] && linkToAdTrialEconomy ? (
-                      <LtaTrialTextPeek
-                        body={card.fullLabel}
-                        className="mt-2.5 text-[13px] leading-snug"
-                      />
-                    ) : (
-                      <p
-                        className={cn(
-                          "mt-2 text-[12px] leading-snug transition-colors sm:mt-2.5 sm:text-[13px]",
-                          selectedAngleIndex === card.index
-                            ? "text-white/90"
-                            : "text-white/65 group-hover/angle:text-white/80",
-                          !expandedAngleBriefs[card.index] && card.canExpand && "line-clamp-2 sm:line-clamp-3",
-                        )}
-                      >
-                        {expandedAngleBriefs[card.index] ? card.fullLabel : card.label}
-                      </p>
-                    )}
-                    {card.canExpand ? (
-                      <span
-                        role="button"
-                        tabIndex={0}
-                        className="mt-2 hidden text-[11px] font-medium text-violet-300/70 transition hover:text-violet-200 sm:inline-flex"
-                        onClick={(e) => {
-                          e.preventDefault();
-                          e.stopPropagation();
-                          setExpandedAngleBriefs((prev) => ({ ...prev, [card.index]: !Boolean(prev[card.index]) }));
-                        }}
-                        onKeyDown={(e) => {
-                          if (e.key === "Enter") {
-                            e.preventDefault();
-                            e.stopPropagation();
-                            setExpandedAngleBriefs((prev) => ({ ...prev, [card.index]: !Boolean(prev[card.index]) }));
-                          }
-                        }}
-                      >
-                        {expandedAngleBriefs[card.index] ? "Collapse" : "Expand"}
-                      </span>
-                    ) : null}
+                    <p
+                      className={cn(
+                        "mt-2 text-[12px] font-medium leading-snug transition-colors sm:mt-2.5 sm:text-[13px]",
+                        selectedAngleIndex === card.index
+                          ? "text-white/95"
+                          : "text-white/75 group-hover/angle:text-white/85",
+                        "line-clamp-3",
+                      )}
+                    >
+                      {card.label}
+                    </p>
                   </button>
                 ))}
                 </div>
@@ -8513,85 +8476,28 @@ export default function LinkToAdUniverse({
                       {angleOptionCards.map((card) => {
                         const i = card.index;
                         const active = selectedAngleIndex === i;
-                        const expanded = Boolean(expandedAngleScripts[i]);
-                        const fullScript = scriptOptionBodiesAll[i] ?? "";
-                        const summary = angleFullSummaryFromScriptOption(fullScript);
                         return (
-                          <div
+                          <button
                             key={i}
+                            type="button"
+                            onClick={() => void onSelectAngle(i)}
                             className={cn(
-                              "rounded-xl border px-3 py-2.5 transition-all",
+                              "w-full rounded-xl border px-3 py-2.5 text-left transition-all",
                               active
                                 ? "border-violet-400/55 bg-violet-500/[0.14] shadow-[0_0_20px_rgba(139,92,246,0.12)] ring-1 ring-violet-400/25"
                                 : "border-white/10 bg-white/[0.03] hover:border-violet-400/35 hover:bg-white/[0.06]",
                             )}
                           >
-                            <div className="flex items-center justify-between gap-3">
-                              <span className="text-[10px] font-bold uppercase tracking-wide text-violet-300">
-                                Angle {i + 1}
-                                {active ? (
-                                  <span className="ml-1.5 hidden font-semibold normal-case text-violet-200/90 sm:inline">· active</span>
-                                ) : null}
-                              </span>
-                              <button
-                                type="button"
-                                onClick={(e) => {
-                                  e.stopPropagation();
-                                  const wasExpanded = Boolean(expandedAngleScripts[i]);
-                                  if (wasExpanded) {
-                                    const t = angleSummarySaveTimersRef.current[i];
-                                    if (t) {
-                                      clearTimeout(t);
-                                      delete angleSummarySaveTimersRef.current[i];
-                                    }
-                                    const d = angleSummaryDrafts[i];
-                                    if (d !== undefined) applyAngleSummaryEdit(i, { silent: true, draft: d });
-                                  } else {
-                                    setAngleSummaryDrafts((prev) => ({
-                                      ...prev,
-                                      [i]: angleFullSummaryFromScriptOption(fullScript),
-                                    }));
-                                  }
-                                  setExpandedAngleScripts((prev) => ({ ...prev, [i]: !Boolean(prev[i]) }));
-                                }}
-                                className="inline-flex items-center gap-1 rounded-md border border-white/10 bg-white/[0.04] px-2 py-1 text-[10px] font-semibold text-white/70 transition hover:border-violet-400/35 hover:bg-white/[0.07] hover:text-white"
-                              >
-                                {expanded ? <ChevronUp className="h-3.5 w-3.5" /> : <ChevronDown className="h-3.5 w-3.5" />}
-                                {expanded ? "Collapse" : "Expand"}
-                              </button>
-                            </div>
-                            <button type="button" onClick={() => void onSelectAngle(i)} className="mt-1.5 w-full text-left">
-                              <p className="text-xs leading-snug text-white/80 line-clamp-5">
-                                {card.label}
-                              </p>
-                            </button>
-                            {expanded ? (
-                              <div className="mt-2 space-y-2 border-t border-white/10 pt-2">
-                                {linkToAdTrialEconomy ? (
-                                  <LtaTrialPromptPeek
-                                    showFooter
-                                    sections={[
-                                      {
-                                        label: "Summary",
-                                        body: angleSummaryDrafts[i] ?? summary,
-                                      },
-                                    ]}
-                                  />
-                                ) : (
-                                  <Textarea
-                                    value={angleSummaryDrafts[i] ?? summary}
-                                    onChange={(e) => {
-                                      const v = e.target.value;
-                                      setAngleSummaryDrafts((prev) => ({ ...prev, [i]: v }));
-                                      scheduleAngleSummaryPersist(i, v);
-                                    }}
-                                    className="min-h-[120px] border-white/10 bg-black/25 text-xs leading-relaxed text-white/85"
-                                    spellCheck
-                                  />
-                                )}
-                              </div>
-                            ) : null}
-                          </div>
+                            <span className="text-[10px] font-bold uppercase tracking-wide text-violet-300">
+                              Angle {i + 1}
+                              {active ? (
+                                <span className="ml-1.5 hidden font-semibold normal-case text-violet-200/90 sm:inline">· active</span>
+                              ) : null}
+                            </span>
+                            <p className="mt-1.5 text-sm font-medium leading-snug text-white/90 line-clamp-3">
+                              {card.label}
+                            </p>
+                          </button>
                         );
                       })}
                     </div>
