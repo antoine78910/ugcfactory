@@ -4202,7 +4202,7 @@ export default function LinkToAdUniverse({
       void templateRecording.beginTemplateReplay(storeUrl);
       return;
     }
-    if (templateRecording.interceptPaidAction()) return;
+    if (templateRecording.isTemplateReplayActive) return;
     const url = storeUrl.trim();
     if (!url) {
       toast.error("Missing URL");
@@ -4462,7 +4462,7 @@ export default function LinkToAdUniverse({
     angleIdx?: number | null,
     opts?: { keepThreeImagesSubmitting?: boolean },
   ): Promise<string | null> {
-    if (templateRecording.interceptPaidAction()) return null;
+    if (templateRecording.interceptPaidAction("generate_prompts")) return null;
     const url = storeUrl.trim();
     const idx = angleIdx !== undefined && angleIdx !== null ? angleIdx : selectedAngleIndex;
     const selectedScript = selectedScriptOptionByIndex(scriptsText, idx);
@@ -4573,7 +4573,7 @@ export default function LinkToAdUniverse({
   }
 
   async function onGenerateNanoBananaImage() {
-    if (templateRecording.interceptPaidAction()) return;
+    if (templateRecording.interceptPaidAction("generate_images")) return;
     const url = storeUrl.trim();
     const idx = selectedAngleIndex === 0 || selectedAngleIndex === 1 || selectedAngleIndex === 2 ? selectedAngleIndex : 0;
     const productRefs = resolveNanoProductImageUrls();
@@ -5099,7 +5099,7 @@ export default function LinkToAdUniverse({
   }
 
   async function onGenerateNanoBananaImagesFromAllPrompts(opts?: { forceRegenerateCharge?: boolean }) {
-    if (templateRecording.interceptPaidAction()) return;
+    if (templateRecording.interceptPaidAction("generate_images")) return;
     const url = storeUrl.trim();
     const idx = selectedAngleIndex;
     // Beacon to server logs: lets us trace whether the click reached the handler and which exit path it took.
@@ -5643,7 +5643,7 @@ export default function LinkToAdUniverse({
   }, [nanoPollTaskId]);
 
   async function onGenerateUgcVideoPrompt(): Promise<string | null> {
-    if (templateRecording.interceptPaidAction()) return null;
+    if (templateRecording.interceptPaidAction("generate_video_prompt")) return null;
     const url = storeUrl.trim();
     const script = selectedScriptOptionByIndex(scriptsText, selectedAngleIndex);
     if (!url || !lastExtractedJson || selectedAngleIndex === null || !script.trim()) {
@@ -5781,7 +5781,7 @@ export default function LinkToAdUniverse({
     chainPart2Prompt?: string,
     opts?: { forceRegenerateCharge?: boolean },
   ) {
-    if (templateRecording.interceptPaidAction()) return;
+    if (templateRecording.interceptPaidAction("generate_kling")) return;
     const url = storeUrl.trim();
     const img = nanoBananaImageUrl;
     const idx = nanoBananaSelectedImageIndex;

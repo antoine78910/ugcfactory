@@ -33,11 +33,22 @@ type FlowStage =
   | "step1_gate"
   | "step2_loading"
   | "step2_gate"
-  | "step3_loading"
-  | "step3_gate"
-  | "step4_loading"
+  | "step3_prompts_loading"
+  | "step3_prompts_gate"
+  | "step3_images_loading"
+  | "step3_images_gate"
+  | "step4_prompt_loading"
+  | "step4_prompt_gate"
+  | "step4_video_loading"
   | "step4_gate"
   | "finished";
+
+/** Paid Link to Ad actions that advance the template replay when clicked naturally. */
+export type LtaTemplatePaidAction =
+  | "generate_prompts"
+  | "generate_images"
+  | "generate_video_prompt"
+  | "generate_kling";
 
 export type UseLtaTemplateRecordingArgs = {
   /** Logged-in email from the browser session (OAuth-safe). */
@@ -76,8 +87,8 @@ function delay(ms: number): Promise<void> {
 function gateStepForStage(stage: FlowStage): LtaTemplateRecordingGateStep | null {
   if (stage === "step1_gate") return 1;
   if (stage === "step2_gate") return 2;
-  if (stage === "step3_gate") return 3;
-  if (stage === "step4_gate") return 4;
+  if (stage === "step3_prompts_gate" || stage === "step3_images_gate") return 3;
+  if (stage === "step4_prompt_gate" || stage === "step4_gate") return 4;
   return null;
 }
 
@@ -124,7 +135,9 @@ export function useLtaTemplateRecording(args: UseLtaTemplateRecordingArgs) {
     locksSelection &&
     flowStage !== "step1_gate" &&
     flowStage !== "step2_gate" &&
-    flowStage !== "step3_gate" &&
+    flowStage !== "step3_prompts_gate" &&
+    flowStage !== "step3_images_gate" &&
+    flowStage !== "step4_prompt_gate" &&
     flowStage !== "step4_gate";
 
   useEffect(() => {
@@ -272,20 +285,69 @@ export function useLtaTemplateRecording(args: UseLtaTemplateRecordingArgs) {
     setFlowStage("step1_gate");
   }, [applyCachedStep, args, runClassicLtaLoading]);
 
-  const runStep3Loading = useCallback(async () => {
-    await runClassicLtaLoading();
-    applyCachedStep(3, { step3Phase: "prompts" });
-    await runClassicLtaLoading();
-    applyCachedStep(3, { step3Phase: "full" });
+  /** Fake “Writing image prompts…” — no store scanning. */
+  const runTemplatePromptsLoading = useCallback(async () => {
     args.setIsWorking(false);
-    setFlowStage("step3_gate");
-  }, [applyCachedStep, args, runClassicLtaLoading]);
+    args.setStage("ready");
+    args.setServerPipelineStepIndex(null);
+    args.setIsNanoAllImagesSubmitting(false);
+    args.setIsVideoPromptLoading(false);
+    args.setIsKlingSubmitting(false);
+    setFlowStage("step3_prompts_loading");
+    args.setIsNanoPromptsLoading(true);
+    await delay(LTA_TEMPLATE_RECORDING_MIN_STEP_MS);
+    applyCachedStep(3, { step3Phase: "prompts" });
+    args.setIsNanoPromptsLoading(false);
+    setFlowStage("step3_prompts_gate");
+  }, [applyCachedStep, args]);
 
-  const runStep4Loading = useCallback(async () => {
-    await runClassicLtaLoading();
-    applyCachedStep(4);
+  /** Fake “Generating your 3 reference images…” — no store scanning, no prompt pass. */
+  const runTemplateImagesLoading = useCallback(async () => {
+    args.setIsWorking(false);
+    args.setStage("ready");
+    args.setServerPipelineStepIndex(null);
+    args.setIsNanoPromptsLoading(false);
+    args.setIsVideoPromptLoading(false);
+    args.setIsKlingSubmitting(false);
+    setFlowStage("step3_images_loading");
+    args.setIsNanoAllImagesSubmitting(true);
+    await delay(LTA_TEMPLATE_RECORDING_MIN_STEP_MS);
+    applyCachedStep(3, { step3Phase: "full" });
+    args.setIsNanoAllImagesSubmitting(false);
+    setFlowStage("step3_images_gate");
+  }, [applyCachedStep, args]);
+
+  /** Fake “Writing your video prompt…” */
+  const runTemplateVideoPromptLoading = useCallback(async () => {
+    args.setIsWorking(false);
+    args.setStage("ready");
+    args.setServerPipelineStepIndex(null);
+    args.setIsNanoPromptsLoading(false);
+    args.setIsNanoAllImagesSubmitting(false);
+    args.setIsKlingSubmitting(false);
+    setFlowStage("step4_prompt_loading");
+    args.setIsVideoPromptLoading(true);
+    await delay(LTA_TEMPLATE_RECORDING_MIN_STEP_MS);
+    applyCachedStep(4, { step4Phase: "prompt" });
+    args.setIsVideoPromptLoading(false);
+    setFlowStage("step4_prompt_gate");
+  }, [applyCachedStep, args]);
+
+  /** Fake “Starting video render…” */
+  const runTemplateKlingLoading = useCallback(async () => {
+    args.setIsWorking(false);
+    args.setStage("ready");
+    args.setServerPipelineStepIndex(null);
+    args.setIsNanoPromptsLoading(false);
+    args.setIsNanoAllImagesSubmitting(false);
+    args.setIsVideoPromptLoading(false);
+    setFlowStage("step4_video_loading");
+    args.setIsKlingSubmitting(true);
+    await delay(LTA_TEMPLATE_RECORDING_MIN_STEP_MS);
+    applyCachedStep(4, { step4Phase: "full" });
+    args.setIsKlingSubmitting(false);
     setFlowStage("step4_gate");
-  }, [applyCachedStep, runClassicLtaLoading]);
+  }, [applyCachedStep, args]);
 
   /**
    * Step 1 – fetch the template run and pre-fill the URL field.
@@ -430,24 +492,13 @@ export function useLtaTemplateRecording(args: UseLtaTemplateRecordingArgs) {
       showStep2Gate();
       return;
     }
-    if (flowStage === "step2_gate") {
-      setFlowStage("step3_loading");
-      void runStep3Loading();
-      return;
-    }
-    if (flowStage === "step3_gate") {
-      setFlowStage("step4_loading");
-      void runStep4Loading();
-      return;
-    }
     if (flowStage === "step4_gate") {
       setFlowStage("finished");
       flowActiveRef.current = false;
       setTemplateToggleOn(false);
       toast.success("Template recording complete");
-      return;
     }
-  }, [flowStage, showStep2Gate, runStep3Loading, runStep4Loading]);
+  }, [flowStage, showStep2Gate]);
 
   const previousFromGate = useCallback(() => {
     if (flowStage === "step2_gate") {
@@ -455,14 +506,24 @@ export function useLtaTemplateRecording(args: UseLtaTemplateRecordingArgs) {
       setFlowStage("step1_gate");
       return;
     }
-    if (flowStage === "step3_gate") {
+    if (flowStage === "step3_prompts_gate") {
       applyCachedStep(2);
       setFlowStage("step2_gate");
       return;
     }
+    if (flowStage === "step3_images_gate") {
+      applyCachedStep(3, { step3Phase: "prompts" });
+      setFlowStage("step3_prompts_gate");
+      return;
+    }
+    if (flowStage === "step4_prompt_gate") {
+      applyCachedStep(3, { step3Phase: "full" });
+      setFlowStage("step3_images_gate");
+      return;
+    }
     if (flowStage === "step4_gate") {
-      applyCachedStep(3);
-      setFlowStage("step3_gate");
+      applyCachedStep(4, { step4Phase: "prompt" });
+      setFlowStage("step4_prompt_gate");
     }
   }, [applyCachedStep, flowStage]);
 
@@ -477,26 +538,82 @@ export function useLtaTemplateRecording(args: UseLtaTemplateRecordingArgs) {
       showStep2Gate();
       return;
     }
-    if (flowStage === "step3_gate") {
-      setFlowStage("step3_loading");
-      void runStep3Loading();
+    if (flowStage === "step3_prompts_gate") {
+      void runTemplatePromptsLoading();
+      return;
+    }
+    if (flowStage === "step3_images_gate") {
+      void runTemplateImagesLoading();
+      return;
+    }
+    if (flowStage === "step4_prompt_gate") {
+      void runTemplateVideoPromptLoading();
       return;
     }
     if (flowStage === "step4_gate") {
-      setFlowStage("step4_loading");
-      void runStep4Loading();
+      void runTemplateKlingLoading();
     }
-  }, [flowStage, runStep1Loading, showStep2Gate, runStep3Loading, runStep4Loading]);
+  }, [
+    flowStage,
+    runStep1Loading,
+    showStep2Gate,
+    runTemplatePromptsLoading,
+    runTemplateImagesLoading,
+    runTemplateVideoPromptLoading,
+    runTemplateKlingLoading,
+  ]);
 
-  const interceptPaidAction = useCallback((): boolean => {
-    // Never block paid actions during template replay — the user clicks Generate buttons naturally
-    // to progress through the steps. Just advance the gate and let the action run.
-    if (!isTemplateReplayActive) return false;
-    if (flowStage.endsWith("_gate")) {
-      continueFromGate();
-    }
-    return false;
-  }, [continueFromGate, flowStage, isTemplateReplayActive]);
+  const interceptPaidAction = useCallback(
+    (action: LtaTemplatePaidAction): boolean => {
+      if (!isTemplateReplayActive) return false;
+
+      switch (action) {
+        case "generate_prompts":
+          if (
+            flowStage === "step2_gate" ||
+            flowStage === "step3_prompts_gate"
+          ) {
+            void runTemplatePromptsLoading();
+            return true;
+          }
+          return false;
+        case "generate_images":
+          if (
+            flowStage === "step3_prompts_gate" ||
+            flowStage === "step3_images_gate"
+          ) {
+            void runTemplateImagesLoading();
+            return true;
+          }
+          return false;
+        case "generate_video_prompt":
+          if (
+            flowStage === "step3_images_gate" ||
+            flowStage === "step4_prompt_gate"
+          ) {
+            void runTemplateVideoPromptLoading();
+            return true;
+          }
+          return false;
+        case "generate_kling":
+          if (flowStage === "step4_prompt_gate" || flowStage === "step4_gate") {
+            void runTemplateKlingLoading();
+            return true;
+          }
+          return false;
+        default:
+          return false;
+      }
+    },
+    [
+      flowStage,
+      isTemplateReplayActive,
+      runTemplateImagesLoading,
+      runTemplateKlingLoading,
+      runTemplatePromptsLoading,
+      runTemplateVideoPromptLoading,
+    ],
+  );
 
   const interceptOnRun = useCallback(
     async (_storeUrl: string, realOnRun: () => Promise<void>) => {

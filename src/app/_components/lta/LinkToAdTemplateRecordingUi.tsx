@@ -28,8 +28,10 @@ export function LinkToAdTemplateRecordingButton({
   const stepLoading =
     recording.flowStage === "step1_loading" ||
     recording.flowStage === "step2_loading" ||
-    recording.flowStage === "step3_loading" ||
-    recording.flowStage === "step4_loading";
+    recording.flowStage === "step3_prompts_loading" ||
+    recording.flowStage === "step3_images_loading" ||
+    recording.flowStage === "step4_prompt_loading" ||
+    recording.flowStage === "step4_video_loading";
 
   useEffect(() => {
     if (stepLoading) setStepBarMinimized(false);

@@ -10,6 +10,7 @@ import type { LtaTemplateRecordingGateStep } from "@/lib/ltaTemplateRecording";
 import { pickBestProductUrlForNanoBanana } from "@/lib/productReferenceImages";
 
 export type LtaTemplateStep3Phase = "prompts" | "full";
+export type LtaTemplateStep4Phase = "prompt" | "full";
 
 function stripNanoImagesFromPipeline(p: LinkToAdAnglePipelineV1): LinkToAdAnglePipelineV1 {
   return {
@@ -27,6 +28,7 @@ function stripPipelineToStep(
   snap: LinkToAdUniverseSnapshotV1,
   maxStep: LtaTemplateRecordingGateStep,
   step3Phase: LtaTemplateStep3Phase = "full",
+  step4Phase: LtaTemplateStep4Phase = "full",
 ): LinkToAdUniverseSnapshotV1 {
   const emptyPipe = emptyAnglePipeline();
   const triple = snap.linkToAdPipelineByAngle;
@@ -51,6 +53,19 @@ function stripPipelineToStep(
       : [emptyAnglePipeline(), emptyAnglePipeline(), emptyAnglePipeline()];
 
   if (maxStep >= 4) {
+    if (step4Phase === "prompt") {
+      return {
+        ...snap,
+        klingTaskId: null,
+        klingVideoUrl: null,
+        klingByReferenceIndex: createEmptyKlingByReference(),
+        videoStageMode: true,
+        linkToAdPipelineByAngle: pipes.map((p) => ({
+          ...p,
+          klingByReferenceIndex: createEmptyKlingByReference(),
+        })) as typeof snap.linkToAdPipelineByAngle,
+      };
+    }
     return { ...snap, linkToAdPipelineByAngle: pipes as typeof snap.linkToAdPipelineByAngle };
   }
 
@@ -120,6 +135,8 @@ function stripPipelineToStep(
 export type BuildExtractedForTemplateStepOpts = {
   /** Step 3 only: show saved prompts without images, then full images on `"full"`. */
   step3Phase?: LtaTemplateStep3Phase;
+  /** Step 4 only: video prompt without render, then full video on `"full"`. */
+  step4Phase?: LtaTemplateStep4Phase;
   storeUrl?: string;
 };
 
@@ -187,8 +204,9 @@ export function buildExtractedForTemplateStep(
   if (!snap0) return extracted;
   const base = cloneExtractedBase(extracted);
   const step3Phase = maxStep === 3 ? (opts?.step3Phase ?? "full") : "full";
+  const step4Phase = maxStep === 4 ? (opts?.step4Phase ?? "full") : "full";
   const storeUrl = typeof opts?.storeUrl === "string" ? opts.storeUrl : "";
-  let snap = stripPipelineToStep(snap0, maxStep, step3Phase);
+  let snap = stripPipelineToStep(snap0, maxStep, step3Phase, step4Phase);
   if (maxStep >= 1) {
     snap = applyTemplateProductPhotoDisplay(snap, snap0, storeUrl);
   }
