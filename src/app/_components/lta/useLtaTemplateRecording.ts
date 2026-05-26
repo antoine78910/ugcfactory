@@ -239,6 +239,31 @@ export function useLtaTemplateRecording(args: UseLtaTemplateRecordingArgs) {
     }
   }, [args]);
 
+  /** Store-only gate (no loading — used when stepping back from Scripts). */
+  const showStep1Gate = useCallback(() => {
+    applyCachedStep(1);
+    setFlowStage("step1_gate");
+  }, [applyCachedStep]);
+
+  /** Scripts gate (no loading — data already hydrated). */
+  const showStep2Gate = useCallback(() => {
+    applyCachedStep(2);
+    setFlowStage("step2_gate");
+  }, [applyCachedStep]);
+
+  /**
+   * One fake loading for Store + Scripts: scanning → image → brief → writing scripts,
+   * then land on Scripts with marketing angles visible.
+   */
+  const runStoreAndScriptsLoading = useCallback(async () => {
+    args.prepareBlankCanvas();
+    args.setStoreUrl(runCacheRef.current?.store_url?.trim() ?? "");
+    await runClassicLtaLoading();
+    applyCachedStep(2);
+    setFlowStage("step2_gate");
+  }, [applyCachedStep, args, runClassicLtaLoading]);
+
+  /** Re-film the Store step only (optional retake from step 1 gate). */
   const runStep1Loading = useCallback(async () => {
     args.prepareBlankCanvas();
     args.setStoreUrl(runCacheRef.current?.store_url?.trim() ?? "");
@@ -246,12 +271,6 @@ export function useLtaTemplateRecording(args: UseLtaTemplateRecordingArgs) {
     applyCachedStep(1);
     setFlowStage("step1_gate");
   }, [applyCachedStep, args, runClassicLtaLoading]);
-
-  const runStep2Loading = useCallback(async () => {
-    await runClassicLtaLoading();
-    applyCachedStep(2);
-    setFlowStage("step2_gate");
-  }, [applyCachedStep, runClassicLtaLoading]);
 
   const runStep3Loading = useCallback(async () => {
     await runClassicLtaLoading();
@@ -302,8 +321,8 @@ export function useLtaTemplateRecording(args: UseLtaTemplateRecordingArgs) {
   );
 
   /**
-   * Step 2 – called when the user clicks Generate after reviewing the URL.
-   * Starts the fake-loading replay from step 1.
+   * Called when the user clicks Generate after reviewing the URL.
+   * Single loading covers store scrape + scripts, then opens Scripts (angles).
    */
   const beginTemplateReplay = useCallback(
     async (urlOverride?: string) => {
@@ -311,10 +330,10 @@ export function useLtaTemplateRecording(args: UseLtaTemplateRecordingArgs) {
       flowActiveRef.current = true;
       setTemplateToggleOn(true);
       if (urlOverride?.trim()) args.setStoreUrl(urlOverride.trim());
-      setFlowStage("step1_loading");
-      await runStep1Loading();
+      setFlowStage("step2_loading");
+      await runStoreAndScriptsLoading();
     },
-    [args, runStep1Loading],
+    [args, runStoreAndScriptsLoading],
   );
 
   const openBrandPicker = useCallback(() => {
@@ -408,8 +427,7 @@ export function useLtaTemplateRecording(args: UseLtaTemplateRecordingArgs) {
 
   const continueFromGate = useCallback(() => {
     if (flowStage === "step1_gate") {
-      setFlowStage("step2_loading");
-      void runStep2Loading();
+      showStep2Gate();
       return;
     }
     if (flowStage === "step2_gate") {
@@ -429,7 +447,7 @@ export function useLtaTemplateRecording(args: UseLtaTemplateRecordingArgs) {
       toast.success("Template recording complete");
       return;
     }
-  }, [flowStage, runStep2Loading, runStep3Loading, runStep4Loading]);
+  }, [flowStage, showStep2Gate, runStep3Loading, runStep4Loading]);
 
   const previousFromGate = useCallback(() => {
     if (flowStage === "step2_gate") {
@@ -456,8 +474,7 @@ export function useLtaTemplateRecording(args: UseLtaTemplateRecordingArgs) {
       return;
     }
     if (flowStage === "step2_gate") {
-      setFlowStage("step2_loading");
-      void runStep2Loading();
+      showStep2Gate();
       return;
     }
     if (flowStage === "step3_gate") {
@@ -469,7 +486,7 @@ export function useLtaTemplateRecording(args: UseLtaTemplateRecordingArgs) {
       setFlowStage("step4_loading");
       void runStep4Loading();
     }
-  }, [flowStage, runStep1Loading, runStep2Loading, runStep3Loading, runStep4Loading]);
+  }, [flowStage, runStep1Loading, showStep2Gate, runStep3Loading, runStep4Loading]);
 
   const interceptPaidAction = useCallback((): boolean => {
     // Don't block during brand_selected — the Generate button should trigger beginTemplateReplay.
