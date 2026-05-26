@@ -286,12 +286,33 @@ function extractPartOneAndTwoForDisplay(editable: string): string | null {
   return slice;
 }
 
-/** Card title only: ANGLE_HEADLINE when present, else derived marketing angle label (not script body). */
+/**
+ * Card title: prefers ANGLE_HEADLINE (the real marketing angle),
+ * then the first spoken quoted line from the script (the hook sentence),
+ * never VIDEO_METADATA persona/tone fields.
+ */
 function marketingAngleTitleFromScript(raw: string, angleIndex: 0 | 1 | 2): string {
-  const { headline } = angleBlockForEditing(raw);
+  const { editable, headline } = angleBlockForEditing(raw);
   const h = headline.replace(/\s+/g, " ").trim();
   if (h) return h;
-  return teaserFromScriptBlock(raw, angleIndex);
+
+  // Try to extract the first actual spoken hook line (quoted or unquoted).
+  const spoken = editable.match(/"([^"]{10,200})"/);
+  if (spoken?.[1]) {
+    const s = spoken[1].replace(/\s+/g, " ").trim();
+    if (s.length > 8) return s.length > 90 ? s.slice(0, 90) + "…" : s;
+  }
+
+  // Fallback: first non-empty, non-metadata line of the editable body.
+  const metaKeys = /^(persona|tone|location|camera_style|energy_level|props|actions|age|gender|accent|timbre)\s*[:：\-]/i;
+  const firstLine = editable
+    .split("\n")
+    .map((l) => l.replace(/^\s*[*•\-]+\s*/, "").replace(/\s+/g, " ").trim())
+    .find((l) => l.length > 10 && !metaKeys.test(l) && !/^VIDEO_METADATA/i.test(l));
+  if (firstLine) return firstLine.length > 90 ? firstLine.slice(0, 90) + "…" : firstLine;
+
+  const fallbacks: [string, string, string] = ["Angle 1", "Angle 2", "Angle 3"];
+  return fallbacks[angleIndex] ?? "…";
 }
 
 function angleBriefPartsFromScriptOption(
@@ -1818,6 +1839,10 @@ export default function LinkToAdUniverse({
   const [nanoImageLightboxUrl, setNanoImageLightboxUrl] = useState<string | null>(null);
   const [productImageLightboxUrl, setProductImageLightboxUrl] = useState<string | null>(null);
   const [angleSummaryDrafts, setAngleSummaryDrafts] = useState<Record<number, string>>({});
+  /** Expanded state for angle picker cards (main "Choose angle" section). */
+  const [expandedAngleBriefs, setExpandedAngleBriefs] = useState<Record<number, boolean>>({});
+  /** Expanded state for angle cards in the sidebar "Script angles" list. */
+  const [expandedAngleScripts, setExpandedAngleScripts] = useState<Record<number, boolean>>({});
   /** Screen-recording: hide recent-generation chips (stored in localStorage). */
   const [hidePreviousLtaGenerations, setHidePreviousLtaGenerations] = useState(false);
   const [hideRunLog, setHideRunLog] = useState(false);
@@ -2185,6 +2210,8 @@ export default function LinkToAdUniverse({
     setScriptHasEdits(false);
     setScriptEditVisible(false);
     setAngleSummaryDrafts({});
+    setExpandedAngleBriefs({});
+    setExpandedAngleScripts({});
     setAngleScriptDrafts({});
     setNanoImageLightboxUrl(null);
     setProductImageLightboxUrl(null);
@@ -7902,11 +7929,32 @@ export default function LinkToAdUniverse({
                         selectedAngleIndex === card.index
                           ? "text-white/95"
                           : "text-white/75 group-hover/angle:text-white/85",
-                        "line-clamp-3",
+                        !expandedAngleBriefs[card.index] && "line-clamp-3",
                       )}
                     >
                       {card.label}
                     </p>
+                    {card.label.length > 80 ? (
+                      <span
+                        role="button"
+                        tabIndex={0}
+                        className="mt-1.5 inline-flex text-[11px] font-medium text-violet-300/70 transition hover:text-violet-200"
+                        onClick={(e) => {
+                          e.preventDefault();
+                          e.stopPropagation();
+                          setExpandedAngleBriefs((prev) => ({ ...prev, [card.index]: !prev[card.index] }));
+                        }}
+                        onKeyDown={(e) => {
+                          if (e.key === "Enter") {
+                            e.preventDefault();
+                            e.stopPropagation();
+                            setExpandedAngleBriefs((prev) => ({ ...prev, [card.index]: !prev[card.index] }));
+                          }
+                        }}
+                      >
+                        {expandedAngleBriefs[card.index] ? "Collapse" : "Expand"}
+                      </span>
+                    ) : null}
                   </button>
                 ))}
                 </div>
@@ -8476,28 +8524,80 @@ export default function LinkToAdUniverse({
                       {angleOptionCards.map((card) => {
                         const i = card.index;
                         const active = selectedAngleIndex === i;
+                        const expanded = Boolean(expandedAngleScripts[i]);
+                        const fullScript = scriptOptionBodiesAll[i] ?? "";
+                        const summary = angleFullSummaryFromScriptOption(fullScript);
                         return (
-                          <button
+                          <div
                             key={i}
-                            type="button"
-                            onClick={() => void onSelectAngle(i)}
                             className={cn(
-                              "w-full rounded-xl border px-3 py-2.5 text-left transition-all",
+                              "rounded-xl border px-3 py-2.5 transition-all",
                               active
                                 ? "border-violet-400/55 bg-violet-500/[0.14] shadow-[0_0_20px_rgba(139,92,246,0.12)] ring-1 ring-violet-400/25"
                                 : "border-white/10 bg-white/[0.03] hover:border-violet-400/35 hover:bg-white/[0.06]",
                             )}
                           >
-                            <span className="text-[10px] font-bold uppercase tracking-wide text-violet-300">
-                              Angle {i + 1}
-                              {active ? (
-                                <span className="ml-1.5 hidden font-semibold normal-case text-violet-200/90 sm:inline">· active</span>
-                              ) : null}
-                            </span>
-                            <p className="mt-1.5 text-sm font-medium leading-snug text-white/90 line-clamp-3">
-                              {card.label}
-                            </p>
-                          </button>
+                            <div className="flex items-center justify-between gap-3">
+                              <span className="text-[10px] font-bold uppercase tracking-wide text-violet-300">
+                                Angle {i + 1}
+                                {active ? (
+                                  <span className="ml-1.5 hidden font-semibold normal-case text-violet-200/90 sm:inline">· active</span>
+                                ) : null}
+                              </span>
+                              <button
+                                type="button"
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  const wasExpanded = expanded;
+                                  if (wasExpanded) {
+                                    const t = angleSummarySaveTimersRef.current[i];
+                                    if (t) {
+                                      clearTimeout(t);
+                                      delete angleSummarySaveTimersRef.current[i];
+                                    }
+                                    const d = angleSummaryDrafts[i];
+                                    if (d !== undefined) applyAngleSummaryEdit(i, { silent: true, draft: d });
+                                  } else {
+                                    setAngleSummaryDrafts((prev) => ({
+                                      ...prev,
+                                      [i]: angleFullSummaryFromScriptOption(fullScript),
+                                    }));
+                                  }
+                                  setExpandedAngleScripts((prev) => ({ ...prev, [i]: !prev[i] }));
+                                }}
+                                className="inline-flex items-center gap-1 rounded-md border border-white/10 bg-white/[0.04] px-2 py-1 text-[10px] font-semibold text-white/70 transition hover:border-violet-400/35 hover:bg-white/[0.07] hover:text-white"
+                              >
+                                {expanded ? <ChevronUp className="h-3.5 w-3.5" /> : <ChevronDown className="h-3.5 w-3.5" />}
+                                {expanded ? "Collapse" : "Expand"}
+                              </button>
+                            </div>
+                            <button type="button" onClick={() => void onSelectAngle(i)} className="mt-1.5 w-full text-left">
+                              <p className="text-xs leading-snug text-white/80 line-clamp-5">
+                                {card.label}
+                              </p>
+                            </button>
+                            {expanded ? (
+                              <div className="mt-2 space-y-2 border-t border-white/10 pt-2">
+                                {linkToAdTrialEconomy ? (
+                                  <LtaTrialPromptPeek
+                                    showFooter
+                                    sections={[{ label: "Summary", body: angleSummaryDrafts[i] ?? summary }]}
+                                  />
+                                ) : (
+                                  <Textarea
+                                    value={angleSummaryDrafts[i] ?? summary}
+                                    onChange={(e) => {
+                                      const v = e.target.value;
+                                      setAngleSummaryDrafts((prev) => ({ ...prev, [i]: v }));
+                                      scheduleAngleSummaryPersist(i, v);
+                                    }}
+                                    className="min-h-[120px] border-white/10 bg-black/25 text-xs leading-relaxed text-white/85"
+                                    spellCheck
+                                  />
+                                )}
+                              </div>
+                            ) : null}
+                          </div>
                         );
                       })}
                     </div>

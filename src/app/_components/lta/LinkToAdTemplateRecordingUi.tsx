@@ -134,48 +134,24 @@ export function LinkToAdTemplateRecordingButton({
           </div>
 
           {!stepBarMinimized ? (
-            <>
-              <p className="mt-1 text-[9px] leading-snug text-white/45">
-                Film this step, then Continue.
-              </p>
-              <div className="mt-1.5 flex flex-col gap-1">
+            <div className="mt-1.5 flex items-center gap-1">
+              {canGoBack ? (
                 <button
                   type="button"
-                  className="inline-flex h-7 w-full items-center justify-center rounded-full border border-white/15 text-[10px] font-semibold text-white/80 transition hover:bg-white/10"
-                  onClick={recording.retakeCurrentStepFromGate}
+                  className="inline-flex h-7 flex-1 items-center justify-center rounded-full border border-white/10 text-[9px] font-medium text-white/55 transition hover:bg-white/10 hover:text-white/75"
+                  onClick={recording.previousFromGate}
                 >
-                  Retake
+                  Previous
                 </button>
-                <div className="flex flex-wrap items-center gap-1">
-                  {canGoBack ? (
-                    <button
-                      type="button"
-                      className="inline-flex h-7 flex-1 items-center justify-center rounded-full border border-white/10 text-[9px] font-medium text-white/55 transition hover:bg-white/10 hover:text-white/75"
-                      onClick={recording.previousFromGate}
-                    >
-                      Prev
-                    </button>
-                  ) : null}
-                  <button
-                    type="button"
-                    className={cn(
-                      "inline-flex h-7 items-center justify-center rounded-full border border-violet-400/40 bg-violet-500/25 px-2.5 text-[10px] font-semibold text-violet-50 transition hover:bg-violet-500/35",
-                      canGoBack ? "flex-1" : "flex-[2]",
-                    )}
-                    onClick={recording.continueFromGate}
-                  >
-                    Continue
-                  </button>
-                  <button
-                    type="button"
-                    className="inline-flex h-7 items-center justify-center rounded-full border border-white/15 px-2 text-[9px] font-semibold text-white/65 transition hover:bg-white/10"
-                    onClick={() => recording.requestTemplateToggle(false)}
-                  >
-                    Exit
-                  </button>
-                </div>
-              </div>
-            </>
+              ) : null}
+              <button
+                type="button"
+                className="inline-flex h-7 items-center justify-center rounded-full border border-white/15 px-2 text-[9px] font-semibold text-white/65 transition hover:bg-white/10"
+                onClick={() => recording.requestTemplateToggle(false)}
+              >
+                Exit
+              </button>
+            </div>
           ) : (
             <div className="mt-1 flex items-center gap-1">
               {canGoBack ? (
@@ -187,16 +163,6 @@ export function LinkToAdTemplateRecordingButton({
                   Prev
                 </button>
               ) : null}
-              <button
-                type="button"
-                className={cn(
-                  "inline-flex h-6 items-center justify-center rounded-full border border-violet-400/40 bg-violet-500/25 px-2 text-[9px] font-semibold text-violet-50 transition hover:bg-violet-500/35",
-                  canGoBack ? "flex-1" : "flex-[2]",
-                )}
-                onClick={recording.continueFromGate}
-              >
-                Continue
-              </button>
             </div>
           )}
         </div>
