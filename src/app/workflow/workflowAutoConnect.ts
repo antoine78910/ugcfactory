@@ -39,15 +39,22 @@ function dist(a: { x: number; y: number }, b: { x: number; y: number }): number 
   return Math.hypot(a.x - b.x, a.y - b.y);
 }
 
-/** Preset modules expect an explicit manual wire — skip drag-to-neighbor auto-link. */
-function isAutoConnectExcludedTarget(node: Node): boolean {
+/**
+ * Nodes that should never participate in drag-to-neighbor auto-link, either as
+ * source or target.  Image generators (kind "image") are intentional — they have
+ * multiple typed input handles and should only be wired by an explicit user action.
+ */
+function isAutoConnectExcluded(node: Node): boolean {
   if (node.type !== "adAsset") return false;
   const data = node.data as {
+    kind?: string;
     imageWorkflowPreset?: string;
     assistantVisionPreset?: string;
   };
   return (
-    data.imageWorkflowPreset === "profile_360" || data.assistantVisionPreset === "image_to_json"
+    data.kind === "image" ||
+    data.imageWorkflowPreset === "profile_360" ||
+    data.assistantVisionPreset === "image_to_json"
   );
 }
 
@@ -64,6 +71,7 @@ export function suggestAutoConnectAfterNodeDrag(
   const nodes = getNodes();
   const dragged = nodes.find((n) => n.id === draggedId);
   if (!dragged || (dragged.type !== "adAsset" && dragged.type !== "imageRef")) return null;
+  if (isAutoConnectExcluded(dragged)) return null;
 
   const dInt = getInternalNode(draggedId);
   const dAnchors = anchorsFromInternal(dInt);
@@ -84,7 +92,7 @@ export function suggestAutoConnectAfterNodeDrag(
     const upstreamToDragged = dist(oAnchors.right, dAnchors.left);
     if (
       upstreamToDragged < snapFlow &&
-      !isAutoConnectExcludedTarget(dragged) &&
+      !isAutoConnectExcluded(o) &&
       (!best || upstreamToDragged < best.d)
     ) {
       best = { source: o.id, target: draggedId, d: upstreamToDragged };
@@ -93,7 +101,7 @@ export function suggestAutoConnectAfterNodeDrag(
     const draggedToDownstream = dist(dAnchors.right, oAnchors.left);
     if (
       draggedToDownstream < snapFlow &&
-      !isAutoConnectExcludedTarget(o) &&
+      !isAutoConnectExcluded(o) &&
       (!best || draggedToDownstream < best.d)
     ) {
       best = { source: draggedId, target: o.id, d: draggedToDownstream };

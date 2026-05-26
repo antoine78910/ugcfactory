@@ -3777,7 +3777,7 @@ function WorkflowFlowWorkspace({
       const selected = (getNodes() as WorkflowCanvasNode[]).filter((n) => n.selected);
       if (selected.length !== 1 || selected[0]?.id !== node.id) {
         alignHoldCandidateRef.current = null;
-        setAlignGuides({ x: null, y: null });
+        setAlignGuides((g) => (g.x === null && g.y === null ? g : { x: null, y: null }));
         return;
       }
 
@@ -3786,7 +3786,7 @@ function WorkflowFlowWorkspace({
       const dragH = dragInternal?.measured?.height ?? node.height ?? 0;
       if (!dragW || !dragH) {
         alignHoldCandidateRef.current = null;
-        setAlignGuides({ x: null, y: null });
+        setAlignGuides((g) => (g.x === null && g.y === null ? g : { x: null, y: null }));
         return;
       }
 
@@ -3831,7 +3831,7 @@ function WorkflowFlowWorkspace({
 
       if (!bestX && !bestY) {
         alignHoldCandidateRef.current = null;
-        setAlignGuides({ x: null, y: null });
+        setAlignGuides((g) => (g.x === null && g.y === null ? g : { x: null, y: null }));
         return;
       }
 
@@ -3854,11 +3854,11 @@ function WorkflowFlowWorkspace({
           guideY: bestY?.guide ?? null,
           sinceMs: holdNow,
         };
-        setAlignGuides({ x: null, y: null });
+        setAlignGuides((g) => (g.x === null && g.y === null ? g : { x: null, y: null }));
         return;
       }
       if (holdNow - hold.sinceMs < ALIGN_HOLD_MS) {
-        setAlignGuides({ x: null, y: null });
+        setAlignGuides((g) => (g.x === null && g.y === null ? g : { x: null, y: null }));
         return;
       }
 
@@ -3879,7 +3879,7 @@ function WorkflowFlowWorkspace({
       const guideX = bestX?.guide ?? null;
       const guideY = bestY?.guide ?? null;
       lastAlignTargetRef.current = { nodeId: node.id, x: guideX, y: guideY };
-      setAlignGuides({ x: guideX, y: guideY });
+      setAlignGuides((g) => (g.x === guideX && g.y === guideY ? g : { x: guideX, y: guideY }));
     },
     [readOnly, getNodes, getInternalNode, setNodes],
   );

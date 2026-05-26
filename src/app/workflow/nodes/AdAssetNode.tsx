@@ -663,6 +663,17 @@ function adAssetNodeLooksLikeImageUrl(s: string): boolean {
   return /\.(png|jpe?g|webp|gif)(\?|$)/i.test(u) || u.includes("/image");
 }
 
+/** Stable empty array returned by selectors that produce arrays but have nothing to show.
+ *  Using a module-level constant avoids returning a new [] on every zustand store tick,
+ *  which would otherwise cause every AdAssetNode to re-render on every viewport update. */
+const EMPTY_URLS: string[] = [];
+
+/** Stable empty plan returned when run-from-here plan is not needed yet. */
+const RUN_FROM_HERE_EMPTY = {
+  steps: [] as { id: string; label: string; kind: string; credits: number; parents: number[] }[],
+  estimatedCredits: 0,
+};
+
 function AdAssetNodeBase({ id, data, selected }: NodeProps<AdAssetNodeType>) {
   const readOnly = useWorkflowReadOnly();
   const patch = useWorkflowNodePatch();
@@ -1158,13 +1169,21 @@ function AdAssetNodeBase({ id, data, selected }: NodeProps<AdAssetNodeType>) {
     }
   };
 
-  const displayIndex = useStore((s) => {
-    const same = s.nodes.filter(
-      (n) => n.type === "adAsset" && (n.data as AdAssetNodeData).kind === data.kind,
-    );
-    const i = same.findIndex((n) => n.id === id);
-    return i < 0 ? 1 : i + 1;
-  });
+  const displayIndex = useStore(
+    useCallback(
+      (s) => {
+        let count = 0;
+        for (const n of s.nodes) {
+          if (n.type === "adAsset" && (n.data as AdAssetNodeData).kind === data.kind) {
+            count++;
+            if (n.id === id) return count;
+          }
+        }
+        return 1;
+      },
+      [data.kind, id],
+    ),
+  );
   const hasDownstreamModules = useStore(
     useCallback((s) => s.edges.some((e) => e.source === id), [id]),
   );
@@ -1221,7 +1240,7 @@ function AdAssetNodeBase({ id, data, selected }: NodeProps<AdAssetNodeType>) {
   const assistantLinkedReferencePreviewUrls = useStore(
     useCallback(
       (s) => {
-        if (data.kind !== "assistant") return [] as string[];
+        if (data.kind !== "assistant") return EMPTY_URLS;
         const imageToJsonOnlyRefs = data.assistantVisionPreset === "image_to_json";
         const byId = new Map(s.nodes.map((n) => [n.id, n]));
         const out: string[] = [];
@@ -2123,41 +2142,35 @@ function AdAssetNodeBase({ id, data, selected }: NodeProps<AdAssetNodeType>) {
     videoNativeAudioEnabled,
   ]);
 
-  const runFromHerePlan = useStore(
-    useCallback(
-      (s) => {
-        const byId = new Map(s.nodes.map((n) => [n.id, n]));
-        if (!byId.has(id)) {
-          return {
-            steps: [] as { id: string; label: string; kind: string; credits: number; parents: number[] }[],
-            estimatedCredits: 0,
-          };
-        }
-        const { orderedRunIds } = planWorkflowRunFromHere(id, s.nodes, s.edges);
-        if (!orderedRunIds.length) {
-          return {
-            steps: [] as { id: string; label: string; kind: string; credits: number; parents: number[] }[],
-            estimatedCredits: 0,
-          };
-        }
-        const parentStepIndices = workflowRunFromHereParentStepIndices(orderedRunIds, s.edges);
-        let estimatedCredits = 0;
-        const steps = orderedRunIds.map((rid) => {
-          const n = byId.get(rid);
-          const d = (n?.data as AdAssetNodeData) ?? ({ kind: "image" } as AdAssetNodeData);
-          const credits =
-            n?.type === "adAsset" ? estimateWorkflowAdAssetRunCredits(d, rid, s.nodes, s.edges) : 0;
-          estimatedCredits += credits;
-          const label = (d.label ?? "").trim() || d.kind || "module";
-          const kind = d.kind || "module";
-          const parents = parentStepIndices.get(rid) ?? [];
-          return { id: rid, label, kind, credits, parents };
-        });
-        return { steps, estimatedCredits: Math.max(0, Math.round(estimatedCredits)) };
-      },
-      [id],
-    ),
-  );
+  /**
+   * Computed lazily: only when the run-choice popover is open AND this node has
+   * downstream connections.  Using useMemo + storeApi.getState() avoids running
+   * an expensive O(N+E) graph traversal on every zustand store tick (which happens
+   * at 60 fps while panning or dragging), cutting a major source of canvas lag.
+   */
+  const runFromHerePlan = useMemo(() => {
+    if (!runChoiceOpen || !hasDownstreamModules) return RUN_FROM_HERE_EMPTY;
+    const s = storeApi.getState();
+    const byId = new Map(s.nodes.map((n) => [n.id, n]));
+    if (!byId.has(id)) return RUN_FROM_HERE_EMPTY;
+    const { orderedRunIds } = planWorkflowRunFromHere(id, s.nodes, s.edges);
+    if (!orderedRunIds.length) return RUN_FROM_HERE_EMPTY;
+    const parentStepIndices = workflowRunFromHereParentStepIndices(orderedRunIds, s.edges);
+    let estimatedCredits = 0;
+    const steps = orderedRunIds.map((rid) => {
+      const n = byId.get(rid);
+      const d = (n?.data as AdAssetNodeData) ?? ({ kind: "image" } as AdAssetNodeData);
+      const credits =
+        n?.type === "adAsset" ? estimateWorkflowAdAssetRunCredits(d, rid, s.nodes, s.edges) : 0;
+      estimatedCredits += credits;
+      const label = (d.label ?? "").trim() || d.kind || "module";
+      const kind = d.kind || "module";
+      const parents = parentStepIndices.get(rid) ?? [];
+      return { id: rid, label, kind, credits, parents };
+    });
+    return { steps, estimatedCredits: Math.max(0, Math.round(estimatedCredits)) };
+  // eslint-disable-next-line react-hooks/exhaustive-deps -- intentionally reads store snapshot when popover opens
+  }, [runChoiceOpen, hasDownstreamModules, id, storeApi]);
   const runFromHereEstimatedCredits = runFromHerePlan.estimatedCredits;
   const assistantEstimatedCredits = useMemo(
     () => {
