@@ -2,6 +2,7 @@ export const runtime = "nodejs";
 
 import { NextResponse } from "next/server";
 import { requireLtaTemplateRecordingUser } from "@/lib/ltaTemplateRecordingAccess";
+import { resolveLtaTemplateRunRow } from "@/lib/ltaTemplateRunResolve";
 import { createSupabaseServiceClient } from "@/lib/supabase/admin";
 
 type Body = {
@@ -69,12 +70,16 @@ export async function POST(req: Request) {
   const title = typeof body?.title === "string" && body.title.trim() ? body.title.trim() : null;
   const thumbUrl = typeof body?.thumbUrl === "string" && body.thumbUrl.trim() ? body.thumbUrl.trim() : null;
 
+  // Always catalog the run that actually has marketing script angles for this store URL.
+  const { resolvedRunId } = await resolveLtaTemplateRunRow(admin, runId);
+  const catalogRunId = resolvedRunId ?? runId;
+
   // Delete any existing entries for this normalizedUrl first (handles stale run_id entries).
   // Ignore errors (e.g. row not found is fine).
   await admin.from("lta_template_brands").delete().eq("normalized_url", normalizedUrl);
 
   const { error } = await admin.from("lta_template_brands").insert({
-    run_id: runId,
+    run_id: catalogRunId,
     normalized_url: normalizedUrl,
     store_url: storeUrl,
     title,
