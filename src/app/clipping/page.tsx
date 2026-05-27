@@ -40,22 +40,6 @@ export default function ClippingPage() {
               Open Template 1
             </Link>
           </article>
-
-          <article className="rounded-2xl border border-white/10 bg-white/[0.03] p-5 shadow-[0_10px_30px_rgba(0,0,0,0.25)]">
-            <p className="mb-2 inline-flex rounded-full border border-white/20 bg-white/10 px-2.5 py-1 text-[10px] font-semibold uppercase tracking-wide text-white/85">
-              Studio
-            </p>
-            <h2 className="text-base font-semibold text-white">Studio corner (camera filming)</h2>
-            <p className="mt-2 text-sm text-white/65">
-              Dedicated area for recording with webcam using clipping templates.
-            </p>
-            <Link
-              href="/clipping/studio"
-              className="mt-4 inline-flex items-center justify-center rounded-xl border border-white/15 bg-white/[0.03] px-4 py-2 text-xs font-semibold text-white/90 transition hover:bg-white/[0.08]"
-            >
-              Open studio
-            </Link>
-          </article>
         </section>
 
         <section className="grid gap-4 lg:grid-cols-2">
