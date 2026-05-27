@@ -15,6 +15,8 @@ import { normalizeDubClickId } from "@/lib/dub/clickId";
 import { trackDubLeadServer } from "@/lib/dub/trackLeadServer";
 import { readStartLinkVisitorIdFromRequest } from "@/lib/analytics/startLinkFromRequest";
 import { recordStartLinkSignup } from "@/lib/analytics/startLinkServer";
+import { readClippingSignupVisitorIdFromRequest } from "@/lib/analytics/clippingSignupFromRequest";
+import { recordClippingTemplateSignup } from "@/lib/analytics/clippingSignupServer";
 import { createSupabaseServiceClient } from "@/lib/supabase/admin";
 
 export async function POST(req: Request) {
@@ -90,6 +92,18 @@ export async function POST(req: Request) {
         await recordStartLinkSignup(admin, startVisitorId, userId);
       } catch (e) {
         console.warn("[start-link] signup attribution failed", e);
+      }
+    }
+  }
+
+  const clippingVisitorId = await readClippingSignupVisitorIdFromRequest();
+  if (clippingVisitorId && userId && email) {
+    const admin = createSupabaseServiceClient();
+    if (admin) {
+      try {
+        await recordClippingTemplateSignup(admin, clippingVisitorId, userId, email);
+      } catch (e) {
+        console.warn("[clipping-signup] attribution failed", e);
       }
     }
   }

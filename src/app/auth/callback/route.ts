@@ -9,6 +9,8 @@ import { normalizeDubClickId } from "@/lib/dub/clickId";
 import { trackDubLeadServer } from "@/lib/dub/trackLeadServer";
 import { START_LINK_VISITOR_COOKIE } from "@/lib/analytics/startLinkRef";
 import { recordStartLinkSignup } from "@/lib/analytics/startLinkServer";
+import { CLIPPING_SIGNUP_REDIRECT_PATH, CLIPPING_SIGNUP_VISITOR_COOKIE } from "@/lib/analytics/clippingSignupRef";
+import { recordClippingTemplateSignup } from "@/lib/analytics/clippingSignupServer";
 import { createSupabaseServiceClient } from "@/lib/supabase/admin";
 
 /** Same-origin path + query only; prevents open redirects. */
@@ -153,12 +155,28 @@ export async function GET(req: NextRequest) {
             SIGNUP_DATE: new Date().toISOString().slice(0, 10),
           });
           if (isNewUser) {
-            // Redirect new users to onboarding (unless a specific ?next= was requested)
+            // Redirect new users to onboarding (unless a specific ?next= was requested
+            // or they came from the clipping-template signup funnel).
             const hasExplicitNext = Boolean(url.searchParams.get("next")?.trim());
-            if (!hasExplicitNext) {
+            const clippingVisitorId = req.cookies.get(CLIPPING_SIGNUP_VISITOR_COOKIE)?.value?.trim() ?? "";
+            const postAuthPath = postAuthUrl.pathname;
+            const isClippingFunnel =
+              Boolean(clippingVisitorId) ||
+              postAuthPath === CLIPPING_SIGNUP_REDIRECT_PATH ||
+              postAuthPath.startsWith(`${CLIPPING_SIGNUP_REDIRECT_PATH}/`);
+            if (!hasExplicitNext && !isClippingFunnel) {
               // Preserve session cookies from the original response
               const existingCookies = redirectResponse.cookies.getAll();
               redirectResponse = NextResponse.redirect(onboardingUrl, 302);
+              for (const cookie of existingCookies) {
+                redirectResponse.cookies.set(cookie);
+              }
+            } else if (!hasExplicitNext && isClippingFunnel) {
+              const existingCookies = redirectResponse.cookies.getAll();
+              redirectResponse = NextResponse.redirect(
+                new URL(CLIPPING_SIGNUP_REDIRECT_PATH, url.origin),
+                302,
+              );
               for (const cookie of existingCookies) {
                 redirectResponse.cookies.set(cookie);
               }
@@ -198,6 +216,23 @@ export async function GET(req: NextRequest) {
                     await recordStartLinkSignup(admin, startVisitorId, userData.user.id);
                   } catch (e) {
                     console.warn("[start-link] oauth signup attribution failed", e);
+                  }
+                }
+              }
+
+              const clippingVisitorId = req.cookies.get(CLIPPING_SIGNUP_VISITOR_COOKIE)?.value?.trim();
+              if (clippingVisitorId && email) {
+                const admin = createSupabaseServiceClient();
+                if (admin) {
+                  try {
+                    await recordClippingTemplateSignup(
+                      admin,
+                      clippingVisitorId,
+                      userData.user.id,
+                      email,
+                    );
+                  } catch (e) {
+                    console.warn("[clipping-signup] oauth attribution failed", e);
                   }
                 }
               }

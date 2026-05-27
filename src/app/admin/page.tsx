@@ -45,6 +45,16 @@ type LtaTemplateRecordingUserRow = {
   builtin: boolean;
 };
 
+type ClippingTemplateSignupRow = {
+  visitor_id: string;
+  user_id: string | null;
+  email: string | null;
+  first_clicked_at: string;
+  signed_up_at: string | null;
+  template_access_granted_at: string | null;
+  template_access_enabled: boolean;
+};
+
 type OnboardingAdminRow = {
   user_id: string;
   email: string;
@@ -489,6 +499,9 @@ export default function AdminPage() {
   const [startLinkError, setStartLinkError] = useState<string | null>(null);
 
   const [ltaRecordingUsers, setLtaRecordingUsers] = useState<LtaTemplateRecordingUserRow[]>([]);
+  const [clippingSignups, setClippingSignups] = useState<ClippingTemplateSignupRow[]>([]);
+  const [clippingSignupsLoading, setClippingSignupsLoading] = useState(false);
+  const [clippingSignupGrantBusy, setClippingSignupGrantBusy] = useState<string | null>(null);
   const [ltaRecordingLoading, setLtaRecordingLoading] = useState(false);
   const [ltaRecordingError, setLtaRecordingError] = useState<string | null>(null);
   const [ltaRecordingEmailInput, setLtaRecordingEmailInput] = useState("");
@@ -737,6 +750,50 @@ export default function AdminPage() {
     }
   }, []);
 
+  const fetchClippingSignups = useCallback(async () => {
+    setClippingSignupsLoading(true);
+    try {
+      const r = await fetch("/api/admin/clipping-template-signups");
+      const d = (await r.json()) as {
+        rows?: ClippingTemplateSignupRow[];
+        error?: string;
+        warning?: string;
+      };
+      if (!r.ok) throw new Error(d.error ?? `HTTP ${r.status}`);
+      setClippingSignups(Array.isArray(d.rows) ? d.rows : []);
+      if (d.warning) setLtaRecordingError(d.warning);
+    } catch (e) {
+      setLtaRecordingError(e instanceof Error ? e.message : "Failed to load clipping signups");
+      setClippingSignups([]);
+    } finally {
+      setClippingSignupsLoading(false);
+    }
+  }, []);
+
+  const grantClippingTemplateAccess = useCallback(
+    async (email: string) => {
+      const normalized = email.trim().toLowerCase();
+      if (!normalized.includes("@")) return;
+      setClippingSignupGrantBusy(normalized);
+      setLtaRecordingError(null);
+      try {
+        const r = await fetch("/api/admin/clipping-template-signups", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ email: normalized }),
+        });
+        const d = (await r.json()) as { error?: string };
+        if (!r.ok) throw new Error(d.error ?? `HTTP ${r.status}`);
+        await Promise.all([fetchClippingSignups(), fetchLtaRecordingUsers()]);
+      } catch (e) {
+        setLtaRecordingError(e instanceof Error ? e.message : "Could not grant template access");
+      } finally {
+        setClippingSignupGrantBusy(null);
+      }
+    },
+    [fetchClippingSignups, fetchLtaRecordingUsers],
+  );
+
   const addLtaRecordingUser = useCallback(async () => {
     const email = ltaRecordingEmailInput.trim().toLowerCase();
     if (!email.includes("@")) {
@@ -790,7 +847,10 @@ export default function AdminPage() {
     else if (tab === "onboarding") void fetchOnboarding();
     else if (tab === "feedback") void fetchFeedback();
     else if (tab === "templates") void fetchWorkflowTemplates();
-    else if (tab === "lta-recording") void fetchLtaRecordingUsers();
+    else if (tab === "lta-recording") {
+      void fetchLtaRecordingUsers();
+      void fetchClippingSignups();
+    }
   }, [
     tab,
     fetchGenerations,
@@ -800,6 +860,7 @@ export default function AdminPage() {
     fetchFeedback,
     fetchWorkflowTemplates,
     fetchLtaRecordingUsers,
+    fetchClippingSignups,
   ]);
 
   useEffect(() => {
@@ -2197,10 +2258,100 @@ export default function AdminPage() {
                 <div className="min-w-0 flex-1">
                   <p className="text-sm font-semibold text-white">Link to Ad — Template recording</p>
                   <p className="mt-1 text-xs leading-relaxed text-white/50">
-                    Allowed users get a bottom-left Template button on Link to Ad. They pick a brand
-                    from clipping templates (synced when you mark a project as Template). Replay uses
-                    saved results only — no backend generation. Minimum 10s loading per step with
-                    Continue / Previous dialogs.
+                    Allowed users get the template toggle on Link to Ad (bottom-right). Share{" "}
+                    <code className="rounded bg-black/40 px-1 py-0.5 text-[10px] text-violet-200/90">
+                      /start/clipping
+                    </code>{" "}
+                    so clippers sign up, land on Link to Ad (not onboarding), and appear below for
+                    one-click access.
+                  </p>
+                </div>
+              </div>
+            </div>
+
+            <div className="rounded-xl border border-white/10 bg-white/[0.03] p-4">
+              <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
+                <p className="text-sm font-semibold text-white">Clipping template signups</p>
+                <button
+                  type="button"
+                  disabled={clippingSignupsLoading}
+                  onClick={() => void fetchClippingSignups()}
+                  className="rounded-lg border border-white/10 bg-white/[0.04] px-2.5 py-1 text-[10px] font-semibold text-white/70 hover:bg-white/[0.08] disabled:opacity-50"
+                >
+                  Refresh
+                </button>
+              </div>
+              {clippingSignupsLoading && clippingSignups.length === 0 ? (
+                <div className="flex items-center justify-center gap-2 py-6 text-white/40">
+                  <Loader2 className="h-4 w-4 animate-spin" />
+                  Loading signups…
+                </div>
+              ) : (
+                <div className="overflow-x-auto rounded-lg border border-white/[0.08]">
+                  <table className="w-full min-w-[560px] text-left text-xs">
+                    <thead>
+                      <tr className="border-b border-white/10 text-[10px] uppercase tracking-wide text-white/40">
+                        <th className="px-3 py-2 font-semibold">Email</th>
+                        <th className="px-3 py-2 font-semibold">Signed up</th>
+                        <th className="px-3 py-2 font-semibold">Template access</th>
+                        <th className="px-3 py-2 font-semibold">Action</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {clippingSignups
+                        .filter((row) => row.signed_up_at && row.email)
+                        .map((row) => (
+                          <tr key={row.visitor_id} className="border-b border-white/5 hover:bg-white/[0.02]">
+                            <td className="px-3 py-2 font-medium text-white/85">{row.email}</td>
+                            <td className="px-3 py-2 text-white/45">
+                              {row.signed_up_at ? new Date(row.signed_up_at).toLocaleString() : "—"}
+                            </td>
+                            <td className="px-3 py-2">
+                              {row.template_access_enabled ? (
+                                <span className="rounded bg-emerald-500/15 px-2 py-0.5 text-[10px] font-semibold text-emerald-200">
+                                  Enabled
+                                </span>
+                              ) : (
+                                <span className="rounded bg-amber-500/15 px-2 py-0.5 text-[10px] font-semibold text-amber-200">
+                                  Pending
+                                </span>
+                              )}
+                            </td>
+                            <td className="px-3 py-2">
+                              {row.template_access_enabled || !row.email ? (
+                                <span className="text-white/30">—</span>
+                              ) : (
+                                <button
+                                  type="button"
+                                  disabled={clippingSignupGrantBusy === row.email}
+                                  onClick={() => void grantClippingTemplateAccess(row.email!)}
+                                  className="rounded-md bg-violet-600 px-2 py-1 text-[10px] font-semibold text-white hover:bg-violet-500 disabled:opacity-50"
+                                >
+                                  {clippingSignupGrantBusy === row.email ? "Enabling…" : "Enable toggle"}
+                                </button>
+                              )}
+                            </td>
+                          </tr>
+                        ))}
+                    </tbody>
+                  </table>
+                  {clippingSignups.filter((row) => row.signed_up_at && row.email).length === 0 ? (
+                    <p className="py-6 text-center text-sm text-white/30">No clipping signups yet</p>
+                  ) : null}
+                </div>
+              )}
+            </div>
+
+            <div className="rounded-xl border border-white/10 bg-white/[0.03] p-4">
+              <div className="flex items-start gap-3">
+                <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-violet-500/20 text-violet-200">
+                  <Clapperboard className="h-5 w-5" />
+                </div>
+                <div className="min-w-0 flex-1">
+                  <p className="text-sm font-semibold text-white">Manual allowlist</p>
+                  <p className="mt-1 text-xs leading-relaxed text-white/50">
+                    Add an email directly to enable the Link to Ad template toggle without going
+                    through the clipping signup funnel.
                   </p>
                 </div>
               </div>

@@ -15,6 +15,7 @@ import {
 } from "@/lib/supabase/BrowserSupabaseProvider";
 import { getAuthCallbackUrl } from "@/lib/supabase/authRedirect";
 import { startLinkAttributionParams } from "@/lib/analytics/startLinkRef";
+import { clippingSignupAttributionParams } from "@/lib/analytics/clippingSignupRef";
 
 type AuthMode = "signin" | "signup";
 
@@ -36,8 +37,8 @@ export default function AuthClient({ mode = "signin", redirectTo }: { mode?: Aut
 
   useEffect(() => {
     const viewGoal = mode === "signup" ? "view_signup" : "view_signin";
-    const extra = startLinkAttributionParams();
-    if (extra) window.datafast?.(viewGoal, extra);
+    const extra = { ...startLinkAttributionParams(), ...clippingSignupAttributionParams() };
+    if (Object.keys(extra).length > 0) window.datafast?.(viewGoal, extra);
     else window.datafast?.(viewGoal);
   }, [mode]);
 
