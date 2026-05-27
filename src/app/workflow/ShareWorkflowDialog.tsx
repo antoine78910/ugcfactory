@@ -257,97 +257,105 @@ export function ShareWorkflowDialog({
           ) : null}
 
           {userId && isOwner ? (
-            <div className="mb-6 flex items-center gap-2">
-              <div className="flex min-w-0 flex-1 items-center gap-0 rounded-full border border-white/12 bg-white/[0.04]">
-                <div className="min-w-0 flex-1 truncate px-4 py-2.5 text-[13px] text-white/55">
-                  {activeShareUrl ?? "Generating link…"}
-                </div>
-
-                <div className="relative">
-                  <button
-                    type="button"
-                    onClick={() => setPermDropdownOpen((o) => !o)}
-                    className="inline-flex items-center gap-1 whitespace-nowrap border-l border-white/10 px-3 py-2.5 text-[13px] font-medium text-white/75 transition hover:text-white"
-                  >
-                    {permission === "viewer"
-                      ? "Can view"
-                      : permission === "editor"
-                        ? "Can edit"
-                        : "Public link"}
-                    <ChevronDown className="h-3.5 w-3.5 opacity-60" />
-                  </button>
-
-                  {permDropdownOpen ? (
-                    <div className="absolute right-0 top-full z-10 mt-1 min-w-[180px] overflow-hidden rounded-xl border border-white/12 bg-[#1a1824] py-1 shadow-xl">
-                      <button
-                        type="button"
-                        onClick={() => handlePermissionChange("viewer")}
-                        className={cn(
-                          "flex w-full items-center gap-2 px-3 py-2 text-[13px] transition hover:bg-white/[0.06]",
-                          permission === "viewer" ? "text-white" : "text-white/65",
-                        )}
-                      >
-                        {permission === "viewer" && <Check className="h-3.5 w-3.5 text-violet-400" />}
-                        <Eye className={cn("h-3.5 w-3.5", permission !== "viewer" && "ml-5")} />
-                        Can view
-                      </button>
-                      <button
-                        type="button"
-                        onClick={() => handlePermissionChange("editor")}
-                        className={cn(
-                          "flex w-full items-center gap-2 px-3 py-2 text-[13px] transition hover:bg-white/[0.06]",
-                          permission === "editor" ? "text-white" : "text-white/65",
-                        )}
-                      >
-                        {permission === "editor" && <Check className="h-3.5 w-3.5 text-violet-400" />}
-                        <Pencil className={cn("h-3.5 w-3.5", permission !== "editor" && "ml-5")} />
-                        Can edit
-                      </button>
-                      <button
-                        type="button"
-                        onClick={() => handlePermissionChange("public")}
-                        className={cn(
-                          "flex w-full items-center gap-2 px-3 py-2 text-[13px] transition hover:bg-white/[0.06]",
-                          permission === "public" ? "text-white" : "text-white/65",
-                        )}
-                      >
-                        {permission === "public" && <Check className="h-3.5 w-3.5 text-violet-400" />}
-                        <Globe2 className={cn("h-3.5 w-3.5", permission !== "public" && "ml-5")} />
-                        Public link
-                      </button>
-                    </div>
-                  ) : null}
-                </div>
-              </div>
-
+            <div className="mb-6">
               {permission === "public" ? (
-                <p className="mb-3 flex items-start gap-1.5 text-[11px] leading-snug text-white/45">
+                <p className="mb-2 flex items-start gap-1.5 text-[11px] leading-snug text-white/45">
                   <Info className="mt-0.5 h-3.5 w-3.5 shrink-0 text-violet-300/80" aria-hidden />
                   You can share this link with anybody, even people without an account.
                 </p>
               ) : null}
 
-              <button
-                type="button"
-                disabled={!activeShareUrl || generating}
-                onClick={copyLink}
-                className={cn(
-                  "inline-flex h-10 shrink-0 items-center gap-2 rounded-full px-4 text-[13px] font-semibold shadow-sm transition",
-                  copied
-                    ? "bg-emerald-500 text-white"
-                    : "bg-violet-500 text-white hover:bg-violet-400",
-                  (!activeShareUrl || generating) && "cursor-not-allowed opacity-60",
-                )}
-              >
-                {generating ? (
-                  <Loader2 className="h-4 w-4 animate-spin" />
-                ) : copied ? (
-                  <Check className="h-4 w-4" />
-                ) : (
-                  <Copy className="h-4 w-4" />
-                )}
-                {copied ? "Copied!" : "Copy link"}
-              </button>
+              <div className="flex flex-col items-stretch gap-2 sm:flex-row sm:items-center">
+                <div className="flex min-w-0 flex-1 items-center gap-0 rounded-full border border-white/12 bg-white/[0.04]">
+                  <div className="min-w-0 flex-1 truncate px-4 py-2.5 text-[13px] text-white/55">
+                    {activeShareUrl ?? "Generating link…"}
+                  </div>
+
+                  <div className="relative">
+                    <button
+                      type="button"
+                      onClick={() => setPermDropdownOpen((o) => !o)}
+                      className="inline-flex items-center gap-1 whitespace-nowrap border-l border-white/10 px-3 py-2.5 text-[13px] font-medium text-white/75 transition hover:text-white"
+                    >
+                      {permission === "viewer"
+                        ? "Can view"
+                        : permission === "editor"
+                          ? "Can edit"
+                          : "Public link"}
+                      <ChevronDown className="h-3.5 w-3.5 opacity-60" />
+                    </button>
+
+                    {permDropdownOpen ? (
+                      <div className="absolute right-0 top-full z-10 mt-1 min-w-[180px] overflow-hidden rounded-xl border border-white/12 bg-[#1a1824] py-1 shadow-xl">
+                        <button
+                          type="button"
+                          onClick={() => handlePermissionChange("viewer")}
+                          className={cn(
+                            "flex w-full items-center gap-2 px-3 py-2 text-[13px] transition hover:bg-white/[0.06]",
+                            permission === "viewer" ? "text-white" : "text-white/65",
+                          )}
+                        >
+                          {permission === "viewer" && (
+                            <Check className="h-3.5 w-3.5 text-violet-400" />
+                          )}
+                          <Eye className={cn("h-3.5 w-3.5", permission !== "viewer" && "ml-5")} />
+                          Can view
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => handlePermissionChange("editor")}
+                          className={cn(
+                            "flex w-full items-center gap-2 px-3 py-2 text-[13px] transition hover:bg-white/[0.06]",
+                            permission === "editor" ? "text-white" : "text-white/65",
+                          )}
+                        >
+                          {permission === "editor" && (
+                            <Check className="h-3.5 w-3.5 text-violet-400" />
+                          )}
+                          <Pencil className={cn("h-3.5 w-3.5", permission !== "editor" && "ml-5")} />
+                          Can edit
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => handlePermissionChange("public")}
+                          className={cn(
+                            "flex w-full items-center gap-2 px-3 py-2 text-[13px] transition hover:bg-white/[0.06]",
+                            permission === "public" ? "text-white" : "text-white/65",
+                          )}
+                        >
+                          {permission === "public" && (
+                            <Check className="h-3.5 w-3.5 text-violet-400" />
+                          )}
+                          <Globe2 className={cn("h-3.5 w-3.5", permission !== "public" && "ml-5")} />
+                          Public link
+                        </button>
+                      </div>
+                    ) : null}
+                  </div>
+                </div>
+
+                <button
+                  type="button"
+                  disabled={!activeShareUrl || generating}
+                  onClick={copyLink}
+                  className={cn(
+                    "inline-flex h-10 w-full shrink-0 items-center justify-center gap-2 rounded-full px-4 text-[13px] font-semibold shadow-sm transition sm:w-auto",
+                    copied
+                      ? "bg-emerald-500 text-white"
+                      : "bg-violet-500 text-white hover:bg-violet-400",
+                    (!activeShareUrl || generating) && "cursor-not-allowed opacity-60",
+                  )}
+                >
+                  {generating ? (
+                    <Loader2 className="h-4 w-4 animate-spin" />
+                  ) : copied ? (
+                    <Check className="h-4 w-4" />
+                  ) : (
+                    <Copy className="h-4 w-4" />
+                  )}
+                  {copied ? "Copied!" : "Copy link"}
+                </button>
+              </div>
             </div>
           ) : userId ? (
             <p className="mb-6 rounded-xl border border-white/8 bg-white/[0.02] px-4 py-3 text-[13px] text-white/45">
