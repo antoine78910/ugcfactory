@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { createPortal } from "react-dom";
 import Link from "next/link";
 import { useSearchParams } from "next/navigation";
 import {
@@ -8,13 +9,17 @@ import {
   Download,
   Image as ImageIcon,
   Loader2,
+  Maximize2,
   RefreshCw,
   Sparkles,
   Square,
   UploadCloud,
   Video,
   Wand2,
+  X,
 } from "lucide-react";
+
+import { cn } from "@/lib/utils";
 
 import { registerStudioGenerationClient } from "@/lib/registerStudioGenerationClient";
 import { studioBrowserApiUrl } from "@/lib/studioAppOrigin";
@@ -113,6 +118,67 @@ type Stage =
 interface CamDevice {
   deviceId: string;
   label: string;
+}
+
+type ClippingTemplateFullscreenPreview = {
+  url: string;
+  label: string;
+};
+
+function ClippingTemplateFullscreenPlayer({
+  preview,
+  onClose,
+}: {
+  preview: ClippingTemplateFullscreenPreview | null;
+  onClose: () => void;
+}) {
+  useEffect(() => {
+    if (!preview) return;
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === "Escape") onClose();
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [preview, onClose]);
+
+  if (!preview || typeof document === "undefined") return null;
+
+  return createPortal(
+    <div
+      className="fixed inset-0 z-[200] flex flex-col items-center justify-center bg-black/92 p-4 backdrop-blur-[2px]"
+      role="dialog"
+      aria-modal="true"
+      aria-label="Template fullscreen preview"
+      onClick={onClose}
+    >
+      <div className="absolute left-4 right-16 top-4 z-10">
+        <p className="truncate text-sm font-semibold text-white">{preview.label}</p>
+        <p className="mt-0.5 text-[11px] text-white/50">Preview with sound before you record</p>
+      </div>
+      <button
+        type="button"
+        className="absolute right-4 top-4 z-10 inline-flex h-10 w-10 items-center justify-center rounded-full border border-white/20 bg-black/65 text-white shadow-lg transition hover:bg-black/85"
+        title="Close preview"
+        aria-label="Close preview"
+        onClick={(e) => {
+          e.stopPropagation();
+          onClose();
+        }}
+      >
+        <X className="h-4 w-4" aria-hidden />
+      </button>
+      <video
+        key={preview.url}
+        src={preview.url}
+        className="max-h-[82vh] w-full max-w-[min(96vw,520px)] object-contain"
+        controls
+        autoPlay
+        playsInline
+        onClick={(e) => e.stopPropagation()}
+      />
+    </div>,
+    document.body,
+  );
 }
 
 type ClippingTemplateLibraryItem = {
@@ -406,6 +472,8 @@ export default function ClippingStudio() {
   const [templateLibrary, setTemplateLibrary] = useState<ClippingTemplateLibraryItem[]>([]);
   const [templateLibraryLoading, setTemplateLibraryLoading] = useState(false);
   const [selectedLibraryTemplateUrl, setSelectedLibraryTemplateUrl] = useState<string | null>(null);
+  const [templateFullscreenPreview, setTemplateFullscreenPreview] =
+    useState<ClippingTemplateFullscreenPreview | null>(null);
 
   const [exportedBlob, setExportedBlob] = useState<Blob | null>(null);
   const [exportedUrl, setExportedUrl] = useState<string | null>(null);
@@ -2075,14 +2143,35 @@ export default function ClippingStudio() {
                   Duration: {templateDurationSec.toFixed(1)}s
                 </span>
               ) : null}
-              <button
-                type="button"
-                onClick={() => templateFileInputRef.current?.click()}
-                disabled={!canEditControls}
-                className="mt-2 rounded-lg border border-white/20 bg-white/[0.04] px-3 py-1.5 text-[11px] font-semibold text-white/85 hover:bg-white/[0.08] disabled:cursor-not-allowed disabled:opacity-40"
-              >
-                Upload template
-              </button>
+              <div className="mt-2 flex flex-wrap items-center justify-center gap-2">
+                <button
+                  type="button"
+                  onClick={() => templateFileInputRef.current?.click()}
+                  disabled={!canEditControls}
+                  className="rounded-lg border border-white/20 bg-white/[0.04] px-3 py-1.5 text-[11px] font-semibold text-white/85 hover:bg-white/[0.08] disabled:cursor-not-allowed disabled:opacity-40"
+                >
+                  Upload template
+                </button>
+                {templateObjectUrl ? (
+                  <button
+                    type="button"
+                    disabled={!canEditControls}
+                    onClick={() =>
+                      setTemplateFullscreenPreview({
+                        url: templateObjectUrl,
+                        label:
+                          templateFile?.name?.trim() ||
+                          templateLibrary.find((t) => t.url === templateObjectUrl)?.label ||
+                          "Selected template",
+                      })
+                    }
+                    className="inline-flex items-center gap-1 rounded-lg border border-violet-400/35 bg-violet-500/15 px-3 py-1.5 text-[11px] font-semibold text-violet-100 hover:bg-violet-500/25 disabled:cursor-not-allowed disabled:opacity-40"
+                  >
+                    <Maximize2 className="h-3.5 w-3.5" aria-hidden />
+                    Preview with sound
+                  </button>
+                ) : null}
+              </div>
             </div>
             <div className="rounded-2xl border border-white/10 bg-white/[0.02] p-2.5">
               <p className="text-[10px] font-semibold uppercase tracking-widest text-white/50">
@@ -2098,20 +2187,19 @@ export default function ClippingStudio() {
                 <div className="mt-2 grid max-h-72 grid-cols-2 gap-2 overflow-auto pr-1">
                   {templateLibrary.map((item) => {
                     const selected = selectedLibraryTemplateUrl === item.url;
+                    const itemLabel = item.label?.trim() || item.filename;
                     return (
-                      <button
+                      <article
                         key={item.filename}
-                        type="button"
-                        onClick={() => applyLibraryTemplate(item)}
-                        disabled={!canEditControls}
-                        className={`group overflow-hidden rounded-lg border text-left transition disabled:cursor-not-allowed disabled:opacity-40 ${
+                        className={cn(
+                          "overflow-hidden rounded-lg border transition",
                           selected
                             ? "border-violet-400/60 bg-violet-500/15 text-white"
-                            : "border-white/10 bg-white/[0.03] text-white/90 hover:border-violet-400/35 hover:bg-white/[0.08]"
-                        }`}
+                            : "border-white/10 bg-white/[0.03] text-white/90",
+                        )}
                         title={item.filename}
                       >
-                        <div className="relative aspect-square w-full overflow-hidden bg-black/40">
+                        <div className="group relative aspect-square w-full overflow-hidden bg-black/40">
                           <video
                             src={item.url}
                             muted
@@ -2130,11 +2218,28 @@ export default function ClippingStudio() {
                             }}
                           />
                           <div className="pointer-events-none absolute inset-0 ring-1 ring-inset ring-white/10" />
+                          <button
+                            type="button"
+                            disabled={!canEditControls}
+                            title="Fullscreen preview with sound"
+                            aria-label={`Fullscreen preview: ${itemLabel}`}
+                            onClick={() =>
+                              setTemplateFullscreenPreview({ url: item.url, label: itemLabel })
+                            }
+                            className="absolute right-1.5 top-1.5 z-10 inline-flex h-7 w-7 items-center justify-center rounded-full border border-white/15 bg-black/55 text-white/90 opacity-100 backdrop-blur-sm transition hover:bg-black/70 md:opacity-0 md:group-hover:opacity-100 md:focus-visible:opacity-100 disabled:cursor-not-allowed disabled:opacity-40"
+                          >
+                            <Maximize2 className="h-3.5 w-3.5" aria-hidden />
+                          </button>
                         </div>
-                        <div className="px-2 py-1.5 text-[11px] font-medium leading-snug break-all whitespace-normal">
-                          {item.label?.trim() || item.filename}
-                        </div>
-                      </button>
+                        <button
+                          type="button"
+                          onClick={() => applyLibraryTemplate(item)}
+                          disabled={!canEditControls}
+                          className="w-full px-2 py-1.5 text-left text-[11px] font-medium leading-snug break-all whitespace-normal transition hover:bg-white/[0.06] disabled:cursor-not-allowed disabled:opacity-40"
+                        >
+                          {itemLabel}
+                        </button>
+                      </article>
                     );
                   })}
                 </div>
@@ -2330,6 +2435,10 @@ export default function ClippingStudio() {
           </aside>
         </div>
       </div>
+      <ClippingTemplateFullscreenPlayer
+        preview={templateFullscreenPreview}
+        onClose={() => setTemplateFullscreenPreview(null)}
+      />
     </div>
   );
 }
