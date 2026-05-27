@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 
+import { createSupabaseServiceClient } from "@/lib/supabase/admin";
 import { requireSupabaseUser } from "@/lib/supabase/requireUser";
 
 type Ctx = { params: Promise<{ id: string }> };
@@ -41,7 +42,12 @@ function templateOwnedByUser(
 
 export async function GET(_req: Request, ctx: Ctx) {
   const auth = await requireSupabaseUser();
-  if (auth.response) return auth.response;
+  const admin = createSupabaseServiceClient();
+  // Public read: anonymous users (e.g. /clipping/public) can load template bodies via service role.
+  const client = auth.response ? admin : auth.supabase;
+  if (!client) {
+    return NextResponse.json({ error: "Templates unavailable." }, { status: 503 });
+  }
 
   const { id } = await ctx.params;
   const uuid = typeof id === "string" ? id.trim() : "";
@@ -49,7 +55,7 @@ export async function GET(_req: Request, ctx: Ctx) {
     return NextResponse.json({ error: "Invalid template id." }, { status: 400 });
   }
 
-  const { data, error } = await auth.supabase
+  const { data, error } = await client
     .from("workflow_community_templates")
     .select("id, name, blurb, project, created_at, created_by_name")
     .eq("id", uuid)

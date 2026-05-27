@@ -1,18 +1,11 @@
-import type { Metadata } from "next";
-import { WorkflowTemplatePreview } from "@/app/workflow/WorkflowEditor";
+import { redirect } from "next/navigation";
 
-export const metadata: Metadata = {
-  title: "Clipping workflow template | Youry",
-  description: "Read-only clipping preview for workflow templates.",
-  robots: { index: false, follow: false },
-};
-
-export default async function ClippingWorkflowTemplatePage({
+/** Legacy read-only URL → public fullscreen template viewer. */
+export default async function ClippingWorkflowTemplateRedirectPage({
   params,
 }: {
   params: Promise<{ templateId: string }>;
 }) {
   const { templateId } = await params;
-  return <WorkflowTemplatePreview templateId={templateId} />;
+  redirect(`/clipping/public/${encodeURIComponent(templateId)}`);
 }
-

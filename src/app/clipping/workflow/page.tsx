@@ -82,8 +82,8 @@ export default function ClippingWorkflowTemplatesPage() {
             All workflow templates for clipping
           </h1>
           <p className="text-sm text-white/65">
-            Read-only access for clippers. Open any template to review steps and download
-            images/videos where available.
+            Open any template in fullscreen without signing in. Use &quot;Use workflow&quot; to sign up
+            or copy it into your workspace when you are logged in.
           </p>
         </header>
 
@@ -113,10 +113,10 @@ export default function ClippingWorkflowTemplatesPage() {
                   <p className="mt-2 text-xs text-white/45">by {template.authorName}</p>
                 ) : null}
                 <Link
-                  href={`/clipping/workflow/template/${encodeURIComponent(template.id)}`}
+                  href={`/clipping/public/${encodeURIComponent(template.id)}`}
                   className="mt-4 inline-flex items-center justify-center rounded-xl border border-white/15 bg-white/[0.03] px-4 py-2 text-xs font-semibold text-white/90 transition hover:bg-white/[0.08]"
                 >
-                  Open read-only template
+                  Open template
                 </Link>
               </article>
             ))}

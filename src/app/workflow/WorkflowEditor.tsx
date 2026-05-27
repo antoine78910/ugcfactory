@@ -58,7 +58,7 @@ import {
   X,
 } from "lucide-react";
 import Link from "next/link";
-import { usePathname, useRouter } from "next/navigation";
+import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import type { LucideIcon } from "lucide-react";
 import {
   useCallback,
@@ -688,6 +688,7 @@ type FlowWorkspaceProps = {
   showTemplateUseCta?: boolean;
   onUseTemplate?: () => void;
   useTemplateBusy?: boolean;
+  useTemplateCtaLabel?: string;
   /** Shared link preview (guest or not yet joined): duplicate / sign up */
   showSharePreviewCta?: boolean;
   sharePreviewDuplicateLabel?: string;
@@ -2695,6 +2696,7 @@ function WorkflowFlowWorkspace({
   showTemplateUseCta = false,
   onUseTemplate,
   useTemplateBusy = false,
+  useTemplateCtaLabel = "Use template",
   showSharePreviewCta = false,
   sharePreviewDuplicateLabel = "Duplicate",
   onDuplicateSharePreview,
@@ -4837,7 +4839,7 @@ function WorkflowFlowWorkspace({
               onClick={onUseTemplate}
               className="shrink-0 rounded-full bg-white px-4 py-2 text-[12px] font-semibold text-zinc-900 shadow-sm transition hover:bg-white/95 disabled:cursor-not-allowed disabled:opacity-60 sm:px-5 sm:text-[13px]"
             >
-              {useTemplateBusy ? "Working…" : "Use template"}
+              {useTemplateBusy ? "Working…" : useTemplateCtaLabel}
             </button>
           </div>
         </div>
@@ -6359,10 +6361,23 @@ export function WorkflowEditor({
   );
 }
 
-export function WorkflowTemplatePreview({ templateId }: { templateId: string }) {
+export type WorkflowTemplatePreviewProps = {
+  templateId: string;
+  /** Fullscreen public view (e.g. /clipping/public/…) — no login required to view. */
+  variant?: "default" | "public";
+};
+
+export function WorkflowTemplatePreview({
+  templateId,
+  variant = "default",
+}: WorkflowTemplatePreviewProps) {
+  const isPublic = variant === "public";
   const router = useRouter();
+  const searchParams = useSearchParams();
   const sb = useSupabaseBrowserClient();
   const resolvedId = useMemo(() => normalizeWorkflowSpaceId(templateId), [templateId]);
+  const notFoundRedirect = isPublic ? "/clipping/workflow" : "/workflow";
+  const publicPagePath = `/clipping/public/${encodeURIComponent(resolvedId)}`;
   const [storageScope, setStorageScope] = useState<string | null>(null);
   const [project, setProject] = useState<WorkflowProjectStateV1>(() => defaultWorkflowProject());
   /**
@@ -6380,6 +6395,7 @@ export function WorkflowTemplatePreview({ templateId }: { templateId: string }) 
   const [communityLabel, setCommunityLabel] = useState<string | null>(null);
   const [communityAuthor, setCommunityAuthor] = useState<string | null>(null);
   const [useBusy, setUseBusy] = useState(false);
+  const autoUseStartedRef = useRef(false);
 
   /* eslint-disable react-hooks/set-state-in-effect -- template preview bootstraps scope + project when deps change */
   useEffect(() => {
@@ -6405,7 +6421,7 @@ export function WorkflowTemplatePreview({ templateId }: { templateId: string }) 
       setCommunityAuthor(null);
       const p = buildTemplateProject(resolvedId, storageScope);
       if (!p) {
-        router.replace("/workflow");
+        router.replace(notFoundRedirect);
         return;
       }
       setProject(p);
@@ -6422,7 +6438,7 @@ export function WorkflowTemplatePreview({ templateId }: { templateId: string }) 
       });
       if (cancelled) return;
       if (!res.ok) {
-        router.replace("/workflow");
+        router.replace(notFoundRedirect);
         return;
       }
       const body = (await res.json().catch(() => null)) as {
@@ -6430,7 +6446,7 @@ export function WorkflowTemplatePreview({ templateId }: { templateId: string }) 
       } | null;
       const t = body?.template;
       if (!t?.project || t.project.v !== 1 || !Array.isArray(t.project.pages)) {
-        router.replace("/workflow");
+        router.replace(notFoundRedirect);
         return;
       }
       const nm = typeof t.name === "string" && t.name.trim() ? t.name.trim() : "Template";
@@ -6446,16 +6462,22 @@ export function WorkflowTemplatePreview({ templateId }: { templateId: string }) 
     return () => {
       cancelled = true;
     };
-  }, [resolvedId, router, storageScope]);
+  }, [notFoundRedirect, resolvedId, router, storageScope]);
   /* eslint-enable react-hooks/set-state-in-effect */
 
   const templateMeta = getWorkflowTemplateMeta(resolvedId, storageScope);
   const title = communityLabel ?? templateMeta?.name ?? "Template";
+  const isLoggedIn = storageScope !== null && storageScope !== "guest";
+  const useWorkflowReturnUrl = `${publicPagePath}?action=use`;
 
-  const onUseTemplate = useCallback(() => {
+  const copyTemplateToWorkspace = useCallback(() => {
     if (storageScope === null) {
       toast.error("Still loading your session. Try again in a moment.");
-      return;
+      return false;
+    }
+    if (isPublic && !isLoggedIn) {
+      router.push(`/signup?redirect=${encodeURIComponent(useWorkflowReturnUrl)}`);
+      return false;
     }
     setUseBusy(true);
     const communityUuid = parseWorkflowCommunityTemplateUuid(resolvedId);
@@ -6469,10 +6491,43 @@ export function WorkflowTemplatePreview({ templateId }: { templateId: string }) 
     if (!meta) {
       toast.error("Could not create a workflow from this template.");
       setUseBusy(false);
-      return;
+      return false;
     }
     router.push(`/workflow/space/${encodeURIComponent(meta.id)}`);
-  }, [communityLabel, project, resolvedId, router, storageScope, title]);
+    return true;
+  }, [communityLabel, isLoggedIn, isPublic, project, resolvedId, router, storageScope, title, useWorkflowReturnUrl]);
+
+  const onUseTemplate = useCallback(() => {
+    void copyTemplateToWorkspace();
+  }, [copyTemplateToWorkspace]);
+
+  const onCopyPublicLink = useCallback(() => {
+    const url =
+      typeof window !== "undefined"
+        ? `${window.location.origin}${publicPagePath}`
+        : publicPagePath;
+    void navigator.clipboard.writeText(url).then(
+      () => toast.success("Public link copied"),
+      () => toast.error("Could not copy link"),
+    );
+  }, [publicPagePath]);
+
+  useEffect(() => {
+    if (!isPublic || !projectReady || storageScope === null) return;
+    if (searchParams.get("action") !== "use") return;
+    if (!isLoggedIn || useBusy) return;
+    if (autoUseStartedRef.current) return;
+    autoUseStartedRef.current = true;
+    void copyTemplateToWorkspace();
+  }, [
+    copyTemplateToWorkspace,
+    isLoggedIn,
+    isPublic,
+    projectReady,
+    searchParams,
+    storageScope,
+    useBusy,
+  ]);
 
   return (
     <div className="relative flex min-h-[100dvh] min-w-0 flex-col overflow-hidden bg-[#06070d] text-white">
@@ -6480,28 +6535,67 @@ export function WorkflowTemplatePreview({ templateId }: { templateId: string }) 
 
       <header className="relative z-20 flex h-12 shrink-0 items-center justify-between border-b border-white/10 bg-[#06070d]/95 px-4 backdrop-blur-md sm:h-14 sm:px-5">
         <div className="flex min-w-0 flex-1 flex-wrap items-center gap-3">
-          <div className="flex min-w-0 items-center gap-2 text-[13px] text-white/45">
-            <Link href="/workflow" className="shrink-0 text-violet-200/85 hover:text-violet-100">
-              Workflow
-            </Link>
-            <span className="text-white/25">/</span>
-            <span className="text-white/40">Templates</span>
-            <span className="text-white/25">/</span>
-            <span className="flex min-w-0 items-center gap-1.5 truncate font-medium text-white/80">
-              <Eye className="h-3.5 w-3.5 shrink-0 text-white/45" strokeWidth={2} aria-hidden />
-              <span className="truncate">{title}</span>
-            </span>
-            {communityAuthor ? <span className="truncate text-white/35">by {communityAuthor}</span> : null}
-          </div>
+          {isPublic ? (
+            <div className="flex min-w-0 flex-col gap-0.5">
+              <h1 className="truncate text-[15px] font-semibold text-white sm:text-base">{title}</h1>
+              {communityAuthor ? (
+                <p className="truncate text-[12px] text-white/45">by {communityAuthor}</p>
+              ) : null}
+            </div>
+          ) : (
+            <div className="flex min-w-0 items-center gap-2 text-[13px] text-white/45">
+              <Link href="/workflow" className="shrink-0 text-violet-200/85 hover:text-violet-100">
+                Workflow
+              </Link>
+              <span className="text-white/25">/</span>
+              <span className="text-white/40">Templates</span>
+              <span className="text-white/25">/</span>
+              <span className="flex min-w-0 items-center gap-1.5 truncate font-medium text-white/80">
+                <Eye className="h-3.5 w-3.5 shrink-0 text-white/45" strokeWidth={2} aria-hidden />
+                <span className="truncate">{title}</span>
+              </span>
+              {communityAuthor ? <span className="truncate text-white/35">by {communityAuthor}</span> : null}
+            </div>
+          )}
         </div>
         <div className="flex shrink-0 items-center gap-2">
-          <button
-            type="button"
-            className="inline-flex h-9 items-center gap-2 rounded-full border border-violet-400/35 bg-white px-3.5 text-[13px] font-semibold text-zinc-900 shadow-sm transition hover:bg-white/95"
-          >
-            <Share2 className="h-3.5 w-3.5" />
-            Share
-          </button>
+          {isPublic ? (
+            <>
+              {!isLoggedIn ? (
+                <Link
+                  href={`/signin?redirect=${encodeURIComponent(publicPagePath)}`}
+                  className="hidden text-[12px] font-semibold text-white/55 hover:text-white/80 sm:inline"
+                >
+                  Sign in
+                </Link>
+              ) : null}
+              <button
+                type="button"
+                onClick={onCopyPublicLink}
+                className="inline-flex h-9 items-center gap-2 rounded-full border border-white/15 bg-white/[0.04] px-3.5 text-[13px] font-semibold text-white/90 transition hover:bg-white/[0.08]"
+              >
+                <Share2 className="h-3.5 w-3.5" />
+                Copy link
+              </button>
+              <button
+                type="button"
+                disabled={useBusy || !projectReady}
+                onClick={onUseTemplate}
+                className="inline-flex h-9 items-center gap-2 rounded-full border border-violet-400/35 bg-white px-3.5 text-[13px] font-semibold text-zinc-900 shadow-sm transition hover:bg-white/95 disabled:cursor-not-allowed disabled:opacity-60"
+              >
+                {useBusy ? "Working…" : "Use workflow"}
+              </button>
+            </>
+          ) : (
+            <button
+              type="button"
+              onClick={onCopyPublicLink}
+              className="inline-flex h-9 items-center gap-2 rounded-full border border-violet-400/35 bg-white px-3.5 text-[13px] font-semibold text-zinc-900 shadow-sm transition hover:bg-white/95"
+            >
+              <Share2 className="h-3.5 w-3.5" />
+              Share
+            </button>
+          )}
         </div>
       </header>
 
@@ -6518,6 +6612,7 @@ export function WorkflowTemplatePreview({ templateId }: { templateId: string }) 
                     showTemplateUseCta
                     onUseTemplate={onUseTemplate}
                     useTemplateBusy={useBusy}
+                    useTemplateCtaLabel={isPublic ? "Use workflow" : "Use template"}
                   />
                 </ReactFlowProvider>
               ) : (
@@ -6530,9 +6625,11 @@ export function WorkflowTemplatePreview({ templateId }: { templateId: string }) 
         </div>
       </div>
 
-      <p className="pointer-events-none absolute bottom-1 left-1/2 z-10 -translate-x-1/2 text-[10px] text-violet-200/30">
-        View only, use the banner to copy this template into your workspace
-      </p>
+      {!isPublic ? (
+        <p className="pointer-events-none absolute bottom-1 left-1/2 z-10 -translate-x-1/2 text-[10px] text-violet-200/30">
+          View only, use the banner to copy this template into your workspace
+        </p>
+      ) : null}
     </div>
   );
 }
