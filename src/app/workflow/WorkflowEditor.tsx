@@ -98,6 +98,7 @@ import {
 import type { WorkflowCanvasNode } from "./workflowFlowTypes";
 import { storeInviteWelcome } from "./WorkflowInviteWelcome";
 import { WorkflowOnboarding, starterNodeForKind, type WorkflowStarterKind } from "./WorkflowOnboarding";
+import { WorkflowMediaRecapSidebar } from "./WorkflowMediaRecapSidebar";
 import {
   defaultWorkflowProject,
   migrateWorkflowEdges,
@@ -710,6 +711,8 @@ type FlowWorkspaceProps = {
    * connections when the user reloads quickly after wiring nodes.
    */
   onCanvasPersist?: (snapshot: WorkflowProjectStateV1) => void;
+  /** sessionStorage key for generated-media recap panel order */
+  mediaRecapStorageKey?: string;
 };
 
 function WorkflowPagesPanel({
@@ -2706,8 +2709,9 @@ function WorkflowFlowWorkspace({
   joinShareWorkspaceBusy = false,
   canvasProjectFlushRef,
   onCanvasPersist,
+  mediaRecapStorageKey,
 }: FlowWorkspaceProps) {
-  const { screenToFlowPosition, flowToScreenPosition, getInternalNode, getNodes, getEdges, getViewport } =
+  const { screenToFlowPosition, flowToScreenPosition, getInternalNode, getNodes, getEdges, getViewport, setCenter } =
     useReactFlow();
   const storeApi = useStoreApi();
   const marqueeGestureRef = useRef(false);
@@ -4485,10 +4489,32 @@ function WorkflowFlowWorkspace({
     [readOnly, tool],
   );
 
+  useEffect(() => {
+    const onFocusNode = (ev: Event) => {
+      const nodeId = (ev as CustomEvent<{ nodeId?: string }>).detail?.nodeId?.trim();
+      if (!nodeId) return;
+      const internal = getInternalNode(nodeId);
+      if (!internal) return;
+      const w = internal.measured?.width ?? internal.width ?? 280;
+      const h = internal.measured?.height ?? internal.height ?? 200;
+      const cx = internal.internals.positionAbsolute.x + w / 2;
+      const cy = internal.internals.positionAbsolute.y + h / 2;
+      void setCenter(cx, cy, { zoom: getViewport().zoom, duration: 320 });
+      setNodes((prev) =>
+        prev.map((n) => ({
+          ...n,
+          selected: n.id === nodeId,
+        })),
+      );
+    };
+    window.addEventListener("workflow:focus-node", onFocusNode);
+    return () => window.removeEventListener("workflow:focus-node", onFocusNode);
+  }, [getInternalNode, getViewport, setCenter, setNodes]);
+
   return (
     <div
       ref={workspaceRootRef}
-      className="relative h-full min-h-0 w-full"
+      className="relative flex h-full min-h-0 w-full"
       onMouseDown={(ev) => {
         if (readOnly || tool !== "cutTarget") return;
         if (ev.button !== 0) return;
@@ -4554,6 +4580,7 @@ function WorkflowFlowWorkspace({
         cutTrailJustFinishedRef.current = true;
       }}
     >
+      <div className="relative flex min-h-0 min-w-0 flex-1 flex-col">
       <WorkflowPagesPanel
         project={project}
         setProject={setProject}
@@ -5215,6 +5242,12 @@ function WorkflowFlowWorkspace({
           </div>
         </div>
       ) : null}
+      </div>
+      <WorkflowMediaRecapSidebar
+        project={project}
+        orderStorageKey={mediaRecapStorageKey}
+        readOnly={readOnly}
+      />
     </div>
   );
 }
@@ -6333,6 +6366,7 @@ export function WorkflowEditor({
                     onRunLog={appendRunHistory}
                     canvasProjectFlushRef={canvasProjectFlushRef}
                     onCanvasPersist={persistCanvasNow}
+                    mediaRecapStorageKey={`workflow-media-recap:${resolvedSpaceId}`}
                     showSharePreviewCta={loadedFromShareLink}
                     sharePreviewDuplicateLabel={
                       authUserId ? "Duplicate to my workflows" : "Sign up to duplicate"
@@ -6609,6 +6643,7 @@ export function WorkflowTemplatePreview({
                     project={project}
                     setProject={setProject}
                     readOnly
+                    mediaRecapStorageKey={`workflow-media-recap-preview:${resolvedId}`}
                     showTemplateUseCta
                     onUseTemplate={onUseTemplate}
                     useTemplateBusy={useBusy}
