@@ -28,6 +28,15 @@ const nextConfig: NextConfig = {
     ]);
     return { beforeFiles: rules };
   },
+  async redirects() {
+    return [
+      {
+        source: "/clipping/link-to-ad",
+        destination: "/clipping?linkToAd=signup",
+        permanent: true,
+      },
+    ];
+  },
   /**
    * Tree-shake icon / animation libs we touch from many client components so the
    * marketing page (and every page) only ships the icons it actually renders.
