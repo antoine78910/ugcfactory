@@ -2,6 +2,8 @@ import type { Metadata } from "next";
 import Link from "next/link";
 import { ArrowRight, Clapperboard, GitBranch, Link2 } from "lucide-react";
 
+import { SiteContactLinks } from "@/app/_components/SiteContactLinks";
+
 export const metadata: Metadata = {
   title: "Clipping Tools",
   description: "Access clipping tools, templates, link-to-ad references and workflows.",
@@ -237,6 +239,12 @@ export default function ClippingPage() {
           to land directly on Link to Ad after registration.
         </p>
       </div>
+
+      <footer className="mt-12 border-t border-white/[0.06] pt-6">
+        <div className="mx-auto flex max-w-6xl justify-center px-4">
+          <SiteContactLinks />
+        </div>
+      </footer>
     </div>
   );
 }

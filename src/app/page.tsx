@@ -9,6 +9,7 @@ import { HERO_STUDIO_VIDEOS } from "@/lib/heroCarouselAssets";
 import { LandingSeedanceTopButton } from "./LandingSeedanceTopButton";
 import { ArrowRight, Sparkles } from "lucide-react";
 import { marketingPageRootClassName } from "@/lib/youryFonts";
+import { SiteContactLinks } from "@/app/_components/SiteContactLinks";
 
 /**
  * Below-the-fold sections; code-split off the LP initial JS bundle.
@@ -340,6 +341,7 @@ export default function LandingPage() {
                 Careers
               </Link>
             </div>
+            <SiteContactLinks className="sm:justify-end" />
             <p className="text-xs text-white/25">
               &copy; {new Date().getFullYear()} All rights reserved.
             </p>
