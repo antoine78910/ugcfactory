@@ -3,8 +3,8 @@
 import {
   ChevronLeft,
   ChevronRight,
+  Clapperboard,
   Download,
-  GripVertical,
   Images,
   Maximize2,
   PanelRightClose,
@@ -140,11 +140,6 @@ export function WorkflowMediaRecapSidebar({ project, orderStorageKey, readOnly =
     });
   }, [readOnly]);
 
-  const focusNodeOnCanvas = useCallback((nodeId: string) => {
-    if (typeof window === "undefined") return;
-    window.dispatchEvent(new CustomEvent("workflow:focus-node", { detail: { nodeId } }));
-  }, []);
-
   if (collapsed) {
     return (
       <div className="flex h-full shrink-0 flex-col border-l border-white/10 bg-[#08080f]/95">
@@ -192,7 +187,7 @@ export function WorkflowMediaRecapSidebar({ project, orderStorageKey, readOnly =
               Run image or video nodes to see outputs here. List modules with media exports appear too.
             </p>
           ) : (
-            <ul className="space-y-2">
+            <ul className="grid grid-cols-2 gap-2">
               {items.map((it, index) => (
                 <li
                   key={it.id}
@@ -220,59 +215,42 @@ export function WorkflowMediaRecapSidebar({ project, orderStorageKey, readOnly =
                     setDragOverId(null);
                   }}
                   className={cn(
-                    "group rounded-xl border bg-black/25 transition",
-                    dragOverId === it.id ? "border-violet-400/50 bg-violet-500/10" : "border-white/10",
+                    "group relative aspect-square min-w-0 overflow-hidden rounded-lg border bg-black/40 transition",
+                    !readOnly && "cursor-grab active:cursor-grabbing",
+                    dragOverId === it.id ? "border-violet-400/50 ring-1 ring-violet-400/40" : "border-white/10",
                   )}
                 >
-                  <div className="flex gap-2 p-2">
-                    {!readOnly ? (
-                      <div
-                        className="flex w-5 shrink-0 cursor-grab items-center justify-center text-white/30 active:cursor-grabbing"
-                        title="Drag to reorder"
-                      >
-                        <GripVertical className="h-4 w-4" />
-                      </div>
-                    ) : null}
+                  <MediaThumb item={it} className="h-full w-full" />
+                  {it.kind === "video" ? (
+                    <span className="pointer-events-none absolute left-1.5 top-1.5 rounded-md bg-black/55 p-1 text-white/90">
+                      <Clapperboard className="h-3 w-3" aria-hidden />
+                    </span>
+                  ) : null}
+                  <div className="absolute inset-0 flex items-center justify-center gap-2 bg-black/0 opacity-0 transition group-hover:bg-black/45 group-hover:opacity-100">
                     <button
                       type="button"
-                      onClick={() => openPreview(index)}
-                      className="relative aspect-square h-16 w-16 shrink-0 overflow-hidden rounded-lg border border-white/10 bg-black/40"
-                      title="View full size"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        downloadItem(it);
+                      }}
+                      className="inline-flex h-9 w-9 items-center justify-center rounded-full border border-white/20 bg-black/55 text-white shadow-lg transition hover:bg-black/75"
+                      title="Download"
+                      aria-label="Download"
                     >
-                      <MediaThumb item={it} />
-                      <span className="absolute inset-0 flex items-center justify-center bg-black/0 opacity-0 transition group-hover:bg-black/35 group-hover:opacity-100">
-                        <Maximize2 className="h-4 w-4 text-white" aria-hidden />
-                      </span>
+                      <Download className="h-4 w-4" aria-hidden />
                     </button>
-                    <div className="flex min-w-0 flex-1 flex-col gap-1">
-                      <button
-                        type="button"
-                        onClick={() => focusNodeOnCanvas(it.sourceNodeId)}
-                        className="truncate text-left text-[12px] font-semibold text-white/90 hover:text-violet-100"
-                        title="Focus source node on canvas"
-                      >
-                        {it.label}
-                      </button>
-                      <p className="truncate text-[10px] text-white/40">{it.pageName}</p>
-                      <div className="mt-auto flex flex-wrap gap-1">
-                        <button
-                          type="button"
-                          onClick={() => downloadItem(it)}
-                          className="inline-flex items-center gap-1 rounded-md border border-white/12 bg-white/[0.04] px-2 py-1 text-[10px] font-semibold text-white/75 hover:bg-white/[0.08]"
-                        >
-                          <Download className="h-3 w-3" aria-hidden />
-                          Download
-                        </button>
-                        <button
-                          type="button"
-                          onClick={() => openPreview(index)}
-                          className="inline-flex items-center gap-1 rounded-md border border-white/12 bg-white/[0.04] px-2 py-1 text-[10px] font-semibold text-white/75 hover:bg-white/[0.08]"
-                        >
-                          <Maximize2 className="h-3 w-3" aria-hidden />
-                          Enlarge
-                        </button>
-                      </div>
-                    </div>
+                    <button
+                      type="button"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        openPreview(index);
+                      }}
+                      className="inline-flex h-9 w-9 items-center justify-center rounded-full border border-white/20 bg-black/55 text-white shadow-lg transition hover:bg-black/75"
+                      title="Full screen"
+                      aria-label="Full screen"
+                    >
+                      <Maximize2 className="h-4 w-4" aria-hidden />
+                    </button>
                   </div>
                 </li>
               ))}
@@ -299,16 +277,28 @@ export function WorkflowMediaRecapSidebar({ project, orderStorageKey, readOnly =
   );
 }
 
-function MediaThumb({ item }: { item: WorkflowGeneratedMediaItem }) {
+function MediaThumb({ item, className }: { item: WorkflowGeneratedMediaItem; className?: string }) {
   const src = toRenderableMediaUrl(item.url);
   if (item.kind === "video") {
     return (
-      <video src={src} className="h-full w-full object-cover" muted playsInline preload="metadata" />
+      <video
+        src={src}
+        className={cn("object-cover", className)}
+        muted
+        playsInline
+        preload="metadata"
+      />
     );
   }
   return (
     // eslint-disable-next-line @next/next/no-img-element
-    <img src={src} alt="" className="h-full w-full object-cover" loading="lazy" decoding="async" />
+    <img
+      src={src}
+      alt=""
+      className={cn("object-cover", className)}
+      loading="lazy"
+      decoding="async"
+    />
   );
 }
 
