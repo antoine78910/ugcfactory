@@ -1,15 +1,19 @@
 "use client";
 
+import dynamic from "next/dynamic";
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import { useCallback, useEffect, useState } from "react";
 import { ArrowRight, Clapperboard, GitBranch, Link2 } from "lucide-react";
 
 import { SiteContactLinks } from "@/app/_components/SiteContactLinks";
-import { useSupabaseBrowserClient } from "@/lib/supabase/BrowserSupabaseProvider";
-import { studioAppPath } from "@/lib/studioAppOrigin";
+import { studioAppPath, studioBrowserApiUrl } from "@/lib/studioAppOrigin";
 
-import { ClippingLinkToAdSignupDialog } from "./ClippingLinkToAdSignupDialog";
+const ClippingLinkToAdSignupDialog = dynamic(
+  () =>
+    import("./ClippingLinkToAdSignupDialog").then((m) => m.ClippingLinkToAdSignupDialog),
+  { ssr: false },
+);
 
 function TemplateOneDiagram() {
   return (
@@ -40,10 +44,10 @@ function LinkToAdDiagram() {
   return (
     <div className="relative mx-auto w-full max-w-[180px]" aria-hidden>
       <div className="flex items-center gap-1.5">
-        <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg border border-sky-400/30 bg-sky-500/10">
-          <Link2 className="h-3.5 w-3.5 text-sky-300" />
+        <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg border border-violet-400/30 bg-violet-500/10">
+          <Link2 className="h-3.5 w-3.5 text-violet-300" />
         </div>
-        <div className="h-px flex-1 bg-gradient-to-r from-sky-400/50 to-transparent" />
+        <div className="h-px flex-1 bg-gradient-to-r from-violet-400/50 to-transparent" />
         <div className="h-12 w-10 shrink-0 overflow-hidden rounded-md border border-white/15 bg-white/[0.06]">
           <div className="h-1/2 bg-white/10" />
           <div className="h-1/2 bg-white/[0.04]" />
@@ -56,7 +60,7 @@ function LinkToAdDiagram() {
             key={step}
             className="flex items-center gap-2 rounded-md border border-white/[0.08] bg-white/[0.04] px-2 py-1"
           >
-            <span className="flex h-4 w-4 shrink-0 items-center justify-center rounded-full bg-sky-500/25 text-[8px] font-bold text-sky-200">
+            <span className="flex h-4 w-4 shrink-0 items-center justify-center rounded-full bg-violet-500/25 text-[8px] font-bold text-violet-200">
               {i + 1}
             </span>
             <span className="text-[9px] font-medium text-white/75">{step}</span>
@@ -125,15 +129,14 @@ const TOOLS = [
   {
     id: "link-to-ad",
     badge: "Study",
-    badgeClass: "border-sky-400/30 bg-sky-500/15 text-sky-200",
-    accent: "from-sky-600/20 via-sky-500/5 to-transparent",
+    badgeClass: "border-violet-400/30 bg-violet-500/15 text-violet-200",
+    accent: "from-violet-600/20 via-violet-500/5 to-transparent",
     icon: Link2,
     title: "Link to Ad",
     tagline: "Replay winning ad setups step by step.",
     description:
       "Open published Link to Ad templates from My Projects and follow the exact flow — products, angles, and scripts — without guessing.",
     steps: ["Pick a brand", "Walk the pipeline", "Mirror on camera"],
-    href: studioAppPath("/link-to-ad"),
     cta: "Browse templates",
     ctaPrimary: false,
     diagram: LinkToAdDiagram,
@@ -158,37 +161,28 @@ const TOOLS = [
   },
 ] as const;
 
+async function fetchHasStudioSession(): Promise<boolean> {
+  try {
+    const res = await fetch(studioBrowserApiUrl("/api/me/subscription"), {
+      method: "GET",
+      credentials: "include",
+      cache: "no-store",
+    });
+    return res.ok;
+  } catch {
+    return false;
+  }
+}
+
 export function ClippingToolsHub() {
   const router = useRouter();
   const searchParams = useSearchParams();
-  const supabase = useSupabaseBrowserClient();
-  const [authChecked, setAuthChecked] = useState(false);
-  const [isSignedIn, setIsSignedIn] = useState(false);
   const [ltaSignupOpen, setLtaSignupOpen] = useState(false);
+  const [mounted, setMounted] = useState(false);
 
   useEffect(() => {
-    let cancelled = false;
-    if (!supabase) {
-      setAuthChecked(true);
-      setIsSignedIn(false);
-      return;
-    }
-    void supabase.auth.getSession().then(({ data }) => {
-      if (cancelled) return;
-      setIsSignedIn(Boolean(data.session?.user));
-      setAuthChecked(true);
-    });
-    const {
-      data: { subscription },
-    } = supabase.auth.onAuthStateChange((_event, session) => {
-      setIsSignedIn(Boolean(session?.user));
-      setAuthChecked(true);
-    });
-    return () => {
-      cancelled = true;
-      subscription.unsubscribe();
-    };
-  }, [supabase]);
+    setMounted(true);
+  }, []);
 
   useEffect(() => {
     if (searchParams.get("linkToAd") === "signup") {
@@ -201,16 +195,15 @@ export function ClippingToolsHub() {
   }, []);
 
   const onLinkToAdClick = useCallback(() => {
-    if (!authChecked) {
+    void (async () => {
+      const signedIn = await fetchHasStudioSession();
+      if (signedIn) {
+        router.push(studioAppPath("/link-to-ad"));
+        return;
+      }
       openLinkToAdSignup();
-      return;
-    }
-    if (isSignedIn) {
-      router.push(studioAppPath("/link-to-ad"));
-      return;
-    }
-    openLinkToAdSignup();
-  }, [authChecked, isSignedIn, openLinkToAdSignup, router]);
+    })();
+  }, [openLinkToAdSignup, router]);
 
   return (
     <>
@@ -317,10 +310,12 @@ export function ClippingToolsHub() {
         </footer>
       </div>
 
-      <ClippingLinkToAdSignupDialog
-        open={ltaSignupOpen}
-        onClose={() => setLtaSignupOpen(false)}
-      />
+      {mounted ? (
+        <ClippingLinkToAdSignupDialog
+          open={ltaSignupOpen}
+          onClose={() => setLtaSignupOpen(false)}
+        />
+      ) : null}
     </>
   );
 }

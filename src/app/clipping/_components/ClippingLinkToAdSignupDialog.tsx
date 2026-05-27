@@ -1,6 +1,5 @@
 "use client";
 
-import Image from "next/image";
 import Link from "next/link";
 import { useCallback, useEffect, useRef, useState, type ReactNode } from "react";
 import { ArrowRight, Check, ExternalLink, Loader2, X } from "lucide-react";
@@ -258,11 +257,10 @@ export function ClippingLinkToAdSignupDialog({
               </p>
               <div className="overflow-hidden rounded-xl ring-1 ring-violet-400/15">
                 {!screenshotMissing ? (
-                  <Image
+                  // eslint-disable-next-line @next/next/no-img-element
+                  <img
                     src={LTA_TOGGLE_SCREENSHOT}
                     alt="Template toggle at the bottom right of Link to Ad"
-                    width={800}
-                    height={480}
                     className="h-auto w-full object-cover object-right-bottom"
                     onError={() => setScreenshotMissing(true)}
                   />
