@@ -123,16 +123,38 @@ function collectFromNode(
   }
 }
 
+function collectFromPageNodes(
+  page: WorkflowProjectStateV1["pages"][number],
+  items: WorkflowGeneratedMediaItem[],
+  seen: Set<string>,
+) {
+  const pageName = (page.name ?? "Page").trim() || "Page";
+  for (const node of page.nodes) {
+    collectFromNode(node, pageName, items, seen);
+  }
+}
+
+/** Collect generated / exported media for a single workflow page. */
+export function collectGeneratedMediaFromPage(
+  project: WorkflowProjectStateV1,
+  pageId: string,
+): WorkflowGeneratedMediaItem[] {
+  const items: WorkflowGeneratedMediaItem[] = [];
+  const seen = new Set<string>();
+  const page =
+    project.pages.find((p) => p.id === pageId) ?? project.pages[0];
+  if (!page) return items;
+  collectFromPageNodes(page, items, seen);
+  return items;
+}
+
 /** Collect generated / exported media across all workflow pages (newest pages first). */
 export function collectGeneratedMediaFromProject(project: WorkflowProjectStateV1): WorkflowGeneratedMediaItem[] {
   const items: WorkflowGeneratedMediaItem[] = [];
   const seen = new Set<string>();
   const pages = [...project.pages].reverse();
   for (const page of pages) {
-    const pageName = (page.name ?? "Page").trim() || "Page";
-    for (const node of page.nodes) {
-      collectFromNode(node, pageName, items, seen);
-    }
+    collectFromPageNodes(page, items, seen);
   }
   return items;
 }

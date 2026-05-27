@@ -304,9 +304,9 @@ export function ClippingToolsHub() {
               onClick={openLinkToAdSignup}
               className="font-medium text-violet-300/90 underline-offset-2 hover:text-violet-200 hover:underline"
             >
-              Create a free account
+              Start for free
             </button>{" "}
-            to land directly on Link to Ad after registration.
+            to get Link to Ad template access.
           </p>
         </div>
 

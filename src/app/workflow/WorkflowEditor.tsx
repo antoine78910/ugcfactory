@@ -6409,7 +6409,8 @@ export function WorkflowEditor({
                 <ReactFlowProvider>
                   <WorkflowCanvasWithMediaSidebar
                     project={workflowProject}
-                    mediaRecapStorageKey={`workflow-media-recap:${resolvedSpaceId}`}
+                    activePageId={workflowProject.activePageId}
+                    mediaRecapStorageKey={`workflow-media-recap:${resolvedSpaceId}:${workflowProject.activePageId}`}
                     readOnly={workspaceReadOnly}
                   >
                     <WorkflowFlowWorkspace
@@ -6715,7 +6716,8 @@ export function WorkflowTemplatePreview({
                 <ReactFlowProvider key={resolvedId}>
                   <WorkflowCanvasWithMediaSidebar
                     project={project}
-                    mediaRecapStorageKey={`workflow-media-recap-preview:${resolvedId}`}
+                    activePageId={project.activePageId}
+                    mediaRecapStorageKey={`workflow-media-recap-preview:${resolvedId}:${project.activePageId}`}
                     readOnly
                   >
                     <WorkflowFlowWorkspace

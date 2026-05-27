@@ -20,7 +20,7 @@ import { primeRemoteMediaForDisplay } from "./workflowNodeRun";
 import { triggerWorkflowMediaDownload } from "./workflowMediaDownload";
 import type { WorkflowProjectStateV1 } from "./workflowProjectStorage";
 import {
-  collectGeneratedMediaFromProject,
+  collectGeneratedMediaFromPage,
   orderGeneratedMediaItems,
   toRenderableMediaUrl,
   type WorkflowGeneratedMediaItem,
@@ -29,7 +29,9 @@ import {
 
 type Props = {
   project: WorkflowProjectStateV1;
-  /** Persist custom recap order between reloads (e.g. workflow space id). */
+  /** Only show media from this page (defaults to project.activePageId). */
+  activePageId?: string;
+  /** Persist custom recap order between reloads (e.g. workflow space id + page id). */
   orderStorageKey?: string;
   readOnly?: boolean;
 };
@@ -37,6 +39,7 @@ type Props = {
 type CanvasRowProps = {
   children: ReactNode;
   project: WorkflowProjectStateV1;
+  activePageId?: string;
   mediaRecapStorageKey?: string;
   readOnly?: boolean;
 };
@@ -45,15 +48,18 @@ type CanvasRowProps = {
 export function WorkflowCanvasWithMediaSidebar({
   children,
   project,
+  activePageId,
   mediaRecapStorageKey,
   readOnly = false,
 }: CanvasRowProps) {
+  const resolvedPageId = activePageId ?? project.activePageId;
   return (
     <div className="workflow-editor-canvas-row flex h-full min-h-0 w-full overflow-hidden">
       <div className="relative flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden">{children}</div>
       {mediaRecapStorageKey ? (
         <WorkflowMediaRecapSidebar
           project={project}
+          activePageId={resolvedPageId}
           orderStorageKey={mediaRecapStorageKey}
           readOnly={readOnly}
         />
@@ -83,7 +89,19 @@ function saveStoredOrder(key: string | undefined, ids: string[]) {
   }
 }
 
-export function WorkflowMediaRecapSidebar({ project, orderStorageKey, readOnly = false }: Props) {
+export function WorkflowMediaRecapSidebar({
+  project,
+  activePageId,
+  orderStorageKey,
+  readOnly = false,
+}: Props) {
+  const resolvedPageId = activePageId ?? project.activePageId;
+  const activePage = useMemo(
+    () => project.pages.find((p) => p.id === resolvedPageId) ?? project.pages[0],
+    [project.pages, resolvedPageId],
+  );
+  const activePageName = (activePage?.name ?? "Page").trim() || "Page";
+
   const [collapsed, setCollapsed] = useState(false);
   const [orderIds, setOrderIds] = useState<string[]>(() => loadStoredOrder(orderStorageKey));
   const [previewIndex, setPreviewIndex] = useState<number | null>(null);
@@ -91,7 +109,16 @@ export function WorkflowMediaRecapSidebar({ project, orderStorageKey, readOnly =
   const dragIdRef = useRef<string | null>(null);
   const lastGeneratedAtRef = useRef<Map<string, number>>(new Map());
 
-  const collected = useMemo(() => collectGeneratedMediaFromProject(project), [project]);
+  useEffect(() => {
+    setOrderIds(loadStoredOrder(orderStorageKey));
+    setPreviewIndex(null);
+    lastGeneratedAtRef.current = new Map();
+  }, [orderStorageKey, resolvedPageId]);
+
+  const collected = useMemo(
+    () => collectGeneratedMediaFromPage(project, resolvedPageId),
+    [project, resolvedPageId],
+  );
 
   useEffect(() => {
     const ids = collected.map((it) => it.id);
@@ -215,7 +242,9 @@ export function WorkflowMediaRecapSidebar({ project, orderStorageKey, readOnly =
             <Images className="h-4 w-4 shrink-0 text-violet-300/80" aria-hidden />
             <div className="min-w-0">
               <p className="truncate text-[13px] font-semibold text-white">Generated media</p>
-              <p className="text-[11px] text-white/45">{items.length} item{items.length === 1 ? "" : "s"}</p>
+              <p className="truncate text-[11px] text-white/45">
+                {activePageName} · {items.length} item{items.length === 1 ? "" : "s"}
+              </p>
             </div>
           </div>
           <button
@@ -235,7 +264,8 @@ export function WorkflowMediaRecapSidebar({ project, orderStorageKey, readOnly =
         >
           {items.length === 0 ? (
             <p className="px-2 py-6 text-center text-[12px] leading-relaxed text-white/45">
-              Run image or video nodes to see outputs here. List modules with media exports appear too.
+              Run image or video nodes on {activePageName} to see outputs here. List modules with media
+              exports on this page appear too.
             </p>
           ) : (
             <ul className="grid grid-cols-2 gap-2">
