@@ -4594,6 +4594,7 @@ export function WorkflowFlowWorkspace({
       <WorkflowNodePatchProvider onPatch={patchNodeData}>
         <div className="relative min-h-0 flex-1 overflow-hidden">
         <ReactFlow
+          proOptions={{ hideAttribution: true }}
           nodes={nodes}
           edges={edges}
           onNodesChange={onNodesChange}
