@@ -372,13 +372,52 @@
   -webkit-mask-image: radial-gradient(ellipse 54% 50% at 50% 46%, #000 0%, transparent 98%);
 }
 
-/* Hand / pan tool (default when opening a workflow): grab cursor on empty canvas. */
+/* Pan tool: default cursor on canvas (custom cursors only on ports / cut / sticky tools). */
 .workflow-flow.workflow-pan-mode .react-flow__pane {
-  cursor: grab !important;
+  cursor: default !important;
 }
 
 .workflow-flow.workflow-pan-mode .react-flow__pane:active {
-  cursor: grabbing !important;
+  cursor: default !important;
+}
+
+/* Generated media sidebar: normal pointer + visible scrollbar (outside React Flow). */
+.workflow-media-recap-sidebar {
+  position: relative;
+  z-index: 30;
+  cursor: auto;
+  pointer-events: auto;
+}
+
+.workflow-media-recap-sidebar button {
+  cursor: pointer;
+}
+
+.workflow-media-recap-scroll {
+  scrollbar-gutter: stable;
+  scrollbar-width: thin;
+  scrollbar-color: rgba(167, 139, 250, 0.55) rgba(255, 255, 255, 0.06);
+}
+
+.workflow-media-recap-scroll::-webkit-scrollbar {
+  width: 10px;
+}
+
+.workflow-media-recap-scroll::-webkit-scrollbar-track {
+  background: rgba(255, 255, 255, 0.05);
+  border-radius: 999px;
+}
+
+.workflow-media-recap-scroll::-webkit-scrollbar-thumb {
+  background: rgba(167, 139, 250, 0.45);
+  border-radius: 999px;
+  border: 2px solid transparent;
+  background-clip: padding-box;
+}
+
+.workflow-media-recap-scroll::-webkit-scrollbar-thumb:hover {
+  background: rgba(196, 181, 253, 0.65);
+  background-clip: padding-box;
 }
 
 /* Sticky note placement tool: custom cursor on empty canvas (asset: public/workflow/sticky-note-cursor.png). */
@@ -538,6 +577,14 @@
 /* Re-enable clicks on explicit view/download controls inside template preview nodes. */
 .workflow-template-readonly .react-flow__node .workflow-node-interactive {
   pointer-events: auto;
+}
+
+/* Public / template links: hide prompt copy from signed-out viewers */
+.workflow-guest-prompt-gate .react-flow__node textarea,
+.workflow-guest-prompt-gate .react-flow__node [contenteditable="true"] {
+  filter: blur(7px);
+  pointer-events: none;
+  user-select: none;
 }
 
 /* Image / video generator, run in progress (minimal, smooth) */

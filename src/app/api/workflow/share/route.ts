@@ -72,6 +72,7 @@ export async function POST(req: Request) {
       token: activeToken.token,
       permission,
       inviteUrl: buildShareableWorkspaceUrl(req, spaceId, activeToken.token),
+      publicUrl: buildPublicWorkspaceUrl(req, spaceId, activeToken.token),
     });
   }
 
@@ -93,6 +94,7 @@ export async function POST(req: Request) {
     token: newToken.token,
     permission,
     inviteUrl: buildShareableWorkspaceUrl(req, spaceId, newToken.token),
+    publicUrl: buildPublicWorkspaceUrl(req, spaceId, newToken.token),
   });
 }
 
@@ -100,6 +102,12 @@ export async function POST(req: Request) {
 function buildShareableWorkspaceUrl(req: Request, spaceId: string, token: string): string {
   const url = new URL(req.url);
   return `${url.origin}/workflow/space/${encodeURIComponent(spaceId)}?share=${encodeURIComponent(token)}`;
+}
+
+/** Public page URL — no sign-in required to view the workflow canvas. */
+function buildPublicWorkspaceUrl(req: Request, spaceId: string, token: string): string {
+  const url = new URL(req.url);
+  return `${url.origin}/workflow/public/space/${encodeURIComponent(spaceId)}?token=${encodeURIComponent(token)}`;
 }
 
 /**

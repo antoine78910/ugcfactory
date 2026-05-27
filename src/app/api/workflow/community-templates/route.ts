@@ -14,6 +14,12 @@ function isValidProject(p: unknown): p is WorkflowProjectStateV1 {
   return o.v === 1 && typeof o.activePageId === "string" && Array.isArray(o.pages);
 }
 
+function isMissingHidePromptsColumn(error: { code?: string; message?: string } | null): boolean {
+  if (!error) return false;
+  const msg = (error.message ?? "").toLowerCase();
+  return error.code === "42703" || msg.includes("hide_prompts_for_guests");
+}
+
 function isMissingCommunityTemplatesTable(error: { code?: string; message?: string } | null): boolean {
   if (!error) return false;
   const msg = (error.message ?? "").toLowerCase();
@@ -111,6 +117,7 @@ export async function POST(req: Request) {
     project?: unknown;
     templateId?: unknown;
     thumbnailUrl?: unknown;
+    hidePromptsForGuests?: unknown;
   };
   const name = typeof b.name === "string" ? b.name.trim() : "";
   const blurb = typeof b.blurb === "string" ? b.blurb.trim() : "";
@@ -131,11 +138,14 @@ export async function POST(req: Request) {
     return NextResponse.json({ error: "Workflow project is too large to publish." }, { status: 413 });
   }
 
+  const hidePromptsForGuests = b.hidePromptsForGuests !== false;
+
   const isUpdate = /^[0-9a-f-]{36}$/i.test(templateId);
   const payload = {
     name: name.slice(0, 200),
     blurb: (blurb || "Shared workflow template.").slice(0, 500),
     project: b.project,
+    hide_prompts_for_guests: hidePromptsForGuests,
     ...(thumbnailUrl !== null ? { thumbnail_url: thumbnailUrl } : {}),
   };
   const q = auth.supabase.from("workflow_community_templates");
@@ -154,6 +164,28 @@ export async function POST(req: Request) {
         })
         .select("id, name, blurb, created_by_name")
         .single();
+
+  if (error && isMissingHidePromptsColumn(error)) {
+    const { hide_prompts_for_guests: _omit, ...payloadWithoutHide } = payload;
+    const retry = isUpdate
+      ? await q
+          .update({ ...payloadWithoutHide, updated_at: new Date().toISOString() })
+          .eq("id", templateId)
+          .eq("created_by", auth.user.id)
+          .select("id, name, blurb, created_by_name")
+          .maybeSingle()
+      : await q
+          .insert({
+            created_by: auth.user.id,
+            created_by_name: creatorDisplayNameFromAuthUser(auth.user),
+            ...payloadWithoutHide,
+          })
+          .select("id, name, blurb, created_by_name")
+          .single();
+    if (!retry.error) {
+      return NextResponse.json({ template: retry.data });
+    }
+  }
 
   if (error) {
     if (isMissingCommunityTemplatesTable(error)) {

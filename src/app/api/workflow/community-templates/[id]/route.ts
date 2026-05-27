@@ -7,6 +7,12 @@ type Ctx = { params: Promise<{ id: string }> };
 export const dynamic = "force-dynamic";
 export const revalidate = 0;
 
+function isMissingHidePromptsColumn(error: { code?: string; message?: string } | null): boolean {
+  if (!error) return false;
+  const msg = (error.message ?? "").toLowerCase();
+  return error.code === "42703" || msg.includes("hide_prompts_for_guests");
+}
+
 function isMissingCommunityTemplatesTable(error: { code?: string; message?: string } | null): boolean {
   if (!error) return false;
   const msg = (error.message ?? "").toLowerCase();
@@ -55,11 +61,21 @@ export async function GET(_req: Request, ctx: Ctx) {
     return NextResponse.json({ error: "Invalid template id." }, { status: 400 });
   }
 
-  const { data, error } = await client
+  let { data, error } = await client
     .from("workflow_community_templates")
-    .select("id, name, blurb, project, created_at, created_by_name")
+    .select("id, name, blurb, project, created_at, created_by_name, hide_prompts_for_guests")
     .eq("id", uuid)
     .maybeSingle();
+
+  if (error && isMissingHidePromptsColumn(error)) {
+    const fallback = await client
+      .from("workflow_community_templates")
+      .select("id, name, blurb, project, created_at, created_by_name")
+      .eq("id", uuid)
+      .maybeSingle();
+    data = fallback.data ? { ...fallback.data, hide_prompts_for_guests: true } : null;
+    error = fallback.error;
+  }
 
   if (error) {
     if (isMissingCommunityTemplatesTable(error)) {

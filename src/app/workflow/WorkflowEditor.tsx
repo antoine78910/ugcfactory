@@ -713,6 +713,8 @@ type FlowWorkspaceProps = {
   onCanvasPersist?: (snapshot: WorkflowProjectStateV1) => void;
   /** sessionStorage key for generated-media recap panel order */
   mediaRecapStorageKey?: string;
+  /** Blur prompts on canvas for signed-out public viewers */
+  hidePromptsForGuests?: boolean;
 };
 
 function WorkflowPagesPanel({
@@ -2691,7 +2693,7 @@ function WorkflowReactFlowChrome({
   );
 }
 
-function WorkflowFlowWorkspace({
+export function WorkflowFlowWorkspace({
   project,
   setProject,
   readOnly = false,
@@ -2710,6 +2712,7 @@ function WorkflowFlowWorkspace({
   canvasProjectFlushRef,
   onCanvasPersist,
   mediaRecapStorageKey,
+  hidePromptsForGuests = false,
 }: FlowWorkspaceProps) {
   const { screenToFlowPosition, flowToScreenPosition, getInternalNode, getNodes, getEdges, getViewport, setCenter } =
     useReactFlow();
@@ -4590,8 +4593,9 @@ function WorkflowFlowWorkspace({
         readOnly={readOnly}
       />
 
-      <WorkflowReadOnlyProvider readOnly={readOnly}>
+      <WorkflowReadOnlyProvider readOnly={readOnly} hidePromptsForGuests={hidePromptsForGuests}>
       <WorkflowNodePatchProvider onPatch={patchNodeData}>
+        <div className="relative min-h-0 flex-1">
         <ReactFlow
           nodes={nodes}
           edges={edges}
@@ -4718,8 +4722,9 @@ function WorkflowFlowWorkspace({
             });
           }}
           className={cn(
-            "workflow-flow relative z-[1] !bg-transparent",
+            "workflow-flow relative z-[1] !h-full !bg-transparent",
             readOnly && "workflow-template-readonly",
+            hidePromptsForGuests && "workflow-guest-prompt-gate",
             (readOnly || tool === "pan") && "workflow-pan-mode",
             !readOnly && tool === "select" && "workflow-select-mode",
             !readOnly && tool === "stickyPlace" && "workflow-sticky-place-mode",
@@ -4821,6 +4826,7 @@ function WorkflowFlowWorkspace({
             readOnly={readOnly}
           />
         </ReactFlow>
+        </div>
       </WorkflowNodePatchProvider>
       </WorkflowReadOnlyProvider>
 
@@ -5294,6 +5300,7 @@ export function WorkflowEditor({
   const [publishTemplateOpen, setPublishTemplateOpen] = useState(false);
   const [publishTemplateName, setPublishTemplateName] = useState("");
   const [publishTemplateBlurb, setPublishTemplateBlurb] = useState("");
+  const [publishHidePromptsForGuests, setPublishHidePromptsForGuests] = useState(true);
   /** Loaded via `/api/workflow/share-preview` (guest or signed-in user not yet a collaborator). */
   const [loadedFromShareLink, setLoadedFromShareLink] = useState(false);
   const [duplicateShareBusy, setDuplicateShareBusy] = useState(false);
@@ -5857,6 +5864,7 @@ export function WorkflowEditor({
     const suggestedBlurb = "Shared workflow template.";
     setPublishTemplateName(suggestedName);
     setPublishTemplateBlurb(suggestedBlurb);
+    setPublishHidePromptsForGuests(true);
     setPublishTemplateOpen(true);
   }, [publishBusy, spaceName]);
 
@@ -5902,6 +5910,7 @@ export function WorkflowEditor({
           project: projectForPublish,
           templateId: publishedTemplateId,
           ...(thumbnailUrl ? { thumbnailUrl } : {}),
+          hidePromptsForGuests: publishHidePromptsForGuests,
         }),
       });
       const body = (await res.json().catch(() => null)) as { error?: string; template?: { id?: string } } | null;
@@ -5943,6 +5952,7 @@ export function WorkflowEditor({
     publishBusy,
     publishTemplateName,
     publishTemplateBlurb,
+    publishHidePromptsForGuests,
     publishedTemplateId,
     router,
     spaceName,
@@ -6225,6 +6235,18 @@ export function WorkflowEditor({
                   maxLength={260}
                 />
               </label>
+              <label className="flex cursor-pointer items-start gap-2.5 rounded-lg border border-white/10 bg-white/[0.03] px-3 py-2.5">
+                <input
+                  type="checkbox"
+                  checked={publishHidePromptsForGuests}
+                  onChange={(e) => setPublishHidePromptsForGuests(e.target.checked)}
+                  className="mt-0.5 h-4 w-4 rounded border-white/20 accent-violet-500"
+                />
+                <span className="text-[12px] leading-snug text-white/70">
+                  Hide prompts on the public template link (blur + sign up to view) for people who are
+                  not logged in.
+                </span>
+              </label>
             </div>
             <div className="mt-5 flex items-center justify-end gap-2">
               <button
@@ -6397,7 +6419,7 @@ export function WorkflowEditor({
 
 export type WorkflowTemplatePreviewProps = {
   templateId: string;
-  /** Fullscreen public view (e.g. /clipping/public/…) — no login required to view. */
+  /** Fullscreen public view (e.g. /workflow/public/…) — no login required to view. */
   variant?: "default" | "public";
 };
 
@@ -6410,8 +6432,9 @@ export function WorkflowTemplatePreview({
   const searchParams = useSearchParams();
   const sb = useSupabaseBrowserClient();
   const resolvedId = useMemo(() => normalizeWorkflowSpaceId(templateId), [templateId]);
-  const notFoundRedirect = isPublic ? "/clipping/workflow" : "/workflow";
-  const publicPagePath = `/clipping/public/${encodeURIComponent(resolvedId)}`;
+  const notFoundRedirect = isPublic ? "/workflow" : "/workflow";
+  const publicPagePath = `/workflow/public/${encodeURIComponent(resolvedId)}`;
+  const [communityHidePromptsForGuests, setCommunityHidePromptsForGuests] = useState(true);
   const [storageScope, setStorageScope] = useState<string | null>(null);
   const [project, setProject] = useState<WorkflowProjectStateV1>(() => defaultWorkflowProject());
   /**
@@ -6476,7 +6499,12 @@ export function WorkflowTemplatePreview({
         return;
       }
       const body = (await res.json().catch(() => null)) as {
-        template?: { name?: unknown; project?: WorkflowProjectStateV1; created_by_name?: unknown };
+        template?: {
+          name?: unknown;
+          project?: WorkflowProjectStateV1;
+          created_by_name?: unknown;
+          hide_prompts_for_guests?: unknown;
+        };
       } | null;
       const t = body?.template;
       if (!t?.project || t.project.v !== 1 || !Array.isArray(t.project.pages)) {
@@ -6489,6 +6517,7 @@ export function WorkflowTemplatePreview({
         setCommunityAuthor(
           typeof t.created_by_name === "string" && t.created_by_name.trim() ? t.created_by_name.trim() : null,
         );
+        setCommunityHidePromptsForGuests(t.hide_prompts_for_guests !== false);
         setProject(t.project);
         setProjectReady(true);
       }
@@ -6502,6 +6531,8 @@ export function WorkflowTemplatePreview({
   const templateMeta = getWorkflowTemplateMeta(resolvedId, storageScope);
   const title = communityLabel ?? templateMeta?.name ?? "Template";
   const isLoggedIn = storageScope !== null && storageScope !== "guest";
+  const guestPromptGate =
+    isPublic && !isLoggedIn && communityHidePromptsForGuests;
   const useWorkflowReturnUrl = `${publicPagePath}?action=use`;
 
   const copyTemplateToWorkspace = useCallback(() => {
@@ -6633,6 +6664,18 @@ export function WorkflowTemplatePreview({
         </div>
       </header>
 
+      {guestPromptGate ? (
+        <p className="border-b border-violet-500/20 bg-violet-500/10 px-4 py-2 text-center text-[12px] text-violet-100/90">
+          Prompts are hidden on this public link.{" "}
+          <Link
+            href={`/signup?redirect=${encodeURIComponent(useWorkflowReturnUrl)}`}
+            className="font-semibold underline"
+          >
+            Sign up
+          </Link>{" "}
+          to view prompts.
+        </p>
+      ) : null}
       <div className="relative z-10 flex min-h-0 min-w-0 flex-1">
         <div className="relative flex min-h-0 min-w-0 flex-1 flex-col bg-[#06070d]">
           <div className="relative flex h-full min-h-[480px] min-w-0 flex-1 flex-col">
@@ -6643,6 +6686,7 @@ export function WorkflowTemplatePreview({
                     project={project}
                     setProject={setProject}
                     readOnly
+                    hidePromptsForGuests={guestPromptGate}
                     mediaRecapStorageKey={`workflow-media-recap-preview:${resolvedId}`}
                     showTemplateUseCta
                     onUseTemplate={onUseTemplate}

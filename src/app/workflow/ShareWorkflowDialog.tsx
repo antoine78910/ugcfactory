@@ -6,6 +6,8 @@ import {
   ChevronDown,
   Copy,
   Crown,
+  Globe2,
+  Info,
   Loader2,
   Pencil,
   Trash2,
@@ -18,7 +20,7 @@ import { toast } from "sonner";
 import { cn } from "@/lib/utils";
 import { useSupabaseBrowserClient } from "@/lib/supabase/BrowserSupabaseProvider";
 
-type Permission = "viewer" | "editor";
+type Permission = "viewer" | "editor" | "public";
 
 type Collaborator = {
   id: string;
@@ -53,6 +55,7 @@ export function ShareWorkflowDialog({
   const sb = useSupabaseBrowserClient();
   const [permission, setPermission] = useState<Permission>("viewer");
   const [inviteUrl, setInviteUrl] = useState<string | null>(null);
+  const [publicUrl, setPublicUrl] = useState<string | null>(null);
   const [generating, setGenerating] = useState(false);
   const [copied, setCopied] = useState(false);
   const [collaborators, setCollaborators] = useState<Collaborator[]>([]);
@@ -111,9 +114,12 @@ export function ShareWorkflowDialog({
     if (open) {
       fetchCollaborators();
       setInviteUrl(null);
+      setPublicUrl(null);
       setCopied(false);
     }
   }, [open, fetchCollaborators]);
+
+  const activeShareUrl = permission === "public" ? publicUrl : inviteUrl;
 
   const generateLink = useCallback(async () => {
     setGenerating(true);
@@ -126,18 +132,20 @@ export function ShareWorkflowDialog({
           return;
         }
       }
+      const apiPermission = permission === "public" ? "viewer" : permission;
       const res = await fetch("/api/workflow/share", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ spaceId, permission }),
+        body: JSON.stringify({ spaceId, permission: apiPermission }),
       });
       if (!res.ok) {
         const data = await res.json().catch(() => ({}));
         toast.error(data.error || "Could not generate invite link");
         return;
       }
-      const data = await res.json();
-      setInviteUrl(data.inviteUrl);
+      const data = (await res.json()) as { inviteUrl?: string; publicUrl?: string };
+      setInviteUrl(typeof data.inviteUrl === "string" ? data.inviteUrl : null);
+      setPublicUrl(typeof data.publicUrl === "string" ? data.publicUrl : null);
     } catch {
       toast.error("Network error");
     } finally {
@@ -146,32 +154,33 @@ export function ShareWorkflowDialog({
   }, [spaceId, permission, ensureCloudCopy]);
 
   useEffect(() => {
-    if (open && isOwner && !loadingCollabs && !inviteUrl) {
+    if (open && isOwner && !loadingCollabs && !activeShareUrl) {
       generateLink();
     }
-  }, [open, isOwner, loadingCollabs, permission, inviteUrl, generateLink]);
+  }, [open, isOwner, loadingCollabs, permission, activeShareUrl, generateLink]);
 
   const handlePermissionChange = useCallback(
     (p: Permission) => {
       setPermission(p);
       setPermDropdownOpen(false);
       setInviteUrl(null);
+      setPublicUrl(null);
       setCopied(false);
     },
     [],
   );
 
   const copyLink = useCallback(async () => {
-    if (!inviteUrl) return;
+    if (!activeShareUrl) return;
     try {
-      await navigator.clipboard.writeText(inviteUrl);
+      await navigator.clipboard.writeText(activeShareUrl);
       setCopied(true);
       toast.success("Link copied");
       setTimeout(() => setCopied(false), 2500);
     } catch {
       toast.error("Could not copy link");
     }
-  }, [inviteUrl]);
+  }, [activeShareUrl]);
 
   const updateCollabRole = useCallback(
     async (targetUserId: string, role: Permission) => {
@@ -234,8 +243,8 @@ export function ShareWorkflowDialog({
           </div>
 
           <p className="mb-2 text-[13px] leading-relaxed text-white/50">
-            Anyone with the link can open the workflow canvas (sign-in is only needed to edit or
-            duplicate). Invite collaborators so they join this space on their account.
+            Invite collaborators with view or edit access, or share a public link anyone can open
+            without an account.
           </p>
           <p className="mb-5 text-[12px] text-white/40">
             Workspace: <span className="font-medium text-white/70">{spaceName}</span>
@@ -251,7 +260,7 @@ export function ShareWorkflowDialog({
             <div className="mb-6 flex items-center gap-2">
               <div className="flex min-w-0 flex-1 items-center gap-0 rounded-full border border-white/12 bg-white/[0.04]">
                 <div className="min-w-0 flex-1 truncate px-4 py-2.5 text-[13px] text-white/55">
-                  {inviteUrl ?? "Generating link…"}
+                  {activeShareUrl ?? "Generating link…"}
                 </div>
 
                 <div className="relative">
@@ -260,12 +269,16 @@ export function ShareWorkflowDialog({
                     onClick={() => setPermDropdownOpen((o) => !o)}
                     className="inline-flex items-center gap-1 whitespace-nowrap border-l border-white/10 px-3 py-2.5 text-[13px] font-medium text-white/75 transition hover:text-white"
                   >
-                    {permission === "viewer" ? "Can view" : "Can edit"}
+                    {permission === "viewer"
+                      ? "Can view"
+                      : permission === "editor"
+                        ? "Can edit"
+                        : "Public link"}
                     <ChevronDown className="h-3.5 w-3.5 opacity-60" />
                   </button>
 
                   {permDropdownOpen ? (
-                    <div className="absolute right-0 top-full z-10 mt-1 min-w-[140px] overflow-hidden rounded-xl border border-white/12 bg-[#1a1824] py-1 shadow-xl">
+                    <div className="absolute right-0 top-full z-10 mt-1 min-w-[180px] overflow-hidden rounded-xl border border-white/12 bg-[#1a1824] py-1 shadow-xl">
                       <button
                         type="button"
                         onClick={() => handlePermissionChange("viewer")}
@@ -290,21 +303,40 @@ export function ShareWorkflowDialog({
                         <Pencil className={cn("h-3.5 w-3.5", permission !== "editor" && "ml-5")} />
                         Can edit
                       </button>
+                      <button
+                        type="button"
+                        onClick={() => handlePermissionChange("public")}
+                        className={cn(
+                          "flex w-full items-center gap-2 px-3 py-2 text-[13px] transition hover:bg-white/[0.06]",
+                          permission === "public" ? "text-white" : "text-white/65",
+                        )}
+                      >
+                        {permission === "public" && <Check className="h-3.5 w-3.5 text-violet-400" />}
+                        <Globe2 className={cn("h-3.5 w-3.5", permission !== "public" && "ml-5")} />
+                        Public link
+                      </button>
                     </div>
                   ) : null}
                 </div>
               </div>
 
+              {permission === "public" ? (
+                <p className="mb-3 flex items-start gap-1.5 text-[11px] leading-snug text-white/45">
+                  <Info className="mt-0.5 h-3.5 w-3.5 shrink-0 text-violet-300/80" aria-hidden />
+                  You can share this link with anybody, even people without an account.
+                </p>
+              ) : null}
+
               <button
                 type="button"
-                disabled={!inviteUrl || generating}
+                disabled={!activeShareUrl || generating}
                 onClick={copyLink}
                 className={cn(
                   "inline-flex h-10 shrink-0 items-center gap-2 rounded-full px-4 text-[13px] font-semibold shadow-sm transition",
                   copied
                     ? "bg-emerald-500 text-white"
                     : "bg-violet-500 text-white hover:bg-violet-400",
-                  (!inviteUrl || generating) && "cursor-not-allowed opacity-60",
+                  (!activeShareUrl || generating) && "cursor-not-allowed opacity-60",
                 )}
               >
                 {generating ? (

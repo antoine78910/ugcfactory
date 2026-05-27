@@ -7,5 +7,5 @@ export default async function ClippingWorkflowTemplateRedirectPage({
   params: Promise<{ templateId: string }>;
 }) {
   const { templateId } = await params;
-  redirect(`/clipping/public/${encodeURIComponent(templateId)}`);
+  redirect(`/workflow/public/${encodeURIComponent(templateId)}`);
 }
