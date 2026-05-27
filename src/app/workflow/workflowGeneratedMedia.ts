@@ -16,6 +16,7 @@ export type WorkflowGeneratedMediaItem = {
   sourceNodeId: string;
   sourceType: "adAsset" | "promptList" | "imageRef";
   listSlotIndex?: number;
+  generatedAt?: number;
 };
 
 export function toRenderableMediaUrl(url: string): string {
@@ -80,6 +81,7 @@ function collectFromNode(
       pageName,
       sourceNodeId: node.id,
       sourceType: "adAsset",
+      generatedAt: typeof (d as any).outputGeneratedAt === "number" ? ((d as any).outputGeneratedAt as number) : undefined,
     });
     return;
   }

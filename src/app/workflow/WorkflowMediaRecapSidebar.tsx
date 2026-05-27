@@ -89,15 +89,25 @@ export function WorkflowMediaRecapSidebar({ project, orderStorageKey, readOnly =
   const [previewIndex, setPreviewIndex] = useState<number | null>(null);
   const [dragOverId, setDragOverId] = useState<string | null>(null);
   const dragIdRef = useRef<string | null>(null);
+  const lastGeneratedAtRef = useRef<Map<string, number>>(new Map());
 
   const collected = useMemo(() => collectGeneratedMediaFromProject(project), [project]);
 
   useEffect(() => {
     const ids = collected.map((it) => it.id);
+    const byId = new Map(collected.map((it) => [it.id, it.generatedAt ?? 0]));
+    const bumpedIds = new Set<string>();
+    for (const id of ids) {
+      const nextAt = byId.get(id) ?? 0;
+      const prevAt = lastGeneratedAtRef.current.get(id) ?? 0;
+      if (nextAt > prevAt) bumpedIds.add(id);
+      lastGeneratedAtRef.current.set(id, nextAt);
+    }
     setOrderIds((prev) => {
-      const kept = prev.filter((id) => ids.includes(id));
+      const kept = prev.filter((id) => ids.includes(id) && !bumpedIds.has(id));
       const missing = ids.filter((id) => !kept.includes(id));
-      const next = [...kept, ...missing];
+      missing.sort((a, b) => (byId.get(b) ?? 0) - (byId.get(a) ?? 0));
+      const next = [...missing, ...kept];
       if (next.length === prev.length && next.every((id, i) => id === prev[i])) return prev;
       return next;
     });

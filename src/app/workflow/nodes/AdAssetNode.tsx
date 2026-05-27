@@ -146,6 +146,8 @@ export type AdAssetNodeData = {
   /** Last successful Run output (shown in preview; reference stays in data for i2i). */
   outputPreviewUrl?: string;
   outputMediaKind?: "image" | "video";
+  /** Unix ms timestamp for last output update (used to sort Generated media). */
+  outputGeneratedAt?: number;
   /** Assistant node model selector. */
   assistantModel?: "claude-sonnet-4-5" | "gpt-5o";
   /** Assistant node last response text. */
@@ -3024,6 +3026,7 @@ function AdAssetNodeBase({ id, data, selected }: NodeProps<AdAssetNodeType>) {
         patch(id, {
           outputPreviewUrl: imageUrl,
           outputMediaKind: "image",
+          outputGeneratedAt: Date.now(),
         });
         if (shouldBuildProgressList) {
           if (progressListId) {
@@ -3247,6 +3250,7 @@ function AdAssetNodeBase({ id, data, selected }: NodeProps<AdAssetNodeType>) {
         patch(id, {
           outputPreviewUrl: videoUrl,
           outputMediaKind: "video",
+          outputGeneratedAt: Date.now(),
           videoExtractedFirstFrameUrl: undefined,
           videoExtractedLastFrameUrl: undefined,
         });
@@ -3599,6 +3603,7 @@ function AdAssetNodeBase({ id, data, selected }: NodeProps<AdAssetNodeType>) {
       patch(id, {
         outputPreviewUrl: videoUrl,
         outputMediaKind: "video",
+        outputGeneratedAt: Date.now(),
         videoExtractedFirstFrameUrl: undefined,
         videoExtractedLastFrameUrl: undefined,
       });
