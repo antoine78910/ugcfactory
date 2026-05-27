@@ -9,10 +9,10 @@ import type { WorkflowCanvasNode } from "./workflowFlowTypes";
  *  - in-flight job descriptors
  *  - last-run timestamps
  *
- * NOTE: `outputPreviewUrl` and `outputMediaKind` are intentionally kept so that
- * generated results remain visible when the template is loaded by other users.
- * These are stable HTTPS URLs (Supabase Storage / provider CDN) that are already
- * publicly accessible (the same URLs back the template thumbnail cards).
+ * NOTE: `outputPreviewUrl`, `outputMediaKind`, and `assistantOutput` are intentionally
+ * kept so generated results remain visible when the template is loaded by other users.
+ * Image/video outputs use stable HTTPS URLs (Supabase Storage / provider CDN). Assistant
+ * output is plain text (small payload) and is part of what clippers study in a template.
  */
 const EPHEMERAL_DATA_FIELDS = [
   "referencePreviewUrl",
@@ -24,7 +24,6 @@ const EPHEMERAL_DATA_FIELDS = [
   "videoExtractedLastFrameUrl",
   "websiteLastRunAt",
   "pendingWorkflowRun",
-  "assistantOutput",
 ] as const;
 
 function isLikelyDataUrl(value: unknown): value is string {

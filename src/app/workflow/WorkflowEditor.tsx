@@ -101,6 +101,7 @@ import { WorkflowOnboarding, starterNodeForKind, type WorkflowStarterKind } from
 import { WorkflowCanvasWithMediaSidebar } from "./WorkflowMediaRecapSidebar";
 import {
   defaultWorkflowProject,
+  duplicateWorkflowPage,
   migrateWorkflowEdges,
   newPage,
   shouldShowWorkflowOnboarding,
@@ -764,6 +765,26 @@ function WorkflowPagesPanel({
     if (renamingId === id) setRenamingId(null);
   }
 
+  function duplicatePage(id: string) {
+    const snap = nodesEdgesRef.current;
+    setProject((prev) => {
+      const pagesWithSnap = prev.pages.map((p) =>
+        p.id === prev.activePageId && snap ? { ...p, nodes: snap.nodes, edges: snap.edges } : p,
+      );
+      const source = pagesWithSnap.find((p) => p.id === id);
+      if (!source) return prev;
+
+      const duplicated = duplicateWorkflowPage(source);
+      const idx = pagesWithSnap.findIndex((p) => p.id === id);
+      const nextPages = [
+        ...pagesWithSnap.slice(0, idx + 1),
+        duplicated,
+        ...pagesWithSnap.slice(idx + 1),
+      ];
+      return { ...prev, pages: nextPages, activePageId: duplicated.id };
+    });
+  }
+
   return (
     <div className="pointer-events-auto absolute left-2 top-2 z-20 w-[min(100%,170px)] sm:left-3 sm:top-3">
       <div className="overflow-hidden rounded-lg border border-white/[0.1] bg-[#0b0912]/90 shadow-[0_8px_24px_rgba(0,0,0,0.4)] backdrop-blur-md">
@@ -812,15 +833,27 @@ function WorkflowPagesPanel({
                     >
                       <span className="block truncate">{p.name}</span>
                     </button>
-                    {!readOnly && project.pages.length > 1 ? (
-                      <button
-                        type="button"
-                        title="Delete page"
-                        onClick={() => deletePage(p.id)}
-                        className="flex h-6 w-6 shrink-0 items-center justify-center rounded-md text-white/25 opacity-0 transition hover:bg-red-500/15 hover:text-red-300 group-hover:opacity-100"
-                      >
-                        <Trash2 className="h-3 w-3" />
-                      </button>
+                    {!readOnly ? (
+                      <div className="flex shrink-0 items-center gap-0.5 opacity-0 transition group-hover:opacity-100">
+                        <button
+                          type="button"
+                          title="Duplicate page"
+                          onClick={() => duplicatePage(p.id)}
+                          className="flex h-6 w-6 items-center justify-center rounded-md text-white/25 transition hover:bg-white/[0.08] hover:text-white/80"
+                        >
+                          <CopyPlus className="h-3 w-3" />
+                        </button>
+                        {project.pages.length > 1 ? (
+                          <button
+                            type="button"
+                            title="Delete page"
+                            onClick={() => deletePage(p.id)}
+                            className="flex h-6 w-6 items-center justify-center rounded-md text-white/25 transition hover:bg-red-500/15 hover:text-red-300"
+                          >
+                            <Trash2 className="h-3 w-3" />
+                          </button>
+                        ) : null}
+                      </div>
                     ) : null}
                   </div>
                 )}

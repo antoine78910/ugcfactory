@@ -1,5 +1,7 @@
 import type { Edge } from "@xyflow/react";
 
+import { buildClonedWorkflowEdges, clonePortableImageRefData } from "./workflowClone";
+import type { ImageRefNodeType } from "./nodes/ImageRefNode";
 import type { WorkflowCanvasNode } from "./workflowFlowTypes";
 
 function workflowEdgeSourceIsTextInput(
@@ -101,6 +103,52 @@ function newPage(name: string): WorkflowFlowPage {
     nodes: [],
     edges: [],
   };
+}
+
+function duplicatePageName(name: string): string {
+  const t = name.trim();
+  if (!t) return "Page (copy)";
+  return t.endsWith("(copy)") ? `${t} 2` : `${t} (copy)`;
+}
+
+/** Deep-clone a workflow page (new page id, new node/edge ids, same layout). */
+export function duplicateWorkflowPage(source: WorkflowFlowPage): WorkflowFlowPage {
+  const page = newPage(duplicatePageName(source.name));
+  const { nodes, edges } = source;
+  if (nodes.length === 0) {
+    return { ...page, nodes: [], edges: [] };
+  }
+
+  const idMap = new Map<string, string>();
+  for (const n of nodes) {
+    idMap.set(n.id, crypto.randomUUID());
+  }
+
+  const clonedNodes: WorkflowCanvasNode[] = nodes.map((n) => {
+    const newId = idMap.get(n.id)!;
+    if (n.type === "imageRef") {
+      const r = n as ImageRefNodeType;
+      const mappedParent = r.parentId ? idMap.get(r.parentId) : undefined;
+      return {
+        ...r,
+        id: newId,
+        selected: false,
+        parentId: mappedParent,
+        extent: mappedParent ? ("parent" as const) : r.extent,
+        data: clonePortableImageRefData(r.data),
+      } satisfies ImageRefNodeType;
+    }
+    const copy = structuredClone(n) as WorkflowCanvasNode;
+    const next: WorkflowCanvasNode = { ...copy, id: newId, selected: false };
+    if (next.parentId) {
+      const mappedParent = idMap.get(next.parentId);
+      if (mappedParent) next.parentId = mappedParent;
+    }
+    return next;
+  });
+
+  const clonedEdges = migrateWorkflowEdges(clonedNodes, buildClonedWorkflowEdges(edges, idMap));
+  return { ...page, nodes: clonedNodes, edges: clonedEdges };
 }
 
 /** Deterministic initial state for SSR / hydration. */
