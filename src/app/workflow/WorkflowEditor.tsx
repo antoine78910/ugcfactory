@@ -98,7 +98,7 @@ import {
 import type { WorkflowCanvasNode } from "./workflowFlowTypes";
 import { storeInviteWelcome } from "./WorkflowInviteWelcome";
 import { WorkflowOnboarding, starterNodeForKind, type WorkflowStarterKind } from "./WorkflowOnboarding";
-import { WorkflowMediaRecapSidebar } from "./WorkflowMediaRecapSidebar";
+import { WorkflowCanvasWithMediaSidebar } from "./WorkflowMediaRecapSidebar";
 import {
   defaultWorkflowProject,
   migrateWorkflowEdges,
@@ -711,8 +711,6 @@ type FlowWorkspaceProps = {
    * connections when the user reloads quickly after wiring nodes.
    */
   onCanvasPersist?: (snapshot: WorkflowProjectStateV1) => void;
-  /** sessionStorage key for generated-media recap panel order */
-  mediaRecapStorageKey?: string;
   /** Blur prompts on canvas for signed-out public viewers */
   hidePromptsForGuests?: boolean;
 };
@@ -2711,7 +2709,6 @@ export function WorkflowFlowWorkspace({
   joinShareWorkspaceBusy = false,
   canvasProjectFlushRef,
   onCanvasPersist,
-  mediaRecapStorageKey,
   hidePromptsForGuests = false,
 }: FlowWorkspaceProps) {
   const { screenToFlowPosition, flowToScreenPosition, getInternalNode, getNodes, getEdges, getViewport, setCenter } =
@@ -4517,7 +4514,7 @@ export function WorkflowFlowWorkspace({
   return (
     <div
       ref={workspaceRootRef}
-      className="relative flex h-full min-h-0 w-full"
+      className="relative flex h-full min-h-0 w-full flex-col overflow-hidden"
       onMouseDown={(ev) => {
         if (readOnly || tool !== "cutTarget") return;
         if (ev.button !== 0) return;
@@ -4583,7 +4580,7 @@ export function WorkflowFlowWorkspace({
         cutTrailJustFinishedRef.current = true;
       }}
     >
-      <div className="relative flex min-h-0 min-w-0 flex-1 flex-col">
+      <div className="relative flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden">
       <WorkflowPagesPanel
         project={project}
         setProject={setProject}
@@ -4595,7 +4592,7 @@ export function WorkflowFlowWorkspace({
 
       <WorkflowReadOnlyProvider readOnly={readOnly} hidePromptsForGuests={hidePromptsForGuests}>
       <WorkflowNodePatchProvider onPatch={patchNodeData}>
-        <div className="relative min-h-0 flex-1">
+        <div className="relative min-h-0 flex-1 overflow-hidden">
         <ReactFlow
           nodes={nodes}
           edges={edges}
@@ -5249,11 +5246,6 @@ export function WorkflowFlowWorkspace({
         </div>
       ) : null}
       </div>
-      <WorkflowMediaRecapSidebar
-        project={project}
-        orderStorageKey={mediaRecapStorageKey}
-        readOnly={readOnly}
-      />
     </div>
   );
 }
@@ -6095,7 +6087,7 @@ export function WorkflowEditor({
   }, [joinShareBusy, shareTokenTrimmed, resolvedSpaceId]);
 
   return (
-    <div className="relative flex min-h-[100dvh] min-w-0 flex-col overflow-hidden bg-[#06070d] text-white">
+    <div className="relative flex h-[100dvh] max-h-[100dvh] min-w-0 flex-col overflow-hidden bg-[#06070d] text-white">
       <div className="pointer-events-none absolute left-1/2 top-0 h-[420px] w-[900px] -translate-x-1/2 rounded-full bg-violet-600/12 blur-[120px]" />
 
       <header className="relative z-20 flex h-12 shrink-0 items-center justify-between border-b border-white/10 bg-[#06070d]/95 px-4 backdrop-blur-md sm:h-14 sm:px-5">
@@ -6307,8 +6299,8 @@ export function WorkflowEditor({
       ) : null}
       <WorkflowInviteWelcome spaceId={resolvedSpaceId} />
 
-      <div className="relative z-10 flex min-h-0 min-w-0 flex-1">
-        <div className="relative flex min-h-0 min-w-0 flex-1 flex-col bg-[#06070d]">
+      <div className="relative z-10 flex min-h-0 min-w-0 flex-1 overflow-hidden">
+        <div className="relative flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden bg-[#06070d]">
           {runHistory.length > 0 ? (
             <div className="group pointer-events-auto absolute right-3 top-3 z-30 w-[min(250px,calc(100%-1.5rem))] rounded-xl border border-white/12 bg-[#0b0912]/90 p-2 shadow-2xl backdrop-blur-md">
               <div className="mb-2 flex items-center justify-between">
@@ -6377,31 +6369,36 @@ export function WorkflowEditor({
               </div>
             </div>
           ) : null}
-          <div className="relative flex h-full min-h-[480px] min-w-0 flex-1 flex-col">
-            <div className="min-h-0 flex-1">
+          <div className="relative flex h-full min-h-0 min-w-0 flex-1 flex-col overflow-hidden">
+            <div className="min-h-0 flex-1 overflow-hidden">
               {workflowHydrated && !showOnboarding ? (
                 <ReactFlowProvider>
-                  <WorkflowFlowWorkspace
+                  <WorkflowCanvasWithMediaSidebar
                     project={workflowProject}
-                    setProject={setWorkflowProject}
-                    readOnly={workspaceReadOnly}
-                    onRunLog={appendRunHistory}
-                    canvasProjectFlushRef={canvasProjectFlushRef}
-                    onCanvasPersist={persistCanvasNow}
                     mediaRecapStorageKey={`workflow-media-recap:${resolvedSpaceId}`}
-                    showSharePreviewCta={loadedFromShareLink}
-                    sharePreviewDuplicateLabel={
-                      authUserId ? "Duplicate to my workflows" : "Sign up to duplicate"
-                    }
-                    onDuplicateSharePreview={onDuplicateSharePreview}
-                    duplicateSharePreviewBusy={duplicateShareBusy}
-                    sharePreviewJoinLabel={authUserId ? "Join workspace" : undefined}
-                    onJoinShareWorkspace={authUserId ? onJoinShareWorkspace : undefined}
-                    joinShareWorkspaceBusy={joinShareBusy}
-                  />
+                    readOnly={workspaceReadOnly}
+                  >
+                    <WorkflowFlowWorkspace
+                      project={workflowProject}
+                      setProject={setWorkflowProject}
+                      readOnly={workspaceReadOnly}
+                      onRunLog={appendRunHistory}
+                      canvasProjectFlushRef={canvasProjectFlushRef}
+                      onCanvasPersist={persistCanvasNow}
+                      showSharePreviewCta={loadedFromShareLink}
+                      sharePreviewDuplicateLabel={
+                        authUserId ? "Duplicate to my workflows" : "Sign up to duplicate"
+                      }
+                      onDuplicateSharePreview={onDuplicateSharePreview}
+                      duplicateSharePreviewBusy={duplicateShareBusy}
+                      sharePreviewJoinLabel={authUserId ? "Join workspace" : undefined}
+                      onJoinShareWorkspace={authUserId ? onJoinShareWorkspace : undefined}
+                      joinShareWorkspaceBusy={joinShareBusy}
+                    />
+                  </WorkflowCanvasWithMediaSidebar>
                 </ReactFlowProvider>
               ) : (
-                <div className="h-full min-h-[400px] w-full" aria-hidden />
+                <div className="h-full w-full" aria-hidden />
               )}
             </div>
           </div>
@@ -6595,7 +6592,7 @@ export function WorkflowTemplatePreview({
   ]);
 
   return (
-    <div className="relative flex min-h-[100dvh] min-w-0 flex-col overflow-hidden bg-[#06070d] text-white">
+    <div className="relative flex h-[100dvh] max-h-[100dvh] min-w-0 flex-col overflow-hidden bg-[#06070d] text-white">
       <div className="pointer-events-none absolute left-1/2 top-0 h-[420px] w-[900px] -translate-x-1/2 rounded-full bg-violet-600/12 blur-[120px]" />
 
       <header className="relative z-20 flex h-12 shrink-0 items-center justify-between border-b border-white/10 bg-[#06070d]/95 px-4 backdrop-blur-md sm:h-14 sm:px-5">
@@ -6678,21 +6675,26 @@ export function WorkflowTemplatePreview({
       ) : null}
       <div className="relative z-10 flex min-h-0 min-w-0 flex-1">
         <div className="relative flex min-h-0 min-w-0 flex-1 flex-col bg-[#06070d]">
-          <div className="relative flex h-full min-h-[480px] min-w-0 flex-1 flex-col">
-            <div className="min-h-0 flex-1">
+          <div className="relative flex h-full min-h-0 min-w-0 flex-1 flex-col overflow-hidden">
+            <div className="min-h-0 flex-1 overflow-hidden">
               {projectReady ? (
                 <ReactFlowProvider key={resolvedId}>
-                  <WorkflowFlowWorkspace
+                  <WorkflowCanvasWithMediaSidebar
                     project={project}
-                    setProject={setProject}
-                    readOnly
-                    hidePromptsForGuests={guestPromptGate}
                     mediaRecapStorageKey={`workflow-media-recap-preview:${resolvedId}`}
-                    showTemplateUseCta
-                    onUseTemplate={onUseTemplate}
-                    useTemplateBusy={useBusy}
-                    useTemplateCtaLabel={isPublic ? "Use workflow" : "Use template"}
-                  />
+                    readOnly
+                  >
+                    <WorkflowFlowWorkspace
+                      project={project}
+                      setProject={setProject}
+                      readOnly
+                      hidePromptsForGuests={guestPromptGate}
+                      showTemplateUseCta
+                      onUseTemplate={onUseTemplate}
+                      useTemplateBusy={useBusy}
+                      useTemplateCtaLabel={isPublic ? "Use workflow" : "Use template"}
+                    />
+                  </WorkflowCanvasWithMediaSidebar>
                 </ReactFlowProvider>
               ) : (
                 <div className="flex h-full items-center justify-center text-[12px] text-white/40">

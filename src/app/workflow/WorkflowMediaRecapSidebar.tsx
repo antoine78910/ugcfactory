@@ -12,7 +12,7 @@ import {
   X,
 } from "lucide-react";
 import { createPortal } from "react-dom";
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode, type WheelEvent } from "react";
 
 import { cn } from "@/lib/utils";
 
@@ -33,6 +33,34 @@ type Props = {
   orderStorageKey?: string;
   readOnly?: boolean;
 };
+
+type CanvasRowProps = {
+  children: ReactNode;
+  project: WorkflowProjectStateV1;
+  mediaRecapStorageKey?: string;
+  readOnly?: boolean;
+};
+
+/** Canvas + media sidebar row: sidebar scroll is isolated; canvas height stays viewport-bound. */
+export function WorkflowCanvasWithMediaSidebar({
+  children,
+  project,
+  mediaRecapStorageKey,
+  readOnly = false,
+}: CanvasRowProps) {
+  return (
+    <div className="workflow-editor-canvas-row flex h-full min-h-0 w-full overflow-hidden">
+      <div className="relative flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden">{children}</div>
+      {mediaRecapStorageKey ? (
+        <WorkflowMediaRecapSidebar
+          project={project}
+          orderStorageKey={mediaRecapStorageKey}
+          readOnly={readOnly}
+        />
+      ) : null}
+    </div>
+  );
+}
 
 function loadStoredOrder(key: string | undefined): string[] {
   if (!key || typeof window === "undefined") return [];
@@ -140,9 +168,16 @@ export function WorkflowMediaRecapSidebar({ project, orderStorageKey, readOnly =
     });
   }, [readOnly]);
 
+  const isolateWheelFromCanvas = useCallback((e: WheelEvent) => {
+    e.stopPropagation();
+  }, []);
+
   if (collapsed) {
     return (
-      <div className="workflow-media-recap-sidebar flex h-full max-h-full min-h-0 shrink-0 flex-col border-l border-white/10 bg-[#08080f]/95">
+      <div
+        className="workflow-media-recap-sidebar flex h-full max-h-full min-h-0 shrink-0 flex-col border-l border-white/10 bg-[#08080f]/95"
+        onWheel={isolateWheelFromCanvas}
+      >
         <button
           type="button"
           onClick={() => setCollapsed(false)}
@@ -161,7 +196,10 @@ export function WorkflowMediaRecapSidebar({ project, orderStorageKey, readOnly =
 
   return (
     <>
-      <aside className="workflow-media-recap-sidebar flex h-full max-h-full min-h-0 w-[min(100%,300px)] shrink-0 flex-col overflow-hidden border-l border-white/10 bg-[#08080f]/95 backdrop-blur-md">
+      <aside
+        className="workflow-media-recap-sidebar flex h-full max-h-full min-h-0 w-[min(100%,300px)] shrink-0 flex-col overflow-hidden border-l border-white/10 bg-[#08080f]/95 backdrop-blur-md"
+        onWheel={isolateWheelFromCanvas}
+      >
         <div className="flex shrink-0 items-center justify-between gap-2 border-b border-white/10 px-3 py-2.5">
           <div className="flex min-w-0 items-center gap-2">
             <Images className="h-4 w-4 shrink-0 text-violet-300/80" aria-hidden />
@@ -181,7 +219,10 @@ export function WorkflowMediaRecapSidebar({ project, orderStorageKey, readOnly =
           </button>
         </div>
 
-        <div className="workflow-media-recap-scroll min-h-0 flex-1 overflow-x-hidden overflow-y-auto overscroll-y-contain p-2">
+        <div
+          className="workflow-media-recap-scroll min-h-0 flex-1 overflow-x-hidden overflow-y-auto overscroll-y-contain p-2"
+          onWheel={isolateWheelFromCanvas}
+        >
           {items.length === 0 ? (
             <p className="px-2 py-6 text-center text-[12px] leading-relaxed text-white/45">
               Run image or video nodes to see outputs here. List modules with media exports appear too.
