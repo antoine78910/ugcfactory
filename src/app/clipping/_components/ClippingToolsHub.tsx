@@ -9,13 +9,7 @@ import { ArrowRight, Clapperboard, GitBranch, Link2, Maximize2, X } from "lucide
 
 import { SiteContactLinks } from "@/app/_components/SiteContactLinks";
 import { CLIPPING_TOOLS_PATH } from "@/lib/clippingPaths";
-import {
-  clippingBadgeClassName,
-  clippingBtnOutlineSm,
-  clippingBtnPrimarySm,
-  clippingCardClassName,
-  clippingEyebrowClassName,
-} from "@/lib/clippingUi";
+import { clippingBtnPrimarySm, clippingCardClassName, clippingEyebrowClassName } from "@/lib/clippingUi";
 import { studioAppPath, studioBrowserApiUrl } from "@/lib/studioAppOrigin";
 import { cn } from "@/lib/utils";
 
@@ -127,19 +121,19 @@ function ToolPreviewVideo({
 
   return (
     <div
-      className="relative mx-auto w-full max-w-[240px] overflow-hidden rounded-xl border border-white/[0.08] bg-black/40 shadow-[0_22px_60px_rgba(0,0,0,0.45),inset_0_0_0_1px_rgba(255,255,255,0.06)]"
+      className="relative mx-auto h-[min(28vh,168px)] w-full max-w-[min(42%,168px)] overflow-hidden rounded-lg border border-white/[0.08] bg-black/40 shadow-[0_16px_40px_rgba(0,0,0,0.4),inset_0_0_0_1px_rgba(255,255,255,0.06)]"
       onPointerEnter={play}
       onPointerLeave={stop}
     >
       <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_50%_0%,rgba(139,92,246,0.18),transparent_60%)]" />
-      <div className="pointer-events-none absolute inset-x-0 bottom-0 z-[2] h-20 bg-gradient-to-b from-transparent to-black/55" />
+      <div className="pointer-events-none absolute inset-x-0 bottom-0 z-[2] h-12 bg-gradient-to-b from-transparent to-black/55" />
       <button
         type="button"
         onClick={(e) => {
           e.stopPropagation();
           onFullscreen();
         }}
-        className="absolute right-2 top-2 z-[3] inline-flex h-8 w-8 items-center justify-center rounded-full border border-white/15 bg-black/55 text-white/90 opacity-0 backdrop-blur-sm transition hover:bg-black/70 group-hover:opacity-100 focus-visible:opacity-100"
+        className="absolute right-1.5 top-1.5 z-[3] inline-flex h-7 w-7 items-center justify-center rounded-full border border-white/15 bg-black/55 text-white/90 opacity-0 backdrop-blur-sm transition hover:bg-black/70 group-hover:opacity-100 focus-visible:opacity-100"
         aria-label="Open fullscreen preview"
         title="Fullscreen"
       >
@@ -148,7 +142,7 @@ function ToolPreviewVideo({
       <video
         src={src}
         ref={videoRef}
-        className="relative aspect-[9/16] w-full object-cover"
+        className="relative h-full w-full object-cover"
         muted
         playsInline
         loop
@@ -247,18 +241,18 @@ export function ClippingToolsHub() {
 
   return (
     <>
-      <ClippingPageShell active="tools" mainClassName="mx-auto max-w-6xl px-4 py-8 sm:px-6 sm:py-12">
-        <header className="mx-auto mb-10 max-w-2xl space-y-4 text-center">
-          <p className={clippingEyebrowClassName}>Clipping studio</p>
-          <h1 className="text-3xl font-bold tracking-tight sm:text-4xl">
+      <ClippingPageShell
+        active="tools"
+        mainClassName="mx-auto flex min-h-[calc(100dvh-3.5rem)] max-w-6xl flex-col px-3 py-3 sm:px-4 sm:py-4"
+      >
+        <header className="mb-3 shrink-0 text-center">
+          <p className={cn(clippingEyebrowClassName, "text-[10px]")}>Clipping studio</p>
+          <h1 className="mt-1 text-xl font-bold tracking-tight sm:text-2xl">
             Three ways to create content that converts
           </h1>
-          <p className="text-sm leading-relaxed text-white/55 sm:text-base">
-            Record fast with Template 1, replay proven Link to Ad runs, record winning workflows, everything you need to clip with confidence.
-          </p>
         </header>
 
-        <section className="grid gap-5 lg:grid-cols-3">
+        <section className="grid min-h-0 flex-1 gap-3 lg:grid-cols-3 lg:items-stretch">
           {TOOLS.map((tool) => {
             const Icon = tool.icon;
             const ctaClassName = clippingBtnPrimarySm;
@@ -272,7 +266,7 @@ export function ClippingToolsHub() {
                 )}
               >
                 <div
-                  className={`relative flex items-center justify-center bg-gradient-to-b ${tool.accent} px-4 py-5`}
+                  className={`relative flex min-h-0 items-center justify-center bg-gradient-to-b px-3 py-3 ${tool.accent}`}
                 >
                   <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_50%_0%,rgba(255,255,255,0.05),transparent_60%)]" />
                   <ToolPreviewVideo
@@ -284,24 +278,25 @@ export function ClippingToolsHub() {
                   />
                 </div>
 
-                <div className="flex flex-1 flex-col p-5">
-                  <div className="mb-3 flex items-center gap-2">
-                    <Icon className="h-3.5 w-3.5 text-white/35" aria-hidden />
+                <div className="flex min-h-0 flex-1 flex-col p-3 sm:p-3.5">
+                  <div className="mb-1.5 flex items-center gap-2">
+                    <Icon className="h-3 w-3 text-white/35" aria-hidden />
+                    <h2 className="text-sm font-semibold tracking-tight text-white sm:text-base">
+                      {tool.title}
+                    </h2>
                   </div>
-
-                  <h2 className="text-lg font-semibold tracking-tight text-white">{tool.title}</h2>
-                  <p className="mt-1 text-xs font-medium text-white/45">{tool.tagline}</p>
-                  <p className="mt-3 flex-1 text-sm leading-relaxed text-white/60">
+                  <p className="text-[11px] font-medium leading-snug text-white/45">{tool.tagline}</p>
+                  <p className="mt-1.5 line-clamp-2 flex-1 text-[11px] leading-snug text-white/55 sm:text-xs">
                     {tool.description}
                   </p>
 
                   {tool.requiresAuth ? (
-                    <button type="button" onClick={onLinkToAdClick} className={cn("mt-5 w-full", ctaClassName)}>
+                    <button type="button" onClick={onLinkToAdClick} className={cn("mt-3 w-full", ctaClassName)}>
                       {tool.cta}
                       <ArrowRight className="h-3.5 w-3.5 opacity-70 transition group-hover:translate-x-0.5" />
                     </button>
                   ) : (
-                    <Link href={tool.href} className={cn("mt-5 w-full", ctaClassName)}>
+                    <Link href={tool.href} className={cn("mt-3 w-full", ctaClassName)}>
                       {tool.cta}
                       <ArrowRight className="h-3.5 w-3.5 opacity-70 transition group-hover:translate-x-0.5" />
                     </Link>
@@ -312,7 +307,7 @@ export function ClippingToolsHub() {
           })}
         </section>
 
-        <p className="mt-10 text-center text-xs text-white/40">
+        <p className="mt-3 shrink-0 text-center text-[10px] text-white/40">
           New here?{" "}
           <button
             type="button"
@@ -324,7 +319,7 @@ export function ClippingToolsHub() {
           to get Link to Ad template access.
         </p>
 
-        <footer className="mt-12 border-t border-white/[0.08] pt-6">
+        <footer className="mt-3 shrink-0 border-t border-white/[0.08] pt-3">
           <div className="flex justify-center">
             <SiteContactLinks />
           </div>
