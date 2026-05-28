@@ -1,15 +1,20 @@
 "use client";
 
+import Image from "next/image";
 import Link from "next/link";
 import { useCallback, useEffect, useRef, useState, type ReactNode } from "react";
 import { ArrowRight, Check, ExternalLink, Play, X } from "lucide-react";
 
-import { cn } from "@/lib/utils";
+import { clippingBtnOutline, clippingBtnPrimary } from "@/lib/clippingUi";
 import { studioAppPath, studioBrowserApiUrl } from "@/lib/studioAppOrigin";
 import { CLIPPING_SIGNUP_REDIRECT_PATH } from "@/lib/analytics/clippingSignupRef";
+import { cn } from "@/lib/utils";
+
+import ltaTemplateToggle from "../images/lta-template-toggle.png";
 
 const LTA_STUDIO_HOST = "app.youry.io/link-to-ad";
-const LTA_TOGGLE_SCREENSHOT = "/clipping/lta-template-toggle.png";
+/** Fallback if static import path is ever bypassed (also at /lta-template-toggle.png). */
+export const LTA_TOGGLE_SCREENSHOT_PUBLIC = "/lta-template-toggle.png";
 const LTA_DEMO_VIDEO_URL =
   "https://drive.google.com/file/d/1cJzkvA81MIMt-bc0EDA2zEKAYygrsTQZ/view?usp=sharing";
 
@@ -59,7 +64,6 @@ export function ClippingLinkToAdSignupDialog({
   const [email, setEmail] = useState("");
   const [emailDone, setEmailDone] = useState(false);
   const [emailError, setEmailError] = useState<string | null>(null);
-  const [screenshotMissing, setScreenshotMissing] = useState(false);
 
   useEffect(() => {
     if (!open) {
@@ -121,10 +125,8 @@ export function ClippingLinkToAdSignupDialog({
 
   if (!open) return null;
 
-  const ghostBtn =
-    "inline-flex items-center justify-center gap-1.5 rounded-full border border-white/[0.08] bg-white/[0.03] px-4 py-2 text-[13px] font-medium text-white/80 transition hover:border-violet-400/20 hover:bg-violet-500/[0.06] hover:text-white";
-  const primaryBtn =
-    "inline-flex w-full items-center justify-center gap-1.5 rounded-full bg-violet-500 px-4 py-2.5 text-[13px] font-semibold text-white shadow-[0_0_24px_rgba(139,92,246,0.22)] transition hover:bg-violet-400";
+  const ghostBtn = cn(clippingBtnOutline, "text-[13px]");
+  const primaryBtn = cn(clippingBtnPrimary, "w-full text-[13px]");
 
   return (
     <div
@@ -136,7 +138,7 @@ export function ClippingLinkToAdSignupDialog({
         role="dialog"
         aria-modal="true"
         aria-labelledby="clipping-lta-signup-title"
-        className="relative max-h-[min(90vh,760px)] w-full max-w-[420px] overflow-hidden rounded-[1.35rem] border border-white/[0.06] bg-[#07050c] shadow-[0_32px_100px_rgba(0,0,0,0.65),0_0_0_1px_rgba(167,139,250,0.06)_inset]"
+        className="relative max-h-[min(90vh,760px)] w-full max-w-[420px] overflow-hidden rounded-[1.35rem] border border-white/[0.08] bg-[#050507] shadow-[0_32px_100px_rgba(0,0,0,0.65),0_0_0_1px_rgba(167,139,250,0.06)_inset]"
         onClick={(e) => e.stopPropagation()}
       >
         <div
@@ -240,10 +242,7 @@ export function ClippingLinkToAdSignupDialog({
                       type="button"
                       onClick={onSubmitEmail}
                       disabled={emailDone || !email.trim()}
-                      className={cn(
-                        ghostBtn,
-                        "shrink-0 rounded-full px-3.5 disabled:cursor-not-allowed disabled:opacity-40",
-                      )}
+                      className={cn(ghostBtn, "shrink-0 px-3.5 disabled:cursor-not-allowed disabled:opacity-40")}
                     >
                       Next
                     </button>
@@ -275,21 +274,13 @@ export function ClippingLinkToAdSignupDialog({
                 Bottom right on Link to Ad — tap{" "}
                 <span className="font-medium text-violet-200/90">Template</span> to begin.
               </p>
-              <div className="overflow-hidden rounded-xl ring-1 ring-violet-400/15">
-                {!screenshotMissing ? (
-                  // eslint-disable-next-line @next/next/no-img-element
-                  <img
-                    src={LTA_TOGGLE_SCREENSHOT}
-                    alt="Template toggle at the bottom right of Link to Ad"
-                    className="h-auto w-full object-cover object-right-bottom"
-                    onError={() => setScreenshotMissing(true)}
-                  />
-                ) : (
-                  <div className="flex aspect-[5/3] items-center justify-center bg-violet-500/[0.04] px-4 text-center text-[11px] leading-relaxed text-white/30">
-                    Add screenshot at{" "}
-                    <code className="text-violet-300/60">public/clipping/lta-template-toggle.png</code>
-                  </div>
-                )}
+              <div className="overflow-hidden rounded-xl border border-white/[0.06] bg-black/40 ring-1 ring-violet-400/15">
+                <Image
+                  src={ltaTemplateToggle}
+                  alt="Template toggle at the bottom right of Link to Ad"
+                  className="h-auto w-full object-cover object-right-bottom"
+                  sizes="(max-width: 420px) 100vw, 420px"
+                />
               </div>
             </Step>
           </ol>

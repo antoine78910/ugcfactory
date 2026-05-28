@@ -63,41 +63,38 @@
 }
 
 .shimmerText {
-  background: linear-gradient(90deg, #fff 0%, #fff 40%, #c4b5fd 50%, #fff 60%, #fff 100%);
+  background: linear-gradient(90deg, #fafafa 0%, #fafafa 42%, #a78bfa 50%, #fafafa 58%, #fafafa 100%);
   background-size: 200% auto;
   -webkit-background-clip: text;
   background-clip: text;
   -webkit-text-fill-color: transparent;
-  animation: shimmer 4s linear infinite;
+  animation: shimmer 5s ease-in-out infinite;
 }
 
 .stepCard {
-  background: linear-gradient(135deg, rgba(255, 255, 255, 0.03) 0%, rgba(255, 255, 255, 0.01) 100%);
+  background: rgba(255, 255, 255, 0.015);
   border: 1px solid rgba(255, 255, 255, 0.06);
   backdrop-filter: blur(12px);
-  transition: all 0.4s cubic-bezier(0.16, 1, 0.3, 1);
+  transition: all 0.35s cubic-bezier(0.16, 1, 0.3, 1);
 }
 
 .stepCard:hover {
-  border-color: rgba(139, 92, 246, 0.3);
-  background: linear-gradient(135deg, rgba(139, 92, 246, 0.08) 0%, rgba(255, 255, 255, 0.02) 100%);
-  transform: translateY(-4px);
-  box-shadow: 0 20px 60px -15px rgba(139, 92, 246, 0.15);
+  border-color: rgba(167, 139, 250, 0.25);
+  background: rgba(255, 255, 255, 0.025);
+  transform: translateY(-3px);
+  box-shadow: 0 0 40px rgba(139, 92, 246, 0.06);
 }
 
 .tipCard {
-  background: rgba(255, 255, 255, 0.03);
+  background: rgba(255, 255, 255, 0.015);
   border: 1px solid rgba(255, 255, 255, 0.06);
   transition: all 0.3s ease;
 }
 
 .tipCard:hover {
-  background: rgba(255, 255, 255, 0.06);
-  border-color: rgba(255, 255, 255, 0.12);
+  background: rgba(255, 255, 255, 0.03);
+  border-color: rgba(167, 139, 250, 0.2);
   transform: translateY(-2px);
+  box-shadow: 0 0 32px rgba(139, 92, 246, 0.05);
 }
 
-.ctaPattern {
-  background-image: url("data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iMjAwIiBoZWlnaHQ9IjIwMCIgeG1sbnM9Imh0dHA6Ly93d3cudzMub3JnLzIwMDAvc3ZnIj48ZGVmcz48cGF0dGVybiBpZD0iZyIgd2lkdGg9IjIwIiBoZWlnaHQ9IjIwIiBwYXR0ZXJuVW5pdHM9InVzZXJTcGFjZU9uVXNlIj48Y2lyY2xlIGN4PSIxMCIgY3k9IjEwIiByPSIwLjciIGZpbGw9InJnYmEoMjU1LDI1NSwyNTUsMC4wNCkiLz48L3BhdHRlcm4+PC9kZWZzPjxyZWN0IHdpZHRoPSIyMDAiIGhlaWdodD0iMjAwIiBmaWxsPSJ1cmwoI2cpIi8+PC9zdmc+");
-  opacity: 0.5;
-}

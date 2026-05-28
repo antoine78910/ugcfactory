@@ -6891,9 +6891,6 @@ export default function LinkToAdUniverse({
                       onChange={setLtaSeedanceSpeed}
                       locked={ltaVideoDurationLocked}
                     />
-                    <p className="text-[10px] text-white/40">
-                      Normal uses Seedance 2 Fast; Pro uses the full Seedance 2 model.
-                    </p>
                   </div>
                 </div>
                 <div>

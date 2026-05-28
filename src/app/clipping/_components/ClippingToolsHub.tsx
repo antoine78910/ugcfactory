@@ -8,7 +8,17 @@ import { ArrowRight, Clapperboard, GitBranch, Link2 } from "lucide-react";
 
 import { SiteContactLinks } from "@/app/_components/SiteContactLinks";
 import { CLIPPING_TOOLS_PATH } from "@/lib/clippingPaths";
+import {
+  clippingBadgeClassName,
+  clippingBtnOutlineSm,
+  clippingBtnPrimarySm,
+  clippingCardClassName,
+  clippingEyebrowClassName,
+} from "@/lib/clippingUi";
 import { studioAppPath, studioBrowserApiUrl } from "@/lib/studioAppOrigin";
+import { cn } from "@/lib/utils";
+
+import { ClippingPageShell } from "./ClippingShell";
 
 const ClippingLinkToAdSignupDialog = dynamic(
   () =>
@@ -24,7 +34,7 @@ function TemplateOneDiagram() {
     >
       <div className="absolute inset-x-0 top-0 h-[42%] bg-gradient-to-b from-violet-500/20 to-black/40">
         <div className="absolute left-1/2 top-[38%] h-7 w-7 -translate-x-1/2 rounded-full border border-white/20 bg-white/10" />
-        <span className="absolute left-2 top-2 rounded bg-violet-500/80 px-1.5 py-0.5 text-[8px] font-bold uppercase tracking-wide text-white">
+        <span className="absolute left-2 top-2 rounded bg-violet-500/80 px-1.5 py-0.5 text-[8px] font-bold uppercase tracking-wide text-black">
           Hook
         </span>
       </div>
@@ -34,7 +44,7 @@ function TemplateOneDiagram() {
           Template
         </span>
       </div>
-      <div className="absolute left-1/2 top-1/2 z-10 flex h-5 w-5 -translate-x-1/2 -translate-y-1/2 items-center justify-center rounded-full bg-violet-600 text-[9px] font-bold text-white shadow-lg">
+      <div className="absolute left-1/2 top-1/2 z-10 flex h-5 w-5 -translate-x-1/2 -translate-y-1/2 items-center justify-center rounded-full bg-violet-500 text-[9px] font-bold text-black shadow-lg">
         1
       </div>
     </div>
@@ -55,7 +65,7 @@ function LinkToAdDiagram() {
         </div>
       </div>
       <div className="mx-auto my-2 h-4 w-px bg-white/15" />
-      <div className="space-y-1.5 rounded-lg border border-white/10 bg-black/30 p-2">
+      <div className="space-y-1.5 rounded-lg border border-white/[0.08] bg-black/30 p-2">
         {["Product", "Angles", "Scripts"].map((step, i) => (
           <div
             key={step}
@@ -82,7 +92,7 @@ function WorkflowDiagram() {
   ];
   return (
     <div
-      className="relative mx-auto aspect-[4/3] w-full max-w-[180px] overflow-hidden rounded-xl border border-fuchsia-400/20 bg-black/40"
+      className="relative mx-auto aspect-[4/3] w-full max-w-[180px] overflow-hidden rounded-xl border border-violet-400/20 bg-black/40"
       aria-hidden
     >
       <svg className="absolute inset-0 h-full w-full" viewBox="0 0 180 120">
@@ -113,8 +123,8 @@ const TOOLS = [
   {
     id: "template-1",
     badge: "Film",
-    badgeClass: "border-violet-400/30 bg-violet-500/15 text-violet-200",
-    accent: "from-violet-600/20 via-violet-500/5 to-transparent",
+    badgeClass: clippingBadgeClassName,
+    accent: "from-violet-600/15 via-violet-500/5 to-transparent",
     icon: Clapperboard,
     title: "Template 1",
     tagline: "One take. Hook + split-screen. Auto export.",
@@ -130,8 +140,8 @@ const TOOLS = [
   {
     id: "link-to-ad",
     badge: "Study",
-    badgeClass: "border-violet-400/30 bg-violet-500/15 text-violet-200",
-    accent: "from-violet-600/20 via-violet-500/5 to-transparent",
+    badgeClass: clippingBadgeClassName,
+    accent: "from-violet-600/15 via-violet-500/5 to-transparent",
     icon: Link2,
     title: "Link to Ad",
     tagline: "Replay winning ad setups step by step.",
@@ -146,8 +156,8 @@ const TOOLS = [
   {
     id: "workflow",
     badge: "Learn",
-    badgeClass: "border-fuchsia-400/30 bg-fuchsia-500/15 text-fuchsia-200",
-    accent: "from-fuchsia-600/20 via-fuchsia-500/5 to-transparent",
+    badgeClass: cn(clippingBadgeClassName, "border-fuchsia-400/25 bg-fuchsia-500/10 text-fuchsia-200/95"),
+    accent: "from-fuchsia-600/15 via-fuchsia-500/5 to-transparent",
     icon: GitBranch,
     title: "Workflow",
     tagline: "See how the pros built it. Download assets.",
@@ -208,108 +218,94 @@ export function ClippingToolsHub() {
 
   return (
     <>
-      <div className="min-h-screen w-full bg-gradient-to-b from-[#06050a] via-[#0a0612] to-[#050307] px-4 py-8 text-white sm:py-12">
-        <div className="mx-auto w-full max-w-6xl space-y-10">
-          <header className="mx-auto max-w-2xl space-y-4 text-center">
-            <p className="text-xs font-semibold uppercase tracking-[0.28em] text-violet-300/80">
-              Clipping studio
-            </p>
-            <h1 className="text-3xl font-bold tracking-tight sm:text-4xl">
-              Three ways to create content that converts
-            </h1>
-            <p className="text-sm leading-relaxed text-white/60 sm:text-base">
-              Film fast with Template 1, study proven Link to Ad runs, or reverse-engineer full
-              workflows — everything you need to clip with confidence.
-            </p>
-          </header>
-
-          <section className="grid gap-5 lg:grid-cols-3">
-            {TOOLS.map((tool) => {
-              const Diagram = tool.diagram;
-              const Icon = tool.icon;
-              const ctaClassName = tool.ctaPrimary
-                ? "mt-5 inline-flex w-full items-center justify-center gap-1.5 rounded-xl bg-violet-600 px-4 py-2.5 text-xs font-semibold text-white transition hover:bg-violet-500"
-                : "mt-5 inline-flex w-full items-center justify-center gap-1.5 rounded-xl border border-white/15 bg-white/[0.04] px-4 py-2.5 text-xs font-semibold text-white/90 transition hover:bg-white/[0.08]";
-
-              return (
-                <article
-                  key={tool.title}
-                  className="group flex flex-col overflow-hidden rounded-2xl border border-white/10 bg-white/[0.03] shadow-[0_12px_40px_rgba(0,0,0,0.28)] transition hover:border-white/20 hover:bg-white/[0.05]"
-                >
-                  <div
-                    className={`relative flex min-h-[168px] items-center justify-center bg-gradient-to-b ${tool.accent} px-4 py-6`}
-                  >
-                    <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_50%_0%,rgba(255,255,255,0.06),transparent_60%)]" />
-                    <Diagram />
-                  </div>
-
-                  <div className="flex flex-1 flex-col p-5">
-                    <div className="mb-3 flex items-center gap-2">
-                      <span
-                        className={`inline-flex rounded-full border px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide ${tool.badgeClass}`}
-                      >
-                        {tool.badge}
-                      </span>
-                      <Icon className="h-3.5 w-3.5 text-white/35" aria-hidden />
-                    </div>
-
-                    <h2 className="text-lg font-semibold text-white">{tool.title}</h2>
-                    <p className="mt-1 text-xs font-medium text-white/50">{tool.tagline}</p>
-                    <p className="mt-3 flex-1 text-sm leading-relaxed text-white/65">
-                      {tool.description}
-                    </p>
-
-                    <ul className="mt-4 flex flex-wrap gap-1.5">
-                      {tool.steps.map((step) => (
-                        <li
-                          key={step}
-                          className="rounded-md border border-white/[0.08] bg-black/25 px-2 py-1 text-[10px] font-medium text-white/55"
-                        >
-                          {step}
-                        </li>
-                      ))}
-                    </ul>
-
-                    {tool.requiresAuth ? (
-                      <button
-                        type="button"
-                        onClick={onLinkToAdClick}
-                        className={ctaClassName}
-                      >
-                        {tool.cta}
-                        <ArrowRight className="h-3.5 w-3.5 opacity-70 transition group-hover:translate-x-0.5" />
-                      </button>
-                    ) : (
-                      <Link href={tool.href} className={ctaClassName}>
-                        {tool.cta}
-                        <ArrowRight className="h-3.5 w-3.5 opacity-70 transition group-hover:translate-x-0.5" />
-                      </Link>
-                    )}
-                  </div>
-                </article>
-              );
-            })}
-          </section>
-
-          <p className="text-center text-xs text-white/40">
-            New here?{" "}
-            <button
-              type="button"
-              onClick={openLinkToAdSignup}
-              className="font-medium text-violet-300/90 underline-offset-2 hover:text-violet-200 hover:underline"
-            >
-              Start for free
-            </button>{" "}
-            to get Link to Ad template access.
+      <ClippingPageShell active="tools" mainClassName="mx-auto max-w-6xl px-4 py-8 sm:px-6 sm:py-12">
+        <header className="mx-auto mb-10 max-w-2xl space-y-4 text-center">
+          <p className={clippingEyebrowClassName}>Clipping studio</p>
+          <h1 className="text-3xl font-bold tracking-tight sm:text-4xl">
+            Three ways to create content that converts
+          </h1>
+          <p className="text-sm leading-relaxed text-white/55 sm:text-base">
+            Film fast with Template 1, study proven Link to Ad runs, or reverse-engineer full
+            workflows — everything you need to clip with confidence.
           </p>
-        </div>
+        </header>
 
-        <footer className="mt-12 border-t border-white/[0.06] pt-6">
-          <div className="mx-auto flex max-w-6xl justify-center px-4">
+        <section className="grid gap-5 lg:grid-cols-3">
+          {TOOLS.map((tool) => {
+            const Diagram = tool.diagram;
+            const Icon = tool.icon;
+            const ctaClassName = tool.ctaPrimary ? clippingBtnPrimarySm : clippingBtnOutlineSm;
+
+            return (
+              <article
+                key={tool.title}
+                className={cn("group flex flex-col overflow-hidden p-0", clippingCardClassName)}
+              >
+                <div
+                  className={`relative flex min-h-[168px] items-center justify-center bg-gradient-to-b ${tool.accent} px-4 py-6`}
+                >
+                  <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_50%_0%,rgba(255,255,255,0.05),transparent_60%)]" />
+                  <Diagram />
+                </div>
+
+                <div className="flex flex-1 flex-col p-5">
+                  <div className="mb-3 flex items-center gap-2">
+                    <span className={tool.badgeClass}>{tool.badge}</span>
+                    <Icon className="h-3.5 w-3.5 text-white/35" aria-hidden />
+                  </div>
+
+                  <h2 className="text-lg font-semibold tracking-tight text-white">{tool.title}</h2>
+                  <p className="mt-1 text-xs font-medium text-white/45">{tool.tagline}</p>
+                  <p className="mt-3 flex-1 text-sm leading-relaxed text-white/60">
+                    {tool.description}
+                  </p>
+
+                  <ul className="mt-4 flex flex-wrap gap-1.5">
+                    {tool.steps.map((step) => (
+                      <li
+                        key={step}
+                        className="rounded-md border border-white/[0.08] bg-black/25 px-2 py-1 text-[10px] font-medium text-white/50"
+                      >
+                        {step}
+                      </li>
+                    ))}
+                  </ul>
+
+                  {tool.requiresAuth ? (
+                    <button type="button" onClick={onLinkToAdClick} className={cn("mt-5 w-full", ctaClassName)}>
+                      {tool.cta}
+                      <ArrowRight className="h-3.5 w-3.5 opacity-70 transition group-hover:translate-x-0.5" />
+                    </button>
+                  ) : (
+                    <Link href={tool.href} className={cn("mt-5 w-full", ctaClassName)}>
+                      {tool.cta}
+                      <ArrowRight className="h-3.5 w-3.5 opacity-70 transition group-hover:translate-x-0.5" />
+                    </Link>
+                  )}
+                </div>
+              </article>
+            );
+          })}
+        </section>
+
+        <p className="mt-10 text-center text-xs text-white/40">
+          New here?{" "}
+          <button
+            type="button"
+            onClick={openLinkToAdSignup}
+            className="font-medium text-violet-300/90 underline-offset-2 hover:text-violet-200 hover:underline"
+          >
+            Start for free
+          </button>{" "}
+          to get Link to Ad template access.
+        </p>
+
+        <footer className="mt-12 border-t border-white/[0.08] pt-6">
+          <div className="flex justify-center">
             <SiteContactLinks />
           </div>
         </footer>
-      </div>
+      </ClippingPageShell>
 
       {mounted ? (
         <ClippingLinkToAdSignupDialog

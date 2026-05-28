@@ -5,7 +5,7 @@
 Screenshot of the **Template** toggle (bottom-right) on Link to Ad.
 
 - **Used on:** `/clipping/tools` → Link to Ad signup dialog (step 4)
-- **Path in app:** `/clipping/lta-template-toggle.png`
+- **Paths in app:** bundled via `src/app/clipping/images/lta-template-toggle.png`; public fallback `/lta-template-toggle.png` and `/clipping/lta-template-toggle.png`
 
 ## Demo video
 

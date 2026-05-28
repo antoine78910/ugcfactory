@@ -17,7 +17,9 @@ import {
   X,
 } from "lucide-react";
 
+import { ClippingPageShell } from "@/app/clipping/_components/ClippingShell";
 import { CLIPPING_TOOLS_PATH } from "@/lib/clippingPaths";
+import { clippingBtnOutlineSm, clippingBtnPrimarySm } from "@/lib/clippingUi";
 import { cn } from "@/lib/utils";
 
 import { studioBrowserApiUrl } from "@/lib/studioAppOrigin";
@@ -1228,18 +1230,17 @@ export default function ClippingStudio() {
   const canEditControls = !isLive || stage === "ready_for_hook";
 
   return (
-    <div className="min-h-screen w-full bg-gradient-to-b from-[#06050a] via-[#0a0612] to-[#050307] text-white">
+    <ClippingPageShell active="tools" mainClassName="mx-auto flex w-full max-w-6xl flex-col gap-6 px-4 py-6 sm:px-6 sm:py-8">
       {/* Mount next/font faces in the DOM so canvas + export can use them. */}
       <div aria-hidden className="pointer-events-none fixed h-0 w-0 overflow-hidden opacity-0">
         <span className={clippingHookMontserrat.className}>Aa</span>
         <span className={clippingHookInter.className}>Aa</span>
         <span className={clippingHookPoppins.className}>Aa</span>
       </div>
-      <div className="mx-auto flex w-full max-w-6xl flex-col gap-6 px-4 py-8 sm:py-10">
-        <header className="flex items-center justify-between gap-3">
+        <header className="flex flex-wrap items-center justify-between gap-3">
           <div className="flex items-center gap-2">
-            <div className="grid size-9 place-items-center rounded-2xl border border-white/10 bg-white/[0.04]">
-              <Wand2 className="size-4 text-violet-300" aria-hidden />
+            <div className="grid size-9 place-items-center rounded-2xl border border-white/[0.08] bg-white/[0.03]">
+              <Wand2 className="size-4 text-violet-400" aria-hidden />
             </div>
             <div>
               <h1 className="text-lg font-semibold tracking-tight">Clipping Studio</h1>
@@ -1255,7 +1256,7 @@ export default function ClippingStudio() {
           <div className="flex items-center gap-2">
             <Link
               href={`${CLIPPING_TOOLS_PATH}/template${clipId ? `?id=${encodeURIComponent(clipId)}` : ""}`}
-              className="inline-flex items-center rounded-xl border border-white/15 bg-white/[0.03] px-3 py-2 text-xs font-semibold text-white/85 transition hover:bg-white/[0.08]"
+              className={clippingBtnOutlineSm}
             >
               Change template
             </Link>
@@ -1265,7 +1266,7 @@ export default function ClippingStudio() {
                   ? `${CLIPPING_TOOLS_PATH}?id=${encodeURIComponent(clipId)}`
                   : CLIPPING_TOOLS_PATH
               }
-              className="inline-flex items-center rounded-xl border border-white/15 bg-white/[0.03] px-3 py-2 text-xs font-semibold text-white/85 transition hover:bg-white/[0.08]"
+              className={clippingBtnOutlineSm}
             >
               Back to tools
             </Link>
@@ -1338,7 +1339,7 @@ export default function ClippingStudio() {
                   <button
                     type="button"
                     onClick={handleAllowAccess}
-                    className="rounded-xl bg-violet-600 px-4 py-2 text-xs font-semibold hover:bg-violet-500"
+                    className={cn(clippingBtnPrimarySm, "px-4 py-2")}
                   >
                     Allow access
                   </button>
@@ -1362,7 +1363,7 @@ export default function ClippingStudio() {
                   <button
                     type="button"
                     onClick={startHookCountdown}
-                    className="inline-flex items-center gap-2 rounded-xl bg-violet-600 px-5 py-2.5 text-sm font-semibold hover:bg-violet-500"
+                    className={cn(clippingBtnPrimarySm, "inline-flex gap-2 px-5 py-2.5 text-sm")}
                   >
                     <CircleDot className="size-4" aria-hidden /> I&apos;m ready
                   </button>
@@ -1381,14 +1382,14 @@ export default function ClippingStudio() {
                     <button
                       type="button"
                       onClick={startVideoCountdown}
-                      className="inline-flex items-center gap-2 rounded-xl bg-violet-600 px-4 py-2.5 text-sm font-semibold hover:bg-violet-500"
+                      className={cn(clippingBtnPrimarySm, "inline-flex gap-2 px-4 py-2.5 text-sm")}
                     >
                       <CircleDot className="size-4" aria-hidden /> Continue
                     </button>
                     <button
                       type="button"
                       onClick={retakeHookPhase}
-                      className="inline-flex items-center gap-2 rounded-xl border border-white/20 bg-white/[0.06] px-4 py-2.5 text-sm font-semibold text-white/90 hover:bg-white/[0.12]"
+                      className={cn(clippingBtnOutlineSm, "inline-flex gap-2 px-4 py-2.5 text-sm")}
                     >
                       <RefreshCw className="size-4" aria-hidden /> Retake hook
                     </button>
@@ -1462,14 +1463,14 @@ export default function ClippingStudio() {
                   <a
                     href={exportedUrl}
                     download={`clip-${clipId ?? "session"}.${exportedExt}`}
-                    className="inline-flex items-center gap-2 rounded-xl bg-violet-600 px-4 py-2 text-xs font-semibold hover:bg-violet-500"
+                    className={cn(clippingBtnPrimarySm, "inline-flex items-center gap-2 px-4 py-2")}
                   >
                     <Download className="size-4" aria-hidden /> Download clip
                   </a>
                   <button
                     type="button"
                     onClick={resetForRetake}
-                    className="inline-flex items-center gap-2 rounded-xl border border-white/15 bg-white/[0.04] px-4 py-2 text-xs font-semibold hover:bg-white/[0.08]"
+                    className={cn(clippingBtnOutlineSm, "inline-flex items-center gap-2 px-4 py-2")}
                   >
                     <RefreshCw className="size-4" aria-hidden /> Retake
                   </button>
@@ -1479,7 +1480,7 @@ export default function ClippingStudio() {
                     <button
                       type="button"
                       onClick={() => setAwaitingFinalDecision(false)}
-                      className="inline-flex items-center gap-2 rounded-lg bg-violet-600 px-3 py-1.5 text-xs font-semibold hover:bg-violet-500"
+                      className={cn(clippingBtnPrimarySm, "inline-flex gap-2 px-3 py-1.5")}
                     >
                       Continue
                     </button>
@@ -1803,7 +1804,7 @@ export default function ClippingStudio() {
                 <button
                   type="button"
                   onClick={startSession}
-                  className="inline-flex w-full items-center justify-center gap-2 rounded-xl bg-violet-600 px-4 py-2.5 text-sm font-semibold hover:bg-violet-500"
+                  className={cn(clippingBtnPrimarySm, "inline-flex w-full justify-center gap-2 px-4 py-2.5 text-sm")}
                 >
                   <Wand2 className="size-4" aria-hidden /> Start session
                 </button>
@@ -1811,7 +1812,7 @@ export default function ClippingStudio() {
                 <button
                   type="button"
                   onClick={handleAllowAccess}
-                  className="inline-flex w-full items-center justify-center gap-2 rounded-xl bg-violet-600 px-4 py-2.5 text-sm font-semibold hover:bg-violet-500"
+                  className={cn(clippingBtnPrimarySm, "inline-flex w-full justify-center gap-2 px-4 py-2.5 text-sm")}
                 >
                   <Video className="size-4" aria-hidden /> Allow camera
                 </button>
@@ -1835,11 +1836,10 @@ export default function ClippingStudio() {
             </ol>
           </aside>
         </div>
-      </div>
       <ClippingTemplateFullscreenPlayer
         preview={templateFullscreenPreview}
         onClose={() => setTemplateFullscreenPreview(null)}
       />
-    </div>
+    </ClippingPageShell>
   );
 }

@@ -3,7 +3,14 @@
 import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
 
+import { ClippingPageShell } from "@/app/clipping/_components/ClippingShell";
 import { CLIPPING_TOOLS_PATH } from "@/lib/clippingPaths";
+import {
+  clippingBtnOutlineSm,
+  clippingCardClassName,
+  clippingEyebrowClassName,
+} from "@/lib/clippingUi";
+import { cn } from "@/lib/utils";
 import {
   listWorkflowTemplates,
   workflowCommunityTemplateId,
@@ -73,66 +80,56 @@ export default function ClippingWorkflowTemplatesPage() {
   );
 
   return (
-    <div className="min-h-screen w-full bg-gradient-to-b from-[#06050a] via-[#0a0612] to-[#050307] px-4 py-8 text-white sm:py-10">
-      <div className="mx-auto w-full max-w-6xl space-y-6">
-        <header className="space-y-2">
-          <p className="text-xs font-semibold uppercase tracking-[0.22em] text-violet-300/80">
-            Clipping workflow
-          </p>
-          <h1 className="text-2xl font-bold tracking-tight sm:text-3xl">
-            All workflow templates for clipping
-          </h1>
-          <p className="text-sm text-white/65">
-            Open any template in fullscreen without signing in. Use &quot;Use workflow&quot; to sign up
-            or copy it into your workspace when you are logged in.
-          </p>
-        </header>
+    <ClippingPageShell active="tools" mainClassName="mx-auto max-w-6xl space-y-6 px-4 py-8 sm:px-6 sm:py-10">
+      <header className="space-y-2">
+        <p className={clippingEyebrowClassName}>Clipping workflow</p>
+        <h1 className="text-2xl font-bold tracking-tight sm:text-3xl">
+          All workflow templates for clipping
+        </h1>
+        <p className="max-w-2xl text-sm leading-relaxed text-white/55 sm:text-base">
+          Open any template in fullscreen without signing in. Use &quot;Use workflow&quot; to sign up
+          or copy it into your workspace when you are logged in.
+        </p>
+      </header>
 
-        {templates.length === 0 ? (
-          <div className="rounded-2xl border border-dashed border-white/15 bg-white/[0.02] px-6 py-10 text-center text-sm text-white/55">
-            No workflow templates available yet.
-          </div>
-        ) : (
-          <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-            {templates.map((template) => (
-              <article
-                key={template.id}
-                className="rounded-2xl border border-white/10 bg-white/[0.03] p-5 shadow-[0_10px_30px_rgba(0,0,0,0.25)]"
-              >
-                <p className="text-[10px] font-semibold uppercase tracking-wide text-violet-200/80">
-                  {template.source === "community"
-                    ? "Community"
-                    : template.source === "custom"
-                      ? "Local copy"
-                      : "Built-in"}
-                </p>
-                <h2 className="mt-2 text-base font-semibold text-white">{template.name}</h2>
-                <p className="mt-2 text-sm leading-relaxed text-white/65">
-                  {template.blurb || "Workflow template for clipping preparation."}
-                </p>
-                {template.authorName ? (
-                  <p className="mt-2 text-xs text-white/45">by {template.authorName}</p>
-                ) : null}
-                <Link
-                  href={`/workflow/public/${encodeURIComponent(template.id)}`}
-                  className="mt-4 inline-flex items-center justify-center rounded-xl border border-white/15 bg-white/[0.03] px-4 py-2 text-xs font-semibold text-white/90 transition hover:bg-white/[0.08]"
-                >
-                  Open template
-                </Link>
-              </article>
-            ))}
-          </div>
-        )}
-
-        <div>
-          <Link
-            href={CLIPPING_TOOLS_PATH}
-            className="inline-flex items-center rounded-xl border border-white/15 bg-white/[0.03] px-3 py-2 text-xs font-semibold text-white/85 transition hover:bg-white/[0.08]"
-          >
-            Back to clipping tools
-          </Link>
+      {templates.length === 0 ? (
+        <div className="rounded-2xl border border-dashed border-white/[0.12] bg-white/[0.02] px-6 py-10 text-center text-sm text-white/50">
+          No workflow templates available yet.
         </div>
+      ) : (
+        <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+          {templates.map((template) => (
+            <article key={template.id} className={cn("p-5", clippingCardClassName)}>
+              <p className="text-[10px] font-semibold uppercase tracking-wide text-violet-200/80">
+                {template.source === "community"
+                  ? "Community"
+                  : template.source === "custom"
+                    ? "Local copy"
+                    : "Built-in"}
+              </p>
+              <h2 className="mt-2 text-base font-semibold tracking-tight text-white">{template.name}</h2>
+              <p className="mt-2 text-sm leading-relaxed text-white/60">
+                {template.blurb || "Workflow template for clipping preparation."}
+              </p>
+              {template.authorName ? (
+                <p className="mt-2 text-xs text-white/40">by {template.authorName}</p>
+              ) : null}
+              <Link
+                href={`/workflow/public/${encodeURIComponent(template.id)}`}
+                className={cn("mt-4", clippingBtnOutlineSm)}
+              >
+                Open template
+              </Link>
+            </article>
+          ))}
+        </div>
+      )}
+
+      <div>
+        <Link href={CLIPPING_TOOLS_PATH} className={clippingBtnOutlineSm}>
+          Back to clipping tools
+        </Link>
       </div>
-    </div>
+    </ClippingPageShell>
   );
 }

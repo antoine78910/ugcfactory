@@ -13,7 +13,7 @@ export default function ClippingPage() {
   return (
     <Suspense
       fallback={
-        <div className="flex min-h-screen items-center justify-center bg-[#06050a] text-sm text-white/45">
+        <div className="flex min-h-screen items-center justify-center bg-[#050507] text-sm text-white/45">
           Loading clipping tools…
         </div>
       }
