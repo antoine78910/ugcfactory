@@ -19,7 +19,14 @@ import {
 
 import { ClippingPageShell } from "@/app/clipping/_components/ClippingShell";
 import { CLIPPING_TOOLS_PATH } from "@/lib/clippingPaths";
-import { clippingBtnOutlineSm, clippingBtnPrimarySm } from "@/lib/clippingUi";
+import {
+  clippingStudioBtnDanger,
+  clippingStudioBtnOutline,
+  clippingStudioBtnOutlineMd,
+  clippingStudioBtnPrimary,
+  clippingStudioBtnPrimaryMd,
+  clippingStudioBtnSuccess,
+} from "@/lib/clippingUi";
 import { cn } from "@/lib/utils";
 
 import { studioBrowserApiUrl } from "@/lib/studioAppOrigin";
@@ -1243,19 +1250,23 @@ export default function ClippingStudio() {
     stage === "countdown_video" ||
     stage === "recording_video" ||
     stage === "processing";
-  const compactControls =
-    stage !== "permission" && stage !== "setup" && stage !== "error" && stage !== "done";
-  const canEditControls = !isLive || stage === "ready_for_hook";
+  /** Setup sidebar only before/during configuration — hidden while recording or reviewing export. */
+  const showSetupSidebar = stage === "permission" || stage === "setup" || stage === "error";
+  const useCenteredStage = !showSetupSidebar;
+  const canEditControls = stage === "permission" || stage === "setup";
 
   return (
-    <ClippingPageShell active="tools" mainClassName="mx-auto flex w-full max-w-6xl flex-col gap-6 px-4 py-6 sm:px-6 sm:py-8">
+    <ClippingPageShell
+      active="tools"
+      mainClassName="mx-auto flex max-h-[calc(100dvh-3.25rem)] w-full max-w-6xl flex-col gap-4 overflow-hidden px-4 py-4 sm:px-6 sm:py-5"
+    >
       {/* Mount next/font faces in the DOM so canvas + export can use them. */}
       <div aria-hidden className="pointer-events-none fixed h-0 w-0 overflow-hidden opacity-0">
         <span className={clippingHookMontserrat.className}>Aa</span>
         <span className={clippingHookInter.className}>Aa</span>
         <span className={clippingHookPoppins.className}>Aa</span>
       </div>
-        <header className="flex flex-wrap items-center justify-between gap-3">
+        <header className="flex shrink-0 flex-wrap items-center justify-between gap-3">
           <div className="flex items-center gap-2">
             <div className="grid size-9 place-items-center rounded-2xl border border-white/[0.08] bg-white/[0.03]">
               <Wand2 className="size-4 text-violet-400" aria-hidden />
@@ -1274,7 +1285,7 @@ export default function ClippingStudio() {
           <div className="flex items-center gap-2">
             <Link
               href={`${CLIPPING_TOOLS_PATH}/template${clipId ? `?id=${encodeURIComponent(clipId)}` : ""}`}
-              className={clippingBtnOutlineSm}
+              className={clippingStudioBtnOutline}
             >
               Change template
             </Link>
@@ -1284,7 +1295,7 @@ export default function ClippingStudio() {
                   ? `${CLIPPING_TOOLS_PATH}?id=${encodeURIComponent(clipId)}`
                   : CLIPPING_TOOLS_PATH
               }
-              className={clippingBtnOutlineSm}
+              className={clippingStudioBtnOutline}
             >
               Back to tools
             </Link>
@@ -1292,7 +1303,7 @@ export default function ClippingStudio() {
               <a
                 href={exportedUrl}
                 download={`clip-${clipId ?? "session"}.${exportedExt}`}
-                className="inline-flex items-center gap-2 rounded-xl border border-emerald-400/30 bg-emerald-500/15 px-3 py-2 text-xs font-semibold text-emerald-100 hover:bg-emerald-500/25"
+                className={clippingStudioBtnSuccess}
               >
                 <Download className="size-4" aria-hidden /> Download
               </a>
@@ -1302,48 +1313,59 @@ export default function ClippingStudio() {
 
         <div
           className={
-            compactControls
-              ? "relative flex min-h-[72vh] items-center justify-center"
-              : "grid grid-cols-1 gap-6 lg:grid-cols-[minmax(0,1fr)_360px]"
+            showSetupSidebar
+              ? "grid min-h-0 flex-1 grid-cols-1 gap-4 overflow-hidden lg:grid-cols-[minmax(0,1fr)_min(360px,34vw)] lg:items-start"
+              : "relative flex min-h-0 flex-1 items-center justify-center overflow-hidden"
           }
         >
           {/* ---------- Stage / live preview ---------- */}
           <section
             className={
-              compactControls
-                ? "relative flex w-full max-w-[520px] flex-col items-center justify-center gap-4 rounded-3xl border border-white/8 bg-black/40 p-4 sm:p-6"
-                : "relative flex flex-col items-center justify-center gap-4 rounded-3xl border border-white/8 bg-black/40 p-4 sm:p-6"
+              useCenteredStage
+                ? "relative flex w-full max-w-[min(420px,92vw)] flex-col items-center justify-center gap-3"
+                : "relative flex min-h-0 flex-col items-center justify-center gap-4 overflow-hidden rounded-3xl border border-white/8 bg-black/40 p-4 sm:p-6"
             }
           >
             <div
               className="relative w-full max-w-[420px] overflow-hidden rounded-2xl border border-white/10 bg-black"
               style={{ aspectRatio: "9 / 16" }}
             >
-              {/* Hidden decode surfaces — composite happens on the visible canvas below. */}
-              <video
-                ref={webcamVideoRef}
-                playsInline
-                muted
-                autoPlay
-                className="pointer-events-none absolute inset-0 h-full w-full opacity-0"
-              />
-              <video
-                ref={templateVideoRef}
-                playsInline
-                preload="auto"
-                src={templateObjectUrl ?? undefined}
-                onEnded={() => {
-                  if (stageRef.current === "recording_video") finalizeRecording();
-                }}
-                className="pointer-events-none absolute inset-0 h-full w-full opacity-0"
-              />
-              {/* Single output canvas: full recording resolution, scaled by CSS (GPU) — avoids per-frame CPU downscale copy. */}
-              <canvas
-                ref={canvasRef}
-                width={CANVAS_WIDTH}
-                height={CANVAS_HEIGHT}
-                className="block h-full w-full object-contain transform-gpu"
-              />
+              {stage === "done" && exportedUrl ? (
+                <video
+                  key={exportedUrl}
+                  src={exportedUrl}
+                  controls
+                  playsInline
+                  className="absolute inset-0 h-full w-full bg-black object-contain"
+                />
+              ) : (
+                <>
+                  {/* Hidden decode surfaces — composite happens on the visible canvas below. */}
+                  <video
+                    ref={webcamVideoRef}
+                    playsInline
+                    muted
+                    autoPlay
+                    className="pointer-events-none absolute inset-0 h-full w-full opacity-0"
+                  />
+                  <video
+                    ref={templateVideoRef}
+                    playsInline
+                    preload="auto"
+                    src={templateObjectUrl ?? undefined}
+                    onEnded={() => {
+                      if (stageRef.current === "recording_video") finalizeRecording();
+                    }}
+                    className="pointer-events-none absolute inset-0 h-full w-full opacity-0"
+                  />
+                  <canvas
+                    ref={canvasRef}
+                    width={CANVAS_WIDTH}
+                    height={CANVAS_HEIGHT}
+                    className="block h-full w-full object-contain transform-gpu"
+                  />
+                </>
+              )}
 
               {/* Overlays per stage. */}
               {stage === "permission" ? (
@@ -1357,7 +1379,7 @@ export default function ClippingStudio() {
                   <button
                     type="button"
                     onClick={handleAllowAccess}
-                    className={cn(clippingBtnPrimarySm, "px-4 py-2")}
+                    className={clippingStudioBtnPrimary}
                   >
                     Allow access
                   </button>
@@ -1381,7 +1403,7 @@ export default function ClippingStudio() {
                   <button
                     type="button"
                     onClick={startHookCountdown}
-                    className={cn(clippingBtnPrimarySm, "inline-flex gap-2 px-5 py-2.5 text-sm")}
+                    className={clippingStudioBtnPrimaryMd}
                   >
                     <CircleDot className="size-4" aria-hidden /> I&apos;m ready
                   </button>
@@ -1400,14 +1422,14 @@ export default function ClippingStudio() {
                     <button
                       type="button"
                       onClick={startVideoCountdown}
-                      className={cn(clippingBtnPrimarySm, "inline-flex gap-2 px-4 py-2.5 text-sm")}
+                      className={clippingStudioBtnPrimaryMd}
                     >
                       <CircleDot className="size-4" aria-hidden /> Continue
                     </button>
                     <button
                       type="button"
                       onClick={retakeHookPhase}
-                      className={cn(clippingBtnOutlineSm, "inline-flex gap-2 px-4 py-2.5 text-sm")}
+                      className={clippingStudioBtnOutlineMd}
                     >
                       <RefreshCw className="size-4" aria-hidden /> Retake hook
                     </button>
@@ -1434,7 +1456,7 @@ export default function ClippingStudio() {
                       setErrorMessage(null);
                       setStage("permission");
                     }}
-                    className="rounded-xl border border-white/20 bg-white/5 px-4 py-2 text-xs font-semibold hover:bg-white/10"
+                    className={clippingStudioBtnOutline}
                   >
                     Try again
                   </button>
@@ -1450,7 +1472,7 @@ export default function ClippingStudio() {
                 </div>
               ) : null}
 
-              {currentLabel && stage !== "permission" && stage !== "error" ? (
+              {currentLabel && stage !== "permission" && stage !== "error" && stage !== "done" ? (
                 <div className="pointer-events-none absolute bottom-3 left-1/2 -translate-x-1/2 rounded-full border border-white/15 bg-black/65 px-3 py-1 text-[11px] font-semibold text-white/85 backdrop-blur">
                   {currentLabel}
                 </div>
@@ -1462,80 +1484,57 @@ export default function ClippingStudio() {
               <button
                 type="button"
                 onClick={handleStopRecording}
-                className="inline-flex items-center gap-2 rounded-xl border border-red-400/35 bg-red-500/15 px-4 py-2 text-xs font-semibold text-red-100 hover:bg-red-500/25"
+                className={clippingStudioBtnDanger}
               >
                 <Square className="size-4" aria-hidden /> Stop & export
               </button>
             ) : null}
 
-            {/* Done state: video playback + retake. */}
             {stage === "done" && exportedUrl ? (
-              <div className="flex w-full max-w-[420px] flex-col items-center gap-3">
-                <video
-                  src={exportedUrl}
-                  controls
-                  className="w-full rounded-2xl border border-white/10 bg-black"
-                  style={{ aspectRatio: "9 / 16" }}
-                />
-                <div className="flex items-center gap-2">
+              <div className="flex w-full max-w-[420px] flex-col items-center gap-2">
+                <div className="flex w-full flex-wrap items-center justify-center gap-2">
                   <a
                     href={exportedUrl}
                     download={`clip-${clipId ?? "session"}.${exportedExt}`}
-                    className={cn(clippingBtnPrimarySm, "inline-flex items-center gap-2 px-4 py-2")}
+                    className={clippingStudioBtnPrimary}
                   >
                     <Download className="size-4" aria-hidden /> Download clip
                   </a>
                   <button
                     type="button"
                     onClick={resetForRetake}
-                    className={cn(clippingBtnOutlineSm, "inline-flex items-center gap-2 px-4 py-2")}
+                    className={clippingStudioBtnOutline}
                   >
                     <RefreshCw className="size-4" aria-hidden /> Retake
                   </button>
                 </div>
                 {awaitingFinalDecision ? (
-                  <div className="mt-1 flex w-full flex-wrap items-center justify-center gap-2 rounded-xl border border-white/10 bg-white/[0.03] p-2">
-                    <button
-                      type="button"
-                      onClick={() => setAwaitingFinalDecision(false)}
-                      className={cn(clippingBtnPrimarySm, "inline-flex gap-2 px-3 py-1.5")}
-                    >
-                      Continue
-                    </button>
+                  <div className="flex w-full flex-wrap items-center justify-center gap-2">
                     <button
                       type="button"
                       onClick={resetForRetake}
-                      className="inline-flex items-center gap-2 rounded-lg border border-white/20 bg-white/[0.05] px-3 py-1.5 text-xs font-semibold hover:bg-white/[0.1]"
+                      className={clippingStudioBtnPrimary}
                     >
-                      Retake
+                      Record another clip
                     </button>
                   </div>
                 ) : null}
-                <p className="text-[11px] text-white/45">
-                  File: {exportedBlob ? `${(exportedBlob.size / 1024 / 1024).toFixed(1)} MB` : "—"} ·{" "}
+                <p className="text-center text-[11px] text-white/45">
+                  {exportedBlob ? `${(exportedBlob.size / 1024 / 1024).toFixed(1)} MB` : "—"} ·{" "}
                   {exportedExt.toUpperCase()}
                 </p>
               </div>
             ) : null}
           </section>
 
-          {/* ---------- Setup / controls ---------- */}
-          <aside
-            className={
-              compactControls
-                ? "absolute right-0 top-0 hidden w-[220px] flex-col gap-2 rounded-2xl border border-white/8 bg-black/45 p-3 lg:flex"
-                : "flex flex-col gap-4 rounded-3xl border border-white/8 bg-black/30 p-5"
-            }
-          >
+          {/* ---------- Setup / controls (hidden during recording & export review) ---------- */}
+          {showSetupSidebar ? (
+          <aside className="flex max-h-full min-h-0 flex-col gap-3 overflow-y-auto rounded-3xl border border-white/8 bg-black/30 p-4 studio-minimal-scrollbar sm:gap-4 sm:p-5">
             <div className="flex items-center gap-2 text-sm font-semibold">
               <UploadCloud className="size-4 text-violet-300" aria-hidden /> Template
               video
             </div>
-            <div
-              className={`group relative flex flex-col items-center justify-center gap-1 rounded-2xl border border-dashed border-white/15 bg-white/[0.02] text-center text-xs text-white/55 transition hover:border-violet-400/40 hover:bg-white/[0.04] ${
-                compactControls ? "px-2 py-3" : "px-3 py-6"
-              }`}
-            >
+            <div className="group relative flex flex-col items-center justify-center gap-1 rounded-2xl border border-dashed border-white/15 bg-white/[0.02] px-3 py-6 text-center text-xs text-white/55 transition hover:border-violet-400/40 hover:bg-white/[0.04]">
               <input
                 ref={templateFileInputRef}
                 type="file"
@@ -1822,7 +1821,7 @@ export default function ClippingStudio() {
                 <button
                   type="button"
                   onClick={startSession}
-                  className={cn(clippingBtnPrimarySm, "inline-flex w-full justify-center gap-2 px-4 py-2.5 text-sm")}
+                  className={cn(clippingStudioBtnPrimary, "w-full px-4 py-2.5 text-sm")}
                 >
                   <Wand2 className="size-4" aria-hidden /> Start session
                 </button>
@@ -1830,7 +1829,7 @@ export default function ClippingStudio() {
                 <button
                   type="button"
                   onClick={handleAllowAccess}
-                  className={cn(clippingBtnPrimarySm, "inline-flex w-full justify-center gap-2 px-4 py-2.5 text-sm")}
+                  className={cn(clippingStudioBtnPrimary, "w-full px-4 py-2.5 text-sm")}
                 >
                   <Video className="size-4" aria-hidden /> Allow camera
                 </button>
@@ -1842,17 +1841,20 @@ export default function ClippingStudio() {
               )}
             </div>
 
-            <ol className="mt-1 list-decimal space-y-1 pl-4 text-[11px] text-white/45">
-              <li>Allow camera access</li>
-              <li>
-                Upload the template that plays{" "}
-                {templateId === "split_focus_bottom_webcam" ? "on the top 3/4" : "on the bottom half"}
-              </li>
-              <li>Click ready, record the hook for {hookDuration}s</li>
-              <li>Click ready again, record over the template</li>
-              <li>Download the single auto-merged clip</li>
-            </ol>
+            {stage === "setup" || stage === "permission" ? (
+              <ol className="mt-1 list-decimal space-y-1 pl-4 text-[11px] text-white/45">
+                <li>Allow camera access</li>
+                <li>
+                  Upload the template that plays{" "}
+                  {templateId === "split_focus_bottom_webcam" ? "on the top 3/4" : "on the bottom half"}
+                </li>
+                <li>Click ready, record the hook for {hookDuration}s</li>
+                <li>Click ready again, record over the template</li>
+                <li>Download the single auto-merged clip</li>
+              </ol>
+            ) : null}
           </aside>
+          ) : null}
         </div>
       <ClippingTemplateFullscreenPlayer
         preview={templateFullscreenPreview}

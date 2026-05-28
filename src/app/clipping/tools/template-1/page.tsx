@@ -4,9 +4,9 @@ import Link from "next/link";
 import { ClippingSubpage } from "@/app/clipping/_components/ClippingShell";
 import { CLIPPING_TOOLS_PATH } from "@/lib/clippingPaths";
 import {
-  clippingBtnOutlineSm,
-  clippingBtnPrimarySm,
   clippingCardClassName,
+  clippingStudioBtnOutline,
+  clippingStudioBtnPrimary,
 } from "@/lib/clippingUi";
 import { cn } from "@/lib/utils";
 
@@ -40,7 +40,7 @@ export default function ClippingTemplateOnePage({
           <li>Download a single merged file when export is done.</li>
         </ol>
         <div className="mt-5 flex flex-wrap items-center gap-2">
-          <Link href={`${CLIPPING_TOOLS_PATH}/studio${query}`} className={clippingBtnPrimarySm}>
+          <Link href={`${CLIPPING_TOOLS_PATH}/studio${query}`} className={clippingStudioBtnPrimary}>
             Start with Template 1
           </Link>
           <Link
@@ -49,7 +49,7 @@ export default function ClippingTemplateOnePage({
                 ? `${CLIPPING_TOOLS_PATH}?id=${encodeURIComponent(clipId)}`
                 : CLIPPING_TOOLS_PATH
             }
-            className={clippingBtnOutlineSm}
+            className={clippingStudioBtnOutline}
           >
             Back to clipping tools
           </Link>

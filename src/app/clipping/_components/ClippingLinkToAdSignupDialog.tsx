@@ -4,7 +4,7 @@ import Image from "next/image";
 import { useCallback, useEffect, useRef, useState, type ReactNode } from "react";
 import { ArrowRight, Check, ExternalLink, Play, X } from "lucide-react";
 
-import { clippingBtnOutline, clippingBtnPrimary } from "@/lib/clippingUi";
+import { clippingStudioBtnOutline, clippingStudioBtnPrimary } from "@/lib/clippingUi";
 import { studioAppPath, studioBrowserApiUrl } from "@/lib/studioAppOrigin";
 import { CLIPPING_SIGNUP_REDIRECT_PATH } from "@/lib/analytics/clippingSignupRef";
 import { cn } from "@/lib/utils";
@@ -124,8 +124,8 @@ export function ClippingLinkToAdSignupDialog({
 
   if (!open) return null;
 
-  const ghostBtn = cn(clippingBtnOutline, "text-[13px]");
-  const primaryBtn = cn(clippingBtnPrimary, "w-full text-[13px]");
+  const ghostBtn = cn(clippingStudioBtnOutline, "text-[13px]");
+  const primaryBtn = cn(clippingStudioBtnPrimary, "w-full text-[13px]");
 
   return (
     <div

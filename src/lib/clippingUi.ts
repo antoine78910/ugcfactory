@@ -35,6 +35,29 @@ export const clippingBtnOutline =
 
 export const clippingBtnOutlineSm = cn(clippingBtnOutline, "px-3 py-1.5 text-xs");
 
+/** In-app tool / studio controls (not marketing LP pills). */
+export const clippingStudioBtnPrimary =
+  "inline-flex items-center justify-center gap-1.5 rounded-xl bg-violet-600 px-4 py-2 text-xs font-semibold text-white transition hover:bg-violet-500 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-violet-400/50";
+
+export const clippingStudioBtnPrimaryMd = cn(
+  clippingStudioBtnPrimary,
+  "px-5 py-2.5 text-sm",
+);
+
+export const clippingStudioBtnOutline =
+  "inline-flex items-center justify-center gap-1.5 rounded-xl border border-white/15 bg-white/[0.03] px-4 py-2 text-xs font-semibold text-white/85 transition hover:border-white/20 hover:bg-white/[0.08] hover:text-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-violet-400/40";
+
+export const clippingStudioBtnOutlineMd = cn(
+  clippingStudioBtnOutline,
+  "px-4 py-2.5 text-sm",
+);
+
+export const clippingStudioBtnDanger =
+  "inline-flex items-center justify-center gap-1.5 rounded-xl border border-red-400/35 bg-red-500/15 px-4 py-2 text-xs font-semibold text-red-100 transition hover:bg-red-500/25";
+
+export const clippingStudioBtnSuccess =
+  "inline-flex items-center justify-center gap-1.5 rounded-xl border border-emerald-400/30 bg-emerald-500/15 px-3 py-2 text-xs font-semibold text-emerald-100 transition hover:bg-emerald-500/25";
+
 /** Nav text link. */
 export const clippingNavLinkClassName = (active?: boolean) =>
   cn(

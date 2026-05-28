@@ -5,9 +5,9 @@ import { ClippingSubpage } from "@/app/clipping/_components/ClippingShell";
 import { CLIPPING_TOOLS_PATH } from "@/lib/clippingPaths";
 import {
   clippingBadgeClassName,
-  clippingBtnOutlineSm,
-  clippingBtnPrimarySm,
   clippingCardClassName,
+  clippingStudioBtnOutline,
+  clippingStudioBtnPrimary,
 } from "@/lib/clippingUi";
 import { cn } from "@/lib/utils";
 
@@ -65,7 +65,7 @@ export default function ClippingTemplatePage({
             <div className="mt-5">
               <Link
                 href={`${CLIPPING_TOOLS_PATH}/studio?template=${encodeURIComponent(template.id)}${clipSuffix}`}
-                className={clippingBtnPrimarySm}
+                className={clippingStudioBtnPrimary}
               >
                 Use this template
               </Link>
@@ -81,7 +81,7 @@ export default function ClippingTemplatePage({
               ? `${CLIPPING_TOOLS_PATH}/studio?id=${encodeURIComponent(clipId)}`
               : `${CLIPPING_TOOLS_PATH}/studio`
           }
-          className={clippingBtnOutlineSm}
+          className={clippingStudioBtnOutline}
         >
           Back to clipping studio
         </Link>

@@ -9,7 +9,11 @@ import { ArrowRight, Clapperboard, GitBranch, Link2, Maximize2, X } from "lucide
 
 import { SiteContactLinks } from "@/app/_components/SiteContactLinks";
 import { CLIPPING_TOOLS_PATH } from "@/lib/clippingPaths";
-import { clippingBtnPrimarySm, clippingCardClassName, clippingEyebrowClassName } from "@/lib/clippingUi";
+import {
+  clippingCardClassName,
+  clippingEyebrowClassName,
+  clippingStudioBtnPrimary,
+} from "@/lib/clippingUi";
 import { studioAppPath, studioBrowserApiUrl } from "@/lib/studioAppOrigin";
 import { cn } from "@/lib/utils";
 
@@ -255,7 +259,7 @@ export function ClippingToolsHub() {
         <section className="grid min-h-0 flex-1 gap-3 lg:grid-cols-3 lg:items-stretch lg:content-start">
           {TOOLS.map((tool) => {
             const Icon = tool.icon;
-            const ctaClassName = clippingBtnPrimarySm;
+            const ctaClassName = cn(clippingStudioBtnPrimary, "w-full");
 
             return (
               <article

@@ -6,9 +6,9 @@ import { useEffect, useMemo, useState } from "react";
 import { ClippingPageShell } from "@/app/clipping/_components/ClippingShell";
 import { CLIPPING_TOOLS_PATH } from "@/lib/clippingPaths";
 import {
-  clippingBtnOutlineSm,
   clippingCardClassName,
   clippingEyebrowClassName,
+  clippingStudioBtnOutline,
 } from "@/lib/clippingUi";
 import { cn } from "@/lib/utils";
 import {
@@ -116,7 +116,7 @@ export default function ClippingWorkflowTemplatesPage() {
               ) : null}
               <Link
                 href={`/workflow/public/${encodeURIComponent(template.id)}`}
-                className={cn("mt-4", clippingBtnOutlineSm)}
+                className={cn("mt-4", clippingStudioBtnOutline)}
               >
                 Open template
               </Link>
@@ -126,7 +126,7 @@ export default function ClippingWorkflowTemplatesPage() {
       )}
 
       <div>
-        <Link href={CLIPPING_TOOLS_PATH} className={clippingBtnOutlineSm}>
+        <Link href={CLIPPING_TOOLS_PATH} className={clippingStudioBtnOutline}>
           Back to clipping tools
         </Link>
       </div>
