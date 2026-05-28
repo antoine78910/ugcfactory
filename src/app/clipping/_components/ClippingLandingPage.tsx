@@ -19,7 +19,10 @@ import {
 } from "lucide-react";
 
 import { DiscordIcon } from "@/app/_components/DiscordIcon";
-import { DISCORD_INVITE_URL, SiteContactLinks } from "@/app/_components/SiteContactLinks";
+import {
+  DISCORD_CLIPPING_INVITE_URL,
+  SiteContactLinks,
+} from "@/app/_components/SiteContactLinks";
 import { CLIPPING_TOOLS_PATH } from "@/lib/clippingPaths";
 import {
   clippingBadgeClassName,
@@ -192,7 +195,7 @@ function DiscordCta({
 }) {
   return (
     <a
-      href={DISCORD_INVITE_URL}
+      href={DISCORD_CLIPPING_INVITE_URL}
       target="_blank"
       rel="noopener noreferrer"
       className={className}

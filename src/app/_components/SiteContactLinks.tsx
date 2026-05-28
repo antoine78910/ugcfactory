@@ -5,6 +5,7 @@ import { cn } from "@/lib/utils";
 import { DiscordIcon } from "./DiscordIcon";
 
 export const DISCORD_INVITE_URL = "https://discord.gg/B3exbqPTJM";
+export const DISCORD_CLIPPING_INVITE_URL = "https://discord.gg/3wE6ZV4HG";
 
 type SiteContactLinksProps = {
   className?: string;
