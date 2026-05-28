@@ -26,95 +26,27 @@ const ClippingLinkToAdSignupDialog = dynamic(
   { ssr: false },
 );
 
-function TemplateOneDiagram() {
-  return (
-    <div
-      className="relative mx-auto aspect-[9/14] w-full max-w-[140px] overflow-hidden rounded-xl border border-violet-400/25 bg-black/50 shadow-[inset_0_0_0_1px_rgba(255,255,255,0.06)]"
-      aria-hidden
-    >
-      <div className="absolute inset-x-0 top-0 h-[42%] bg-gradient-to-b from-violet-500/20 to-black/40">
-        <div className="absolute left-1/2 top-[38%] h-7 w-7 -translate-x-1/2 rounded-full border border-white/20 bg-white/10" />
-        <span className="absolute left-2 top-2 rounded bg-violet-500/80 px-1.5 py-0.5 text-[8px] font-bold uppercase tracking-wide text-black">
-          Hook
-        </span>
-      </div>
-      <div className="absolute inset-x-0 bottom-0 h-[58%] border-t border-white/10 bg-gradient-to-t from-emerald-500/10 to-black/30">
-        <div className="absolute inset-2 rounded-md border border-dashed border-white/15 bg-white/[0.04]" />
-        <span className="absolute bottom-2 left-2 rounded bg-white/10 px-1.5 py-0.5 text-[8px] font-semibold text-white/80">
-          Template
-        </span>
-      </div>
-      <div className="absolute left-1/2 top-1/2 z-10 flex h-5 w-5 -translate-x-1/2 -translate-y-1/2 items-center justify-center rounded-full bg-violet-500 text-[9px] font-bold text-black shadow-lg">
-        1
-      </div>
-    </div>
-  );
-}
+const CLIPPING_TOOL_VIDEOS = {
+  template1: "/clipping/tools/template-1.mp4",
+  linkToAd: "/clipping/tools/link-to-ad.mp4",
+  workflow: "/clipping/tools/workflow.mp4",
+} as const;
 
-function LinkToAdDiagram() {
+function ToolPreviewVideo({ src, label }: { src: string; label: string }) {
   return (
-    <div className="relative mx-auto w-full max-w-[180px]" aria-hidden>
-      <div className="flex items-center gap-1.5">
-        <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg border border-violet-400/30 bg-violet-500/10">
-          <Link2 className="h-3.5 w-3.5 text-violet-300" />
-        </div>
-        <div className="h-px flex-1 bg-gradient-to-r from-violet-400/50 to-transparent" />
-        <div className="h-12 w-10 shrink-0 overflow-hidden rounded-md border border-white/15 bg-white/[0.06]">
-          <div className="h-1/2 bg-white/10" />
-          <div className="h-1/2 bg-white/[0.04]" />
-        </div>
-      </div>
-      <div className="mx-auto my-2 h-4 w-px bg-white/15" />
-      <div className="space-y-1.5 rounded-lg border border-white/[0.08] bg-black/30 p-2">
-        {["Product", "Angles", "Scripts"].map((step, i) => (
-          <div
-            key={step}
-            className="flex items-center gap-2 rounded-md border border-white/[0.08] bg-white/[0.04] px-2 py-1"
-          >
-            <span className="flex h-4 w-4 shrink-0 items-center justify-center rounded-full bg-violet-500/25 text-[8px] font-bold text-violet-200">
-              {i + 1}
-            </span>
-            <span className="text-[9px] font-medium text-white/75">{step}</span>
-          </div>
-        ))}
-      </div>
-    </div>
-  );
-}
-
-function WorkflowDiagram() {
-  const nodes = [
-    { x: "left-[8%] top-[18%]", label: "Ref" },
-    { x: "left-[38%] top-[8%]", label: "Prompt" },
-    { x: "left-[68%] top-[22%]", label: "Gen" },
-    { x: "left-[28%] top-[58%]", label: "Edit" },
-    { x: "left-[62%] top-[62%]", label: "Export" },
-  ];
-  return (
-    <div
-      className="relative mx-auto aspect-[4/3] w-full max-w-[180px] overflow-hidden rounded-xl border border-violet-400/20 bg-black/40"
-      aria-hidden
-    >
-      <svg className="absolute inset-0 h-full w-full" viewBox="0 0 180 120">
-        <path
-          d="M 24 32 L 72 18 L 120 38 M 72 18 L 54 72 M 120 38 L 108 78"
-          fill="none"
-          stroke="rgba(167,139,250,0.35)"
-          strokeWidth="1.5"
-          strokeDasharray="3 3"
-        />
-      </svg>
-      {nodes.map((n) => (
-        <div
-          key={n.label}
-          className={`absolute ${n.x} flex h-7 min-w-[2.25rem] items-center justify-center rounded-md border border-violet-400/25 bg-violet-500/15 px-1 text-[8px] font-semibold text-violet-100`}
-        >
-          {n.label}
-        </div>
-      ))}
-      <div className="absolute bottom-1.5 right-1.5 rounded bg-emerald-500/20 px-1 py-0.5 text-[7px] font-bold uppercase tracking-wide text-emerald-200">
-        ↓ media
-      </div>
+    <div className="relative mx-auto w-full max-w-[220px] overflow-hidden rounded-xl border border-white/[0.08] bg-black/40 shadow-[inset_0_0_0_1px_rgba(255,255,255,0.06)]">
+      <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_50%_0%,rgba(139,92,246,0.18),transparent_60%)]" />
+      <video
+        key={src}
+        src={src}
+        className="relative aspect-[9/16] w-full object-cover"
+        muted
+        playsInline
+        loop
+        autoPlay
+        preload="metadata"
+        aria-label={label}
+      />
     </div>
   );
 }
@@ -122,52 +54,40 @@ function WorkflowDiagram() {
 const TOOLS = [
   {
     id: "template-1",
-    badge: "Film",
-    badgeClass: clippingBadgeClassName,
     accent: "from-violet-600/15 via-violet-500/5 to-transparent",
     icon: Clapperboard,
     title: "Template 1",
-    tagline: "One take. Hook + split-screen. Auto export.",
+    tagline: "One take, hook, split-screen, auto export.",
     description:
-      "Record your hook on webcam, react on top of a proven template video, and ship a ready-to-post clip in minutes.",
-    steps: ["Webcam hook", "Split-screen react", "Merged export"],
+      "Record your hook on webcam, react on top of a proven template video, ship a ready to post clip in minutes.",
     href: `${CLIPPING_TOOLS_PATH}/template-1`,
     cta: "Start recording",
-    ctaPrimary: true,
-    diagram: TemplateOneDiagram,
+    videoSrc: CLIPPING_TOOL_VIDEOS.template1,
     requiresAuth: false,
   },
   {
     id: "link-to-ad",
-    badge: "Study",
-    badgeClass: clippingBadgeClassName,
     accent: "from-violet-600/15 via-violet-500/5 to-transparent",
     icon: Link2,
     title: "Link to Ad",
-    tagline: "Replay winning ad setups step by step.",
+    tagline: "Replay winning ad setups, step by step.",
     description:
-      "Open published Link to Ad templates from My Projects and follow the exact flow — products, angles, and scripts — without guessing.",
-    steps: ["Pick a brand", "Walk the pipeline", "Mirror on camera"],
+      "Open published Link to Ad templates and follow the exact flow.",
     cta: "Browse templates",
-    ctaPrimary: false,
-    diagram: LinkToAdDiagram,
+    videoSrc: CLIPPING_TOOL_VIDEOS.linkToAd,
     requiresAuth: true,
   },
   {
     id: "workflow",
-    badge: "Learn",
-    badgeClass: cn(clippingBadgeClassName, "border-fuchsia-400/25 bg-fuchsia-500/10 text-fuchsia-200/95"),
     accent: "from-fuchsia-600/15 via-fuchsia-500/5 to-transparent",
     icon: GitBranch,
     title: "Workflow",
-    tagline: "See how the pros built it. Download assets.",
+    tagline: "Record winning workflow",
     description:
-      "Explore read-only workflow templates, understand each generation step, and grab reference images or videos to recreate the style.",
-    steps: ["View the graph", "Read each step", "Download media"],
+      "Record ready workflow templates from various topics, clone avatar, ecom brand static workflows, and more, to generate views for the product.",
     href: `${CLIPPING_TOOLS_PATH}/workflow`,
     cta: "Open workflows",
-    ctaPrimary: false,
-    diagram: WorkflowDiagram,
+    videoSrc: CLIPPING_TOOL_VIDEOS.workflow,
     requiresAuth: false,
   },
 ] as const;
@@ -225,16 +145,14 @@ export function ClippingToolsHub() {
             Three ways to create content that converts
           </h1>
           <p className="text-sm leading-relaxed text-white/55 sm:text-base">
-            Film fast with Template 1, study proven Link to Ad runs, or reverse-engineer full
-            workflows — everything you need to clip with confidence.
+            Record fast with Template 1, replay proven Link to Ad runs, record winning workflows, everything you need to clip with confidence.
           </p>
         </header>
 
         <section className="grid gap-5 lg:grid-cols-3">
           {TOOLS.map((tool) => {
-            const Diagram = tool.diagram;
             const Icon = tool.icon;
-            const ctaClassName = tool.ctaPrimary ? clippingBtnPrimarySm : clippingBtnOutlineSm;
+            const ctaClassName = clippingBtnPrimarySm;
 
             return (
               <article
@@ -245,12 +163,11 @@ export function ClippingToolsHub() {
                   className={`relative flex min-h-[168px] items-center justify-center bg-gradient-to-b ${tool.accent} px-4 py-6`}
                 >
                   <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_50%_0%,rgba(255,255,255,0.05),transparent_60%)]" />
-                  <Diagram />
+                  <ToolPreviewVideo src={tool.videoSrc} label={`${tool.title} preview`} />
                 </div>
 
                 <div className="flex flex-1 flex-col p-5">
                   <div className="mb-3 flex items-center gap-2">
-                    <span className={tool.badgeClass}>{tool.badge}</span>
                     <Icon className="h-3.5 w-3.5 text-white/35" aria-hidden />
                   </div>
 
@@ -259,17 +176,6 @@ export function ClippingToolsHub() {
                   <p className="mt-3 flex-1 text-sm leading-relaxed text-white/60">
                     {tool.description}
                   </p>
-
-                  <ul className="mt-4 flex flex-wrap gap-1.5">
-                    {tool.steps.map((step) => (
-                      <li
-                        key={step}
-                        className="rounded-md border border-white/[0.08] bg-black/25 px-2 py-1 text-[10px] font-medium text-white/50"
-                      >
-                        {step}
-                      </li>
-                    ))}
-                  </ul>
 
                   {tool.requiresAuth ? (
                     <button type="button" onClick={onLinkToAdClick} className={cn("mt-5 w-full", ctaClassName)}>

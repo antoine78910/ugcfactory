@@ -94,7 +94,7 @@ const STEPS = [
     step: "01",
     title: "Onboarding",
     description:
-      "Join our Discord community and open Clipping Tools on Youry. Get access to Template 1, Link to Ad replays, and workflow references.",
+      "Join our Discord community to get started.",
     icon: Layers,
   },
   {
@@ -115,7 +115,7 @@ const STEPS = [
     step: "04",
     title: "Create content",
     description:
-      "Record with Clipping Studio (hook + split-screen), study Link to Ad templates, or reverse-engineer pro workflows — no heavy editing required.",
+      "Follow the program, record consistently, improve your hooks, no heavy editing required.",
     icon: Video,
   },
   {
@@ -332,13 +332,7 @@ export function ClippingLandingPage() {
           </div>
 
           <Reveal className="mt-8 text-center">
-            <Link
-              href={CLIPPING_TOOLS_PATH}
-              className="inline-flex items-center gap-2 text-sm font-medium text-violet-300/90 transition hover:text-violet-200"
-            >
-              Open clipping tools
-              <ArrowRight className="size-3.5" aria-hidden />
-            </Link>
+            <p className="text-sm font-medium text-white/40">Join Discord to access the program.</p>
           </Reveal>
         </div>
       </section>
@@ -355,11 +349,7 @@ export function ClippingLandingPage() {
               <div className="relative z-10 text-center">
                 <h3 className="mb-4 text-2xl font-bold sm:text-3xl md:text-4xl">Ready to start earning?</h3>
                 <p className="mx-auto mb-8 max-w-lg text-base text-white/50 sm:text-lg">
-                  Join Discord, explore{" "}
-                  <Link href={CLIPPING_TOOLS_PATH} className="text-violet-300/90 hover:text-violet-200">
-                    clipping tools
-                  </Link>
-                  , and post your first clip today.
+                  Join Discord, follow the program, and post your first clip today.
                 </p>
                 <DiscordCta className={cn("group px-8 py-4 text-base", clippingBtnPrimary)}>
                   <DiscordIcon className="size-5" />
@@ -485,9 +475,6 @@ export function ClippingLandingPage() {
                 Join the program
                 <ArrowRight className="size-4 transition-transform group-hover:translate-x-0.5" aria-hidden />
               </DiscordCta>
-              <Link href={CLIPPING_TOOLS_PATH} className={cn("px-8 py-5 text-base", clippingBtnOutline)}>
-                Open clipping tools
-              </Link>
             </div>
             <p className="mt-6 text-sm text-white/25">
               Free to join · No experience needed · Get started in 5 minutes
