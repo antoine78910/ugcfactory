@@ -3,8 +3,9 @@
 import dynamic from "next/dynamic";
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
-import { useCallback, useEffect, useState } from "react";
-import { ArrowRight, Clapperboard, GitBranch, Link2 } from "lucide-react";
+import { createPortal } from "react-dom";
+import { useCallback, useEffect, useRef, useState } from "react";
+import { ArrowRight, Clapperboard, GitBranch, Link2, Maximize2, X } from "lucide-react";
 
 import { SiteContactLinks } from "@/app/_components/SiteContactLinks";
 import { CLIPPING_TOOLS_PATH } from "@/lib/clippingPaths";
@@ -32,18 +33,125 @@ const CLIPPING_TOOL_VIDEOS = {
   workflow: "/clipping/tools/workflow.mp4",
 } as const;
 
-function ToolPreviewVideo({ src, label }: { src: string; label: string }) {
-  return (
-    <div className="relative mx-auto w-full max-w-[220px] overflow-hidden rounded-xl border border-white/[0.08] bg-black/40 shadow-[inset_0_0_0_1px_rgba(255,255,255,0.06)]">
-      <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_50%_0%,rgba(139,92,246,0.18),transparent_60%)]" />
+type ToolFullscreenPreview = { src: string; label: string } | null;
+
+function ToolFullscreenPlayer({
+  preview,
+  onClose,
+}: {
+  preview: ToolFullscreenPreview;
+  onClose: () => void;
+}) {
+  useEffect(() => {
+    if (!preview) return;
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === "Escape") onClose();
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [onClose, preview]);
+
+  if (!preview || typeof document === "undefined") return null;
+
+  return createPortal(
+    <div
+      className="fixed inset-0 z-[220] flex flex-col items-center justify-center bg-black/92 p-4 backdrop-blur-[2px]"
+      role="dialog"
+      aria-modal="true"
+      aria-label="Tool video fullscreen preview"
+      onClick={onClose}
+    >
+      <div className="absolute left-4 right-16 top-4 z-10">
+        <p className="truncate text-sm font-semibold text-white">{preview.label}</p>
+        <p className="mt-0.5 text-[11px] text-white/50">Hover previews are muted, fullscreen has controls</p>
+      </div>
+      <button
+        type="button"
+        className="absolute right-4 top-4 z-10 inline-flex h-10 w-10 items-center justify-center rounded-full border border-white/20 bg-black/65 text-white shadow-lg transition hover:bg-black/85"
+        title="Close preview"
+        aria-label="Close preview"
+        onClick={(e) => {
+          e.stopPropagation();
+          onClose();
+        }}
+      >
+        <X className="h-4 w-4" aria-hidden />
+      </button>
       <video
-        key={src}
+        key={preview.src}
+        src={preview.src}
+        className="max-h-[82vh] w-full max-w-[min(96vw,520px)] object-contain"
+        controls
+        autoPlay
+        playsInline
+        onClick={(e) => e.stopPropagation()}
+      />
+    </div>,
+    document.body,
+  );
+}
+
+function ToolPreviewVideo({
+  src,
+  label,
+  onFullscreen,
+}: {
+  src: string;
+  label: string;
+  onFullscreen: () => void;
+}) {
+  const videoRef = useRef<HTMLVideoElement | null>(null);
+
+  const stop = useCallback(() => {
+    const v = videoRef.current;
+    if (!v) return;
+    try {
+      v.pause();
+      v.currentTime = 0;
+    } catch {
+      /* ignore */
+    }
+  }, []);
+
+  const play = useCallback(() => {
+    const v = videoRef.current;
+    if (!v) return;
+    try {
+      v.currentTime = 0;
+      v.muted = true;
+      void v.play();
+    } catch {
+      /* ignore */
+    }
+  }, []);
+
+  return (
+    <div
+      className="relative mx-auto w-full max-w-[240px] overflow-hidden rounded-xl border border-white/[0.08] bg-black/40 shadow-[0_22px_60px_rgba(0,0,0,0.45),inset_0_0_0_1px_rgba(255,255,255,0.06)]"
+      onPointerEnter={play}
+      onPointerLeave={stop}
+    >
+      <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_50%_0%,rgba(139,92,246,0.18),transparent_60%)]" />
+      <div className="pointer-events-none absolute inset-x-0 bottom-0 z-[2] h-20 bg-gradient-to-b from-transparent to-black/55" />
+      <button
+        type="button"
+        onClick={(e) => {
+          e.stopPropagation();
+          onFullscreen();
+        }}
+        className="absolute right-2 top-2 z-[3] inline-flex h-8 w-8 items-center justify-center rounded-full border border-white/15 bg-black/55 text-white/90 opacity-0 backdrop-blur-sm transition hover:bg-black/70 group-hover:opacity-100 focus-visible:opacity-100"
+        aria-label="Open fullscreen preview"
+        title="Fullscreen"
+      >
+        <Maximize2 className="h-4 w-4" aria-hidden />
+      </button>
+      <video
         src={src}
+        ref={videoRef}
         className="relative aspect-[9/16] w-full object-cover"
         muted
         playsInline
         loop
-        autoPlay
         preload="metadata"
         aria-label={label}
       />
@@ -110,6 +218,7 @@ export function ClippingToolsHub() {
   const searchParams = useSearchParams();
   const [ltaSignupOpen, setLtaSignupOpen] = useState(false);
   const [mounted, setMounted] = useState(false);
+  const [fullscreenPreview, setFullscreenPreview] = useState<ToolFullscreenPreview>(null);
 
   useEffect(() => {
     setMounted(true);
@@ -157,13 +266,22 @@ export function ClippingToolsHub() {
             return (
               <article
                 key={tool.title}
-                className={cn("group flex flex-col overflow-hidden p-0", clippingCardClassName)}
+                className={cn(
+                  "group flex flex-col overflow-hidden p-0 shadow-[0_24px_80px_rgba(0,0,0,0.35)]",
+                  clippingCardClassName,
+                )}
               >
                 <div
-                  className={`relative flex min-h-[168px] items-center justify-center bg-gradient-to-b ${tool.accent} px-4 py-6`}
+                  className={`relative flex items-center justify-center bg-gradient-to-b ${tool.accent} px-4 py-5`}
                 >
                   <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_50%_0%,rgba(255,255,255,0.05),transparent_60%)]" />
-                  <ToolPreviewVideo src={tool.videoSrc} label={`${tool.title} preview`} />
+                  <ToolPreviewVideo
+                    src={tool.videoSrc}
+                    label={`${tool.title} preview`}
+                    onFullscreen={() =>
+                      setFullscreenPreview({ src: tool.videoSrc, label: `${tool.title} preview` })
+                    }
+                  />
                 </div>
 
                 <div className="flex flex-1 flex-col p-5">
@@ -212,6 +330,8 @@ export function ClippingToolsHub() {
           </div>
         </footer>
       </ClippingPageShell>
+
+      <ToolFullscreenPlayer preview={fullscreenPreview} onClose={() => setFullscreenPreview(null)} />
 
       {mounted ? (
         <ClippingLinkToAdSignupDialog
