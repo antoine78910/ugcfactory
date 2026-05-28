@@ -747,6 +747,24 @@ export default function ClippingStudio() {
     };
   }, []);
 
+  /**
+   * Auto-pick a default template as soon as the library loads.
+   * This prevents the "Continue" action from blocking when the user hasn't manually selected/uploaded a template yet.
+   */
+  useEffect(() => {
+    if (templateObjectUrl) return;
+    if (templateLibraryLoading) return;
+    if (templateLibrary.length === 0) return;
+    // Prefer a template matching the current layout when possible; fallback to the first one.
+    const preferred =
+      templateLibrary.find((t) =>
+        templateId === "split_focus_bottom_webcam"
+          ? /template\s*2|split_focus/i.test(`${t.filename} ${t.label}`)
+          : /template\s*1|classic/i.test(`${t.filename} ${t.label}`),
+      ) ?? templateLibrary[0];
+    applyLibraryTemplate(preferred);
+  }, [applyLibraryTemplate, templateId, templateLibrary, templateLibraryLoading, templateObjectUrl]);
+
   /* ----------------------------- Render loop ----------------------------- */
   const startRenderLoop = useCallback(() => {
     if (animationFrameRef.current !== null) return;

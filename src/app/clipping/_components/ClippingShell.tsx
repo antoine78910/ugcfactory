@@ -28,7 +28,15 @@ function ClippingAmbient() {
   );
 }
 
-export function ClippingHeader({ active = "program" }: { active?: ClippingNavActive }) {
+export type ClippingHeaderCtaVariant = "landing" | "none";
+
+export function ClippingHeader({
+  active = "program",
+  cta = "none",
+}: {
+  active?: ClippingNavActive;
+  cta?: ClippingHeaderCtaVariant;
+}) {
   const [mobileOpen, setMobileOpen] = useState(false);
 
   return (
@@ -68,17 +76,19 @@ export function ClippingHeader({ active = "program" }: { active?: ClippingNavAct
               Log in
             </Link>
           </Button>
-          <Button
-            asChild
-            size="sm"
-            className="h-9 rounded-2xl border border-violet-200/40 bg-violet-400 px-3 text-xs font-semibold text-black shadow-[0_6px_0_0_rgba(76,29,149,0.9)] ring-offset-0 transition-all hover:-translate-y-px hover:bg-violet-300 hover:shadow-[0_8px_0_0_rgba(76,29,149,0.9),0_0_28px_rgba(167,139,250,0.5)] focus-visible:border-violet-400/45 focus-visible:ring-violet-400/55 focus-visible:ring-[3px] active:translate-y-1.5 active:shadow-[0_0_0_0_rgba(76,29,149,0.9)] sm:h-10 sm:px-6 sm:text-base"
-          >
-            <Link href="/start/clipping" prefetch={false} className="inline-flex items-center gap-1.5">
-              <Sparkles className="h-3.5 w-3.5 sm:h-4 sm:w-4" aria-hidden />
-              Get started
-              <ArrowRight className="h-3.5 w-3.5 sm:h-4 sm:w-4" aria-hidden />
-            </Link>
-          </Button>
+          {cta === "landing" ? (
+            <Button
+              asChild
+              size="sm"
+              className="h-9 rounded-2xl border border-violet-200/40 bg-violet-400 px-3 text-xs font-semibold text-black shadow-[0_6px_0_0_rgba(76,29,149,0.9)] ring-offset-0 transition-all hover:-translate-y-px hover:bg-violet-300 hover:shadow-[0_8px_0_0_rgba(76,29,149,0.9),0_0_28px_rgba(167,139,250,0.5)] focus-visible:border-violet-400/45 focus-visible:ring-violet-400/55 focus-visible:ring-[3px] active:translate-y-1.5 active:shadow-[0_0_0_0_rgba(76,29,149,0.9)] sm:h-10 sm:px-6 sm:text-base"
+            >
+              <Link href="/start/clipping" prefetch={false} className="inline-flex items-center gap-1.5">
+                <Sparkles className="h-3.5 w-3.5 sm:h-4 sm:w-4" aria-hidden />
+                Get started
+                <ArrowRight className="h-3.5 w-3.5 sm:h-4 sm:w-4" aria-hidden />
+              </Link>
+            </Button>
+          ) : null}
         </div>
 
         <button
@@ -116,14 +126,16 @@ export function ClippingHeader({ active = "program" }: { active?: ClippingNavAct
             >
               Log in
             </Link>
-            <Link
-              href="/start/clipping"
-              className={cn("inline-flex items-center justify-center gap-1.5 text-center", clippingBtnPrimarySm)}
-              onClick={() => setMobileOpen(false)}
-            >
-              <Sparkles className="size-3.5" aria-hidden />
-              Get started
-            </Link>
+            {cta === "landing" ? (
+              <Link
+                href="/start/clipping"
+                className={cn("inline-flex items-center justify-center gap-1.5 text-center", clippingBtnPrimarySm)}
+                onClick={() => setMobileOpen(false)}
+              >
+                <Sparkles className="size-3.5" aria-hidden />
+                Get started
+              </Link>
+            ) : null}
           </nav>
         </div>
       ) : null}
@@ -134,18 +146,20 @@ export function ClippingHeader({ active = "program" }: { active?: ClippingNavAct
 export function ClippingPageShell({
   children,
   active = "program",
+  headerCta = "none",
   className,
   mainClassName,
 }: {
   children: ReactNode;
   active?: ClippingNavActive;
+  headerCta?: ClippingHeaderCtaVariant;
   className?: string;
   mainClassName?: string;
 }) {
   return (
     <div className={cn(clippingPageClassName, className)}>
       <ClippingAmbient />
-      <ClippingHeader active={active} />
+      <ClippingHeader active={active} cta={headerCta} />
       <div className={cn("relative z-10", mainClassName)}>{children}</div>
     </div>
   );
@@ -167,7 +181,11 @@ export function ClippingSubpage({
   maxWidth?: string;
 }) {
   return (
-    <ClippingPageShell active={active} mainClassName={cn("mx-auto px-4 py-8 sm:px-6 sm:py-10", maxWidth)}>
+    <ClippingPageShell
+      active={active}
+      headerCta="none"
+      mainClassName={cn("mx-auto px-4 py-8 sm:px-6 sm:py-10", maxWidth)}
+    >
       {(eyebrow || title || description) && (
         <header className="mb-8 space-y-2">
           {eyebrow ? <p className={clippingEyebrowClassName}>{eyebrow}</p> : null}

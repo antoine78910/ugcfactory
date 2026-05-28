@@ -204,7 +204,7 @@ function DiscordCta({
 
 export function ClippingLandingPage() {
   return (
-    <ClippingPageShell active="program">
+    <ClippingPageShell active="program" headerCta="landing">
       <main>
       <section className="relative px-4 pb-12 pt-10 sm:px-6 sm:pb-20 sm:pt-16">
         <div className="mx-auto max-w-4xl text-center">
