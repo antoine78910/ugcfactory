@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { useCallback, useEffect, useRef, useState, type ReactNode } from "react";
-import { ArrowRight, Check, ExternalLink, X } from "lucide-react";
+import { ArrowRight, Check, ExternalLink, Play, X } from "lucide-react";
 
 import { cn } from "@/lib/utils";
 import { studioAppPath, studioBrowserApiUrl } from "@/lib/studioAppOrigin";
@@ -10,6 +10,8 @@ import { CLIPPING_SIGNUP_REDIRECT_PATH } from "@/lib/analytics/clippingSignupRef
 
 const LTA_STUDIO_HOST = "app.youry.io/link-to-ad";
 const LTA_TOGGLE_SCREENSHOT = "/clipping/lta-template-toggle.png";
+const LTA_DEMO_VIDEO_URL =
+  "https://drive.google.com/file/d/1cJzkvA81MIMt-bc0EDA2zEKAYygrsTQZ/view?usp=sharing";
 
 type ClippingLinkToAdSignupDialogProps = {
   open: boolean;
@@ -165,6 +167,23 @@ export function ClippingLinkToAdSignupDialog({
             <p className="mt-1.5 text-[13px] leading-relaxed text-white/45">
               A short path to the template toggle in Link to Ad.
             </p>
+            <a
+              href={LTA_DEMO_VIDEO_URL}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="mt-4 flex items-center gap-3 rounded-xl border border-violet-400/20 bg-violet-500/[0.06] px-3.5 py-3 text-left transition hover:border-violet-400/35 hover:bg-violet-500/[0.1]"
+            >
+              <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-violet-500/25 text-violet-100">
+                <Play className="size-4 fill-current" aria-hidden />
+              </span>
+              <span className="min-w-0">
+                <span className="block text-[13px] font-medium text-white">Watch the demo</span>
+                <span className="mt-0.5 block text-[11px] leading-snug text-white/45">
+                  See how template access and recording work end to end.
+                </span>
+              </span>
+              <ExternalLink className="ml-auto size-3.5 shrink-0 text-white/25" aria-hidden />
+            </a>
           </header>
 
           <ol className="mt-7">

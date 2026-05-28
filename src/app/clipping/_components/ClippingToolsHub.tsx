@@ -7,6 +7,7 @@ import { useCallback, useEffect, useState } from "react";
 import { ArrowRight, Clapperboard, GitBranch, Link2 } from "lucide-react";
 
 import { SiteContactLinks } from "@/app/_components/SiteContactLinks";
+import { CLIPPING_TOOLS_PATH } from "@/lib/clippingPaths";
 import { studioAppPath, studioBrowserApiUrl } from "@/lib/studioAppOrigin";
 
 const ClippingLinkToAdSignupDialog = dynamic(
@@ -120,7 +121,7 @@ const TOOLS = [
     description:
       "Record your hook on webcam, react on top of a proven template video, and ship a ready-to-post clip in minutes.",
     steps: ["Webcam hook", "Split-screen react", "Merged export"],
-    href: "/clipping/template-1",
+    href: `${CLIPPING_TOOLS_PATH}/template-1`,
     cta: "Start recording",
     ctaPrimary: true,
     diagram: TemplateOneDiagram,
@@ -153,7 +154,7 @@ const TOOLS = [
     description:
       "Explore read-only workflow templates, understand each generation step, and grab reference images or videos to recreate the style.",
     steps: ["View the graph", "Read each step", "Download media"],
-    href: "/clipping/workflow",
+    href: `${CLIPPING_TOOLS_PATH}/workflow`,
     cta: "Open workflows",
     ctaPrimary: false,
     diagram: WorkflowDiagram,

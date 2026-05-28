@@ -29,8 +29,8 @@ function isMarketingPath(pathname: string | null | undefined): boolean {
     return true;
   }
   if (pathname.startsWith("/careers/")) return true;
-  /** Public clipping tools hub only — skip heavy auth/billing providers (fixes client crash on /clipping). */
-  if (pathname === "/clipping") return true;
+  /** Clipping LP + public tools hub — skip heavy auth/billing providers. */
+  if (pathname === "/clipping" || pathname === "/clipping/tools") return true;
   return false;
 }
 

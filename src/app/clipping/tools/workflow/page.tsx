@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
 
+import { CLIPPING_TOOLS_PATH } from "@/lib/clippingPaths";
 import {
   listWorkflowTemplates,
   workflowCommunityTemplateId,
@@ -125,7 +126,7 @@ export default function ClippingWorkflowTemplatesPage() {
 
         <div>
           <Link
-            href="/clipping"
+            href={CLIPPING_TOOLS_PATH}
             className="inline-flex items-center rounded-xl border border-white/15 bg-white/[0.03] px-3 py-2 text-xs font-semibold text-white/85 transition hover:bg-white/[0.08]"
           >
             Back to clipping tools

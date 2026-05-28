@@ -1,8 +1,13 @@
 # Clipping static assets
 
-Upload the Link to Ad **template toggle** screenshot here:
+## `lta-template-toggle.png`
 
-- **File name:** `lta-template-toggle.png` (or `.webp`)
-- **Used on:** `/clipping` → Link to Ad signup dialog (step 4)
+Screenshot of the **Template** toggle (bottom-right) on Link to Ad.
 
-Recommended: crop showing the bottom-right corner of Link to Ad with the template toggle visible.
+- **Used on:** `/clipping/tools` → Link to Ad signup dialog (step 4)
+- **Path in app:** `/clipping/lta-template-toggle.png`
+
+## Demo video
+
+Link to Ad template walkthrough (Google Drive):  
+https://drive.google.com/file/d/1cJzkvA81MIMt-bc0EDA2zEKAYygrsTQZ/view?usp=sharing

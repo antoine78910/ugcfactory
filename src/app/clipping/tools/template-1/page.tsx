@@ -1,6 +1,8 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 
+import { CLIPPING_TOOLS_PATH } from "@/lib/clippingPaths";
+
 export const metadata: Metadata = {
   title: "Clipping Template 1",
   description: "Template 1 for one-take clipping recording.",
@@ -36,13 +38,17 @@ export default function ClippingTemplateOnePage({
           </ol>
           <div className="mt-5 flex items-center gap-2">
             <Link
-              href={`/clipping/studio${query}`}
+              href={`${CLIPPING_TOOLS_PATH}/studio${query}`}
               className="inline-flex items-center justify-center rounded-xl bg-violet-600 px-4 py-2 text-xs font-semibold text-white transition hover:bg-violet-500"
             >
               Start with Template 1
             </Link>
             <Link
-              href={clipId ? `/clipping?id=${encodeURIComponent(clipId)}` : "/clipping"}
+              href={
+                clipId
+                  ? `${CLIPPING_TOOLS_PATH}?id=${encodeURIComponent(clipId)}`
+                  : CLIPPING_TOOLS_PATH
+              }
               className="inline-flex items-center justify-center rounded-xl border border-white/15 bg-white/[0.03] px-4 py-2 text-xs font-semibold text-white/90 transition hover:bg-white/[0.08]"
             >
               Back to clipping tools

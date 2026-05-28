@@ -32,7 +32,48 @@ const nextConfig: NextConfig = {
     return [
       {
         source: "/clipping/link-to-ad",
-        destination: "/clipping?linkToAd=signup",
+        destination: "/clipping/tools?linkToAd=signup",
+        permanent: true,
+      },
+      {
+        source: "/clipping",
+        has: [{ type: "query", key: "linkToAd", value: "signup" }],
+        destination: "/clipping/tools?linkToAd=signup",
+        permanent: true,
+      },
+      {
+        source: "/clipping/studio",
+        destination: "/clipping/tools/studio",
+        permanent: true,
+      },
+      {
+        source: "/clipping/studio/:path*",
+        destination: "/clipping/tools/studio/:path*",
+        permanent: true,
+      },
+      {
+        source: "/clipping/template",
+        destination: "/clipping/tools/template",
+        permanent: true,
+      },
+      {
+        source: "/clipping/template-1",
+        destination: "/clipping/tools/template-1",
+        permanent: true,
+      },
+      {
+        source: "/clipping/workflow",
+        destination: "/clipping/tools/workflow",
+        permanent: true,
+      },
+      {
+        source: "/clipping/workflow/:path*",
+        destination: "/clipping/tools/workflow/:path*",
+        permanent: true,
+      },
+      {
+        source: "/clipping/public/:path*",
+        destination: "/clipping/tools/public/:path*",
         permanent: true,
       },
     ];
