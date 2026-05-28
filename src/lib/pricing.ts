@@ -42,24 +42,25 @@ export const PRICING_BASE = {
 export const STARTER_CREDIT_VALUE_USD = 29.99 / 250;
 
 // ---------------------------------------------------------------------------
-// Link to Ad, Seedance normal (preview): video slice only (full URL Generate adds scan + 3× ref images)
-// Billing: {@link linkToAdVideoCredits} → Seedance Fast @ 720p via PiAPI $/s × retail × credits.
+// Link to Ad — Seedance video slice only (full URL Generate adds scan + 3× ref images)
+// Billing: {@link linkToAdVideoCredits} → Normal = Seedance 2 Fast @ 720p; Pro = Seedance 2 @ 720p.
 // ---------------------------------------------------------------------------
 
-/** Link to Ad image→video: PiAPI `task_type` maps to these ids for `/api/kling/generate`. */
-export type LinkToAdSeedanceSpeed = "normal" | "vip";
+/** Link to Ad image→video quality tier for `/api/kling/generate` model selection. */
+export type LinkToAdSeedanceSpeed = "normal" | "pro";
 
-/** Seedance 2.0 Fast for Link to Ad (single queue / pricing tier). */
-export function linkToAdSeedanceMarketModel(_speed: LinkToAdSeedanceSpeed): string {
-  void _speed;
-  return "bytedance/seedance-2-fast";
+/** Normal → Seedance 2.0 Fast; Pro → Seedance 2.0 (standard). */
+export function linkToAdSeedanceMarketModel(speed: LinkToAdSeedanceSpeed): string {
+  return speed === "pro"
+    ? LINK_TO_AD_VIDEO_MODELS.seedance.marketModelPro
+    : LINK_TO_AD_VIDEO_MODELS.seedance.marketModelNormal;
 }
 
-/** Link to Ad video: Seedance 2.0 Fast (@see https://docs.kie.ai/market/bytedance/seedance-2-fast). */
+/** Link to Ad video models (@see docs.kie.ai/market/bytedance/seedance-2, seedance-2-fast). */
 export const LINK_TO_AD_VIDEO_MODELS = {
   seedance: {
     marketModelNormal: "bytedance/seedance-2-fast" as const,
-    marketModelVip: "bytedance/seedance-2-fast" as const,
+    marketModelPro: "bytedance/seedance-2" as const,
   },
 } as const;
 
@@ -1229,25 +1230,26 @@ export function calculateVideoCreditsForModel(opts: VideoCreditOptions): number 
 }
 
 /**
- * Link to Ad final video: Seedance 2 **Fast** @ **720p** (matches generate route + no resolution UI).
+ * Link to Ad final video @ **720p** (matches generate route + no resolution UI).
+ * Normal → Seedance 2 Fast; Pro → Seedance 2 standard.
  */
 export function linkToAdVideoCredits(
   model: LinkToAdVideoModelId,
   durationSec: number,
-  _seedanceSpeed: LinkToAdSeedanceSpeed = "normal",
+  seedanceSpeed: LinkToAdSeedanceSpeed = "normal",
 ): number {
-  void LINK_TO_AD_VIDEO_MODELS[model];
-  void _seedanceSpeed;
   const d = normalizeUgcScriptVideoDurationSec(durationSec);
+  const marketModel = linkToAdSeedanceMarketModel(seedanceSpeed);
+  void LINK_TO_AD_VIDEO_MODELS[model];
   return calculateVideoCreditsForModel({
-    modelId: "bytedance/seedance-2-fast",
+    modelId: marketModel,
     duration: d,
     audio: true,
     videoResolution: "720p",
   });
 }
 
-/** Reference snapshot for marketing / tests — Seedance Fast @ 720p. */
+/** Reference snapshot for marketing / tests — Normal (Seedance Fast) @ 720p. */
 export const LINK_TO_AD_SEEDANCE_VIDEO_CREDITS_BY_DURATION_SEC: Record<5 | 10 | 15 | 30, number> = {
   5: linkToAdVideoCredits("seedance", 5, "normal"),
   10: linkToAdVideoCredits("seedance", 10, "normal"),
@@ -1255,13 +1257,17 @@ export const LINK_TO_AD_SEEDANCE_VIDEO_CREDITS_BY_DURATION_SEC: Record<5 | 10 | 
   30: linkToAdVideoCredits("seedance", 30, "normal"),
 };
 
-/** @deprecated VIP lane removed; same rates as {@link LINK_TO_AD_SEEDANCE_VIDEO_CREDITS_BY_DURATION_SEC}. */
-export const LINK_TO_AD_SEEDANCE_VIP_VIDEO_CREDITS_BY_DURATION_SEC: Record<5 | 10 | 15 | 30, number> = {
-  5: linkToAdVideoCredits("seedance", 5),
-  10: linkToAdVideoCredits("seedance", 10),
-  15: linkToAdVideoCredits("seedance", 15),
-  30: linkToAdVideoCredits("seedance", 30),
+/** Reference snapshot — Pro (Seedance 2 standard) @ 720p. */
+export const LINK_TO_AD_SEEDANCE_PRO_VIDEO_CREDITS_BY_DURATION_SEC: Record<5 | 10 | 15 | 30, number> = {
+  5: linkToAdVideoCredits("seedance", 5, "pro"),
+  10: linkToAdVideoCredits("seedance", 10, "pro"),
+  15: linkToAdVideoCredits("seedance", 15, "pro"),
+  30: linkToAdVideoCredits("seedance", 30, "pro"),
 };
+
+/** @deprecated Use {@link LINK_TO_AD_SEEDANCE_PRO_VIDEO_CREDITS_BY_DURATION_SEC}. */
+export const LINK_TO_AD_SEEDANCE_VIP_VIDEO_CREDITS_BY_DURATION_SEC =
+  LINK_TO_AD_SEEDANCE_PRO_VIDEO_CREDITS_BY_DURATION_SEC;
 
 /**
  * Studio Edit Video tab, `studio-edit/…` picker ids.

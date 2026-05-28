@@ -112,6 +112,7 @@ import {
   LINK_TO_AD_DEFAULT_VIDEO_MODEL,
   LINK_TO_AD_DEFAULT_VIDEO_DURATION_SEC,
   linkToAdSeedanceMarketModel,
+  type LinkToAdSeedanceSpeed,
 } from "@/lib/linkToAd/generationCredits";
 import type { InternalFetch } from "@/lib/linkToAd/internalFetch";
 import { runInitialPipeline } from "@/lib/linkToAd/runInitialPipeline";
@@ -995,6 +996,54 @@ function LinkToAdStudioStyleCreditPill({
   );
 }
 
+function LinkToAdVideoQualityPicker({
+  value,
+  onChange,
+  locked,
+  disabled,
+}: {
+  value: LinkToAdSeedanceSpeed;
+  onChange: (next: LinkToAdSeedanceSpeed) => void;
+  locked?: boolean;
+  disabled?: boolean;
+}) {
+  if (locked) {
+    return (
+      <p className="rounded-lg border border-white/10 bg-white/[0.03] px-3 py-2 text-xs font-semibold text-white/80">
+        {value === "pro" ? "Pro" : "Normal"}
+        <span className="font-normal text-white/45"> (locked for this run)</span>
+      </p>
+    );
+  }
+  return (
+    <div className="flex items-center gap-1 rounded-lg border border-white/10 bg-white/[0.03] p-1">
+      {(
+        [
+          { id: "normal" as const, label: "Normal", hint: "Seedance 2 Fast — lower cost" },
+          { id: "pro" as const, label: "Pro", hint: "Seedance 2 — higher quality" },
+        ] as const
+      ).map((tier) => (
+        <button
+          key={tier.id}
+          type="button"
+          title={tier.hint}
+          onClick={() => onChange(tier.id)}
+          disabled={disabled}
+          className={cn(
+            "rounded-md px-3 py-1.5 text-xs font-semibold transition",
+            value === tier.id
+              ? "border border-violet-400/60 bg-violet-500/15 text-white"
+              : "border border-white/10 bg-black/20 text-white/65 hover:border-white/20",
+            disabled && "pointer-events-none opacity-50",
+          )}
+        >
+          {tier.label}
+        </button>
+      ))}
+    </div>
+  );
+}
+
 function LinkToAdRecentRunsToggle({
   hidePreviousLtaGenerations,
   onToggle,
@@ -1700,6 +1749,8 @@ export default function LinkToAdUniverse({
   const scriptProvider = "claude" as const;
 
   const [videoDuration, setVideoDuration] = useState<number>(10);
+  /** Normal = Seedance 2 Fast; Pro = Seedance 2 standard. Locked with duration once a run starts. */
+  const [ltaSeedanceSpeed, setLtaSeedanceSpeed] = useState<LinkToAdSeedanceSpeed>("normal");
   const linkToAdSeedancePreviewMaxPollMs = 12 * 60 * 60 * 1000;
   /** After Generate from URL (or when a saved run is loaded), duration is fixed for this session. */
   const [ltaVideoDurationLocked, setLtaVideoDurationLocked] = useState(false);
@@ -2227,6 +2278,7 @@ export default function LinkToAdUniverse({
     setCustomUgcCta("");
     setLtaFrozenCredits(null);
     setLtaVideoDurationLocked(false);
+    setLtaSeedanceSpeed("normal");
     setVideoDuration(10);
     latestSnapRef.current = null;
     prevAngleRef.current = null;
@@ -2583,6 +2635,7 @@ export default function LinkToAdUniverse({
       klingTaskId: mirror?.taskId ?? undefined,
       klingVideoUrl: mirror?.videoUrl ?? undefined,
       linkToAdPipelineByAngle: triple,
+      ltaSeedanceSpeed,
       ltaVideoDurationSec: normalizeUgcScriptVideoDurationSec(videoDuration),
       videoStageMode,
     };
@@ -2615,6 +2668,7 @@ export default function LinkToAdUniverse({
     nanoBananaSelectedImageIndex,
     pipelineByAngle,
     videoStageMode,
+    ltaSeedanceSpeed,
     videoDuration,
   ]);
 
@@ -3275,6 +3329,7 @@ export default function LinkToAdUniverse({
             ? normalizeUgcScriptVideoDurationSec(snap.ltaVideoDurationSec)
             : LINK_TO_AD_DEFAULT_VIDEO_DURATION_SEC,
         );
+        setLtaSeedanceSpeed(snap.ltaSeedanceSpeed === "pro" ? "pro" : "normal");
       }
       setLtaVideoDurationLocked(Boolean(snap.scriptsText.trim()));
       // Script language is always English now.
@@ -5847,7 +5902,11 @@ export default function LinkToAdUniverse({
     const isRegenerate = Boolean(opts?.forceRegenerateCharge);
     let videoSpend = 0;
     if (isRegenerate && !isPart2Chain) {
-      videoSpend = creditsLinkToAdFullPipeline(LINK_TO_AD_DEFAULT_VIDEO_MODEL, videoDuration);
+      videoSpend = creditsLinkToAdFullPipeline(
+        LINK_TO_AD_DEFAULT_VIDEO_MODEL,
+        videoDuration,
+        ltaSeedanceSpeed,
+      );
     }
     if (videoSpend > 0) {
       const w0 = creditsBalanceRef.current;
@@ -5873,7 +5932,7 @@ export default function LinkToAdUniverse({
       const generatePayload = {
         linkToAd: true,
         accountPlan: planId,
-        marketModel: linkToAdSeedanceMarketModel("normal"),
+        marketModel: linkToAdSeedanceMarketModel(ltaSeedanceSpeed),
         prompt: klingPrompt,
         imageUrl: img,
         duration: apiDuration,
@@ -6431,8 +6490,8 @@ export default function LinkToAdUniverse({
   }, [klingPollTaskId, klingQueuePosition, klingWaitEstimateSeconds]);
 
   const ltaGenerateCredits = useMemo(
-    () => creditsLinkToAdFullPipeline(LINK_TO_AD_DEFAULT_VIDEO_MODEL, videoDuration),
-    [videoDuration],
+    () => creditsLinkToAdFullPipeline(LINK_TO_AD_DEFAULT_VIDEO_MODEL, videoDuration, ltaSeedanceSpeed),
+    [videoDuration, ltaSeedanceSpeed],
   );
   const ltaInitialGenerateCharge = useMemo(
     () => ltaGenerateCredits,
@@ -6450,8 +6509,8 @@ export default function LinkToAdUniverse({
    * dynamic Seedance Fast Link to Ad price (scaled by `videoDuration`).
    */
   const ltaKlingVideoRegenCharge = useMemo(
-    () => creditsLinkToAdFullPipeline(LINK_TO_AD_DEFAULT_VIDEO_MODEL, videoDuration),
-    [videoDuration],
+    () => creditsLinkToAdFullPipeline(LINK_TO_AD_DEFAULT_VIDEO_MODEL, videoDuration, ltaSeedanceSpeed),
+    [videoDuration, ltaSeedanceSpeed],
   );
   /** Video-prompt step has no direct credit charge (render charge happens on video generation). */
   const ltaVideoPromptFromImageCreditsDisplay = useMemo(
@@ -6785,7 +6844,8 @@ export default function LinkToAdUniverse({
                 <ChevronRight className="h-3.5 w-3.5 transition-transform [[open]>&]:rotate-90" aria-hidden />
                 Settings
                 <span className="ml-auto text-[10px] font-normal text-white/35">
-                  {videoDuration}s · English · {generationMode === "custom_ugc" ? "Custom" : "Auto"}
+                  {videoDuration}s · {ltaSeedanceSpeed === "pro" ? "Pro" : "Normal"} · English ·{" "}
+                  {generationMode === "custom_ugc" ? "Custom" : "Auto"}
                 </span>
               </summary>
               <div className="space-y-3 px-4 pb-3">
@@ -6823,6 +6883,17 @@ export default function LinkToAdUniverse({
                         );
                       })}
                     </div>
+                  </div>
+                  <div className="space-y-1">
+                    <p className="text-[11px] font-semibold uppercase tracking-wide text-white/50">Video quality</p>
+                    <LinkToAdVideoQualityPicker
+                      value={ltaSeedanceSpeed}
+                      onChange={setLtaSeedanceSpeed}
+                      locked={ltaVideoDurationLocked}
+                    />
+                    <p className="text-[10px] text-white/40">
+                      Normal uses Seedance 2 Fast; Pro uses the full Seedance 2 model.
+                    </p>
                   </div>
                 </div>
                 <div>
@@ -7132,6 +7203,15 @@ export default function LinkToAdUniverse({
                 })}
               </div>
             )}
+          </div>
+          <div className="space-y-1">
+            <p className="text-[11px] font-semibold uppercase tracking-wide text-white/50">Video quality</p>
+            <LinkToAdVideoQualityPicker
+              value={ltaSeedanceSpeed}
+              onChange={setLtaSeedanceSpeed}
+              locked={ltaVideoDurationLocked}
+              disabled={isWorking}
+            />
           </div>
         </div>
 
