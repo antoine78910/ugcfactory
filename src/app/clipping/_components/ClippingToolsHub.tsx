@@ -121,7 +121,7 @@ function ToolPreviewVideo({
 
   return (
     <div
-      className="relative mx-auto h-[min(28vh,168px)] w-full max-w-[min(42%,168px)] overflow-hidden rounded-lg border border-white/[0.08] bg-black/40 shadow-[0_16px_40px_rgba(0,0,0,0.4),inset_0_0_0_1px_rgba(255,255,255,0.06)]"
+      className="relative mx-auto h-[min(38vh,240px)] w-full max-w-[min(68%,240px)] overflow-hidden rounded-lg border border-white/[0.08] bg-black/40 shadow-[0_16px_40px_rgba(0,0,0,0.4),inset_0_0_0_1px_rgba(255,255,255,0.06)]"
       onPointerEnter={play}
       onPointerLeave={stop}
     >
@@ -266,7 +266,7 @@ export function ClippingToolsHub() {
                 )}
               >
                 <div
-                  className={`relative flex min-h-0 items-center justify-center bg-gradient-to-b px-3 py-3 ${tool.accent}`}
+                  className={`relative flex items-center justify-center bg-gradient-to-b px-3 py-2.5 ${tool.accent}`}
                 >
                   <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_50%_0%,rgba(255,255,255,0.05),transparent_60%)]" />
                   <ToolPreviewVideo
@@ -278,25 +278,25 @@ export function ClippingToolsHub() {
                   />
                 </div>
 
-                <div className="flex min-h-0 flex-1 flex-col p-3 sm:p-3.5">
-                  <div className="mb-1.5 flex items-center gap-2">
+                <div className="flex flex-col p-3 pt-2.5 sm:p-3.5 sm:pt-3">
+                  <div className="mb-1 flex items-center gap-2">
                     <Icon className="h-3 w-3 text-white/35" aria-hidden />
                     <h2 className="text-sm font-semibold tracking-tight text-white sm:text-base">
                       {tool.title}
                     </h2>
                   </div>
                   <p className="text-[11px] font-medium leading-snug text-white/45">{tool.tagline}</p>
-                  <p className="mt-1.5 line-clamp-2 flex-1 text-[11px] leading-snug text-white/55 sm:text-xs">
+                  <p className="mt-1 line-clamp-2 text-[11px] leading-snug text-white/55 sm:text-xs">
                     {tool.description}
                   </p>
 
                   {tool.requiresAuth ? (
-                    <button type="button" onClick={onLinkToAdClick} className={cn("mt-3 w-full", ctaClassName)}>
+                    <button type="button" onClick={onLinkToAdClick} className={cn("mt-2 w-full", ctaClassName)}>
                       {tool.cta}
                       <ArrowRight className="h-3.5 w-3.5 opacity-70 transition group-hover:translate-x-0.5" />
                     </button>
                   ) : (
-                    <Link href={tool.href} className={cn("mt-3 w-full", ctaClassName)}>
+                    <Link href={tool.href} className={cn("mt-2 w-full", ctaClassName)}>
                       {tool.cta}
                       <ArrowRight className="h-3.5 w-3.5 opacity-70 transition group-hover:translate-x-0.5" />
                     </Link>
