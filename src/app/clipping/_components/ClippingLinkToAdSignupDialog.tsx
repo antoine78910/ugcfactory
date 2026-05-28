@@ -1,7 +1,6 @@
 "use client";
 
 import Image from "next/image";
-import Link from "next/link";
 import { useCallback, useEffect, useRef, useState, type ReactNode } from "react";
 import { ArrowRight, Check, ExternalLink, Play, X } from "lucide-react";
 
@@ -193,15 +192,25 @@ export function ClippingLinkToAdSignupDialog({
               <p className="text-[12px] leading-relaxed text-white/45">
                 Create your Youry account. You&apos;ll land on Link to Ad after signup.
               </p>
-              <Link href={signupHref} className={primaryBtn}>
+              <a
+                href={signupHref}
+                target="_blank"
+                rel="noopener noreferrer"
+                className={primaryBtn}
+              >
                 Start for free
                 <ArrowRight className="size-3.5 opacity-80" aria-hidden />
-              </Link>
+              </a>
               <p className="text-center text-[11px] text-white/30">
                 Have an account?{" "}
-                <Link href={signinHref} className="text-violet-300/90 hover:text-violet-200">
+                <a
+                  href={signinHref}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="text-violet-300/90 hover:text-violet-200"
+                >
                   Sign in
-                </Link>
+                </a>
               </p>
             </Step>
 
