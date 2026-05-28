@@ -4,7 +4,6 @@ import { useState } from "react";
 import Image from "next/image";
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
-import { Loader2 } from "lucide-react";
 import { Input } from "@/components/ui/input";
 import { DATAFAST_GOALS, trackDatafastGoal } from "@/lib/analytics/datafastGoals";
 import { cn } from "@/lib/utils";
@@ -135,34 +134,27 @@ export default function OnboardingClient() {
   const [workOtherText, setWorkOtherText] = useState("");
   const [referralSource, setReferralSource] = useState<ReferralSource | null>(null);
   const [referralOtherText, setReferralOtherText] = useState("");
-  const [loading, setLoading] = useState(false);
-
   const workOtherOk = workType !== "other" || workOtherText.trim().length > 0;
   const referralOtherOk = referralSource !== "other" || referralOtherText.trim().length > 0;
   const canSubmit = Boolean(workType && referralSource && workOtherOk && referralOtherOk);
 
-  async function handleSubmit() {
+  function handleSubmit() {
     if (!workType || !referralSource || !workOtherOk || !referralOtherOk) return;
     trackDatafastGoal(DATAFAST_GOALS.onboarding_next_clicked, {
       step: "personalize",
       work_type: payloadWorkType(workType, workOtherText),
       referral_source: payloadReferral(referralSource, referralOtherText),
     });
-    setLoading(true);
-    try {
-      await fetch("/api/onboarding", {
-        method: "POST",
-        credentials: "include",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          work_type: payloadWorkType(workType, workOtherText),
-          referral_source: payloadReferral(referralSource, referralOtherText),
-        }),
-      });
-    } catch {
-      /* non-blocking */
-    }
     router.push("/onboarding?step=setup");
+    void fetch("/api/onboarding", {
+      method: "POST",
+      credentials: "include",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        work_type: payloadWorkType(workType, workOtherText),
+        referral_source: payloadReferral(referralSource, referralOtherText),
+      }),
+    }).catch(() => {});
   }
 
   return (
@@ -308,24 +300,16 @@ export default function OnboardingClient() {
               <div className="mt-10 flex flex-col items-center justify-center">
                 <button
                   type="button"
-                  disabled={!canSubmit || loading}
+                  disabled={!canSubmit}
                   onClick={handleSubmit}
                   className={cn(
                     "inline-flex items-center justify-center gap-2",
                     !canSubmit && nextDisabledClass,
                     !canSubmit && "opacity-60",
                     canSubmit && nextEnabledClass,
-                    loading && canSubmit && "cursor-wait opacity-95",
                   )}
                 >
-                  {loading ? (
-                    <>
-                      <Loader2 className="h-4 w-4 shrink-0 animate-spin text-black/70" aria-hidden />
-                      <span className="text-black/80">Saving…</span>
-                    </>
-                  ) : (
-                    "Next"
-                  )}
+                  Next
                 </button>
               </div>
             </div>

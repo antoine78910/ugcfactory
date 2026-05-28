@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { useCallback, useEffect, useRef, useState, type ReactNode } from "react";
-import { ArrowRight, Check, ExternalLink, Loader2, X } from "lucide-react";
+import { ArrowRight, Check, ExternalLink, X } from "lucide-react";
 
 import { cn } from "@/lib/utils";
 import { studioAppPath, studioBrowserApiUrl } from "@/lib/studioAppOrigin";
@@ -55,7 +55,6 @@ export function ClippingLinkToAdSignupDialog({
 }: ClippingLinkToAdSignupDialogProps) {
   const trackedRef = useRef(false);
   const [email, setEmail] = useState("");
-  const [emailBusy, setEmailBusy] = useState(false);
   const [emailDone, setEmailDone] = useState(false);
   const [emailError, setEmailError] = useState<string | null>(null);
   const [screenshotMissing, setScreenshotMissing] = useState(false);
@@ -90,32 +89,32 @@ export function ClippingLinkToAdSignupDialog({
   );
   const ltaHref = studioAppPath("/link-to-ad");
 
-  const onSubmitEmail = useCallback(async () => {
+  const onSubmitEmail = useCallback(() => {
     const normalized = email.trim().toLowerCase();
     if (!normalized.includes("@")) {
       setEmailError("Enter a valid email address.");
       return;
     }
-    setEmailBusy(true);
     setEmailError(null);
-    try {
-      const res = await fetch(studioBrowserApiUrl("/api/clipping/request-template-access"), {
-        method: "POST",
-        credentials: "include",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ email: normalized }),
+    setEmail(normalized);
+    setEmailDone(true);
+
+    void fetch(studioBrowserApiUrl("/api/clipping/request-template-access"), {
+      method: "POST",
+      credentials: "include",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ email: normalized }),
+    })
+      .then(async (res) => {
+        const json = (await res.json().catch(() => ({}))) as { error?: string };
+        if (!res.ok) {
+          throw new Error(json.error || "Could not save your email. Try again.");
+        }
+      })
+      .catch((e) => {
+        setEmailDone(false);
+        setEmailError(e instanceof Error ? e.message : "Something went wrong.");
       });
-      const json = (await res.json().catch(() => ({}))) as { error?: string };
-      if (!res.ok) {
-        throw new Error(json.error || "Could not save your email. Try again.");
-      }
-      setEmailDone(true);
-      setEmail(normalized);
-    } catch (e) {
-      setEmailError(e instanceof Error ? e.message : "Something went wrong.");
-    } finally {
-      setEmailBusy(false);
-    }
   }, [email]);
 
   if (!open) return null;
@@ -207,25 +206,27 @@ export function ClippingLinkToAdSignupDialog({
                         setEmail(e.target.value);
                         setEmailError(null);
                       }}
+                      onKeyDown={(e) => {
+                        if (e.key === "Enter") {
+                          e.preventDefault();
+                          onSubmitEmail();
+                        }
+                      }}
                       placeholder="you@email.com"
                       autoComplete="email"
-                      disabled={emailBusy}
+                      disabled={emailDone}
                       className="min-w-0 flex-1 rounded-full border border-white/[0.08] bg-white/[0.02] px-3.5 py-2 text-[13px] text-white placeholder:text-white/25 focus:border-violet-400/30 focus:outline-none focus:ring-2 focus:ring-violet-500/15 disabled:opacity-50"
                     />
                     <button
                       type="button"
-                      onClick={() => void onSubmitEmail()}
-                      disabled={emailBusy || !email.trim()}
+                      onClick={onSubmitEmail}
+                      disabled={emailDone || !email.trim()}
                       className={cn(
                         ghostBtn,
                         "shrink-0 rounded-full px-3.5 disabled:cursor-not-allowed disabled:opacity-40",
                       )}
                     >
-                      {emailBusy ? (
-                        <Loader2 className="size-3.5 animate-spin" aria-hidden />
-                      ) : (
-                        "Submit"
-                      )}
+                      Next
                     </button>
                   </div>
                   {emailError ? (
