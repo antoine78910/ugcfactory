@@ -225,7 +225,9 @@ export function ClippingLandingPage() {
 
           <Reveal delay={1}>
             <h1 className="text-[2.25rem] font-bold leading-[1.05] tracking-tight sm:text-[3.25rem] md:text-[4.25rem]">
-              <span className={cn(styles.shimmerText, "whitespace-nowrap")}>Earn money clipping</span>
+              <span className="whitespace-nowrap">
+                <span className="text-violet-400">Earn money</span> clipping
+              </span>
               <br />
               for Youry
             </h1>
@@ -469,9 +471,9 @@ export function ClippingLandingPage() {
         <div className="mx-auto max-w-3xl text-center">
           <Reveal>
             <h2 className={cn(clippingSectionTitle(), "leading-tight lg:text-6xl")}>
-              Start earning with
+              <span className="text-violet-400">Start earning</span> with
               <br />
-              <span className={styles.shimmerText}>Youry today</span>
+              Youry today
             </h2>
             <p className="mx-auto mt-6 max-w-lg text-base text-white/40 sm:text-lg">
               Join thousands of clippers using Youry to ship faster. Your next winning clip could be
