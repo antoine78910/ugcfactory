@@ -121,7 +121,7 @@ function ToolPreviewVideo({
 
   return (
     <div
-      className="relative mx-auto h-[min(38vh,240px)] w-full max-w-[min(68%,240px)] overflow-hidden rounded-lg border border-white/[0.08] bg-black/40 shadow-[0_16px_40px_rgba(0,0,0,0.4),inset_0_0_0_1px_rgba(255,255,255,0.06)]"
+      className="relative mx-auto aspect-[9/16] h-full max-h-full w-auto max-w-[min(82%,280px)] overflow-hidden rounded-lg border border-white/[0.08] bg-black/40 shadow-[0_16px_40px_rgba(0,0,0,0.4),inset_0_0_0_1px_rgba(255,255,255,0.06)]"
       onPointerEnter={play}
       onPointerLeave={stop}
     >
@@ -252,7 +252,7 @@ export function ClippingToolsHub() {
           </h1>
         </header>
 
-        <section className="grid min-h-0 flex-1 gap-3 lg:grid-cols-3 lg:items-stretch">
+        <section className="grid min-h-0 flex-1 gap-3 lg:grid-cols-3 lg:items-stretch lg:content-start">
           {TOOLS.map((tool) => {
             const Icon = tool.icon;
             const ctaClassName = clippingBtnPrimarySm;
@@ -261,12 +261,12 @@ export function ClippingToolsHub() {
               <article
                 key={tool.title}
                 className={cn(
-                  "group flex flex-col overflow-hidden p-0 shadow-[0_24px_80px_rgba(0,0,0,0.35)]",
+                  "group flex h-full min-h-0 flex-col overflow-hidden p-0 shadow-[0_24px_80px_rgba(0,0,0,0.35)]",
                   clippingCardClassName,
                 )}
               >
                 <div
-                  className={`relative flex items-center justify-center bg-gradient-to-b px-3 py-2.5 ${tool.accent}`}
+                  className={`relative flex min-h-[min(42vh,300px)] flex-1 items-center justify-center bg-gradient-to-b px-2 py-2 sm:px-3 ${tool.accent}`}
                 >
                   <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_50%_0%,rgba(255,255,255,0.05),transparent_60%)]" />
                   <ToolPreviewVideo
@@ -278,7 +278,7 @@ export function ClippingToolsHub() {
                   />
                 </div>
 
-                <div className="flex flex-col p-3 pt-2.5 sm:p-3.5 sm:pt-3">
+                <div className="flex shrink-0 flex-col px-3 pb-2 pt-2 sm:px-3.5">
                   <div className="mb-1 flex items-center gap-2">
                     <Icon className="h-3 w-3 text-white/35" aria-hidden />
                     <h2 className="text-sm font-semibold tracking-tight text-white sm:text-base">
@@ -291,12 +291,16 @@ export function ClippingToolsHub() {
                   </p>
 
                   {tool.requiresAuth ? (
-                    <button type="button" onClick={onLinkToAdClick} className={cn("mt-2 w-full", ctaClassName)}>
+                    <button
+                      type="button"
+                      onClick={onLinkToAdClick}
+                      className={cn("mt-2 w-full shrink-0", ctaClassName)}
+                    >
                       {tool.cta}
                       <ArrowRight className="h-3.5 w-3.5 opacity-70 transition group-hover:translate-x-0.5" />
                     </button>
                   ) : (
-                    <Link href={tool.href} className={cn("mt-2 w-full", ctaClassName)}>
+                    <Link href={tool.href} className={cn("mt-2 w-full shrink-0", ctaClassName)}>
                       {tool.cta}
                       <ArrowRight className="h-3.5 w-3.5 opacity-70 transition group-hover:translate-x-0.5" />
                     </Link>
@@ -307,7 +311,7 @@ export function ClippingToolsHub() {
           })}
         </section>
 
-        <p className="mt-3 shrink-0 text-center text-[10px] text-white/40">
+        <p className="mt-2 shrink-0 text-center text-[10px] text-white/40">
           New here?{" "}
           <button
             type="button"
@@ -319,7 +323,7 @@ export function ClippingToolsHub() {
           to get Link to Ad template access.
         </p>
 
-        <footer className="mt-3 shrink-0 border-t border-white/[0.08] pt-3">
+        <footer className="mt-2 shrink-0 border-t border-white/[0.08] pt-2">
           <div className="flex justify-center">
             <SiteContactLinks />
           </div>
