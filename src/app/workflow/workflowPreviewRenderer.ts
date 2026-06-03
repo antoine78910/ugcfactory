@@ -42,6 +42,7 @@ type CardKind =
   | "assistant"
   | "upscale"
   | "website"
+  | "video-merge"
   | "image-ref"
   | "avatar-ref"
   | "video-ref"
@@ -100,6 +101,13 @@ const KIND_STYLES: Record<CardKind, KindStyle> = {
     bodyTint: "rgba(30,64,175,0.07)",
     badge: "W",
     label: "Website",
+  },
+  "video-merge": {
+    headerFill: "rgba(15,118,110,0.78)",
+    headerStroke: "rgba(94,234,212,0.55)",
+    bodyTint: "rgba(15,118,110,0.07)",
+    badge: "⊕",
+    label: "Merge Videos",
   },
   "image-ref": {
     headerFill: "rgba(14,116,144,0.78)",
@@ -171,6 +179,7 @@ function classifyNode(n: WorkflowCanvasNode): CardKind {
     if (k === "assistant") return "assistant";
     if (k === "upscale") return "upscale";
     if (k === "website") return "website";
+    if (k === "videoMerge") return "video-merge";
   }
   return "image-generator";
 }

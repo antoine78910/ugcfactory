@@ -30,6 +30,7 @@ import {
   CopyPlus,
   Eye,
   Globe2,
+  GitMerge,
   GripVertical,
   Hand,
   Image as ImageIconLucide,
@@ -341,6 +342,7 @@ const WORKFLOW_AD_ASSET_DRAG_KINDS: WorkflowDragNodeKind[] = [
   "assistant",
   "upscale",
   "website",
+  "videoMerge",
 ];
 
 function isWorkflowAdAssetDragKind(raw: string): raw is WorkflowDragNodeKind {
@@ -348,7 +350,7 @@ function isWorkflowAdAssetDragKind(raw: string): raw is WorkflowDragNodeKind {
 }
 
 function isRunnableWorkflowAdAssetKind(kind: AdAssetNodeData["kind"]): boolean {
-  return kind === "image" || kind === "video" || kind === "motion" || kind === "assistant" || kind === "website";
+  return kind === "image" || kind === "video" || kind === "motion" || kind === "assistant" || kind === "website" || kind === "videoMerge";
 }
 
 type WorkflowConnectionDataKind = "text" | "image" | "video" | "media";
@@ -424,6 +426,7 @@ function sourceKindFromNodeHandle(
     if (h === "videoFirst" || h === "videoLast" || h === "generated") return "image";
     if (h !== "out") return null;
     if (d.kind === "assistant") return "text";
+    if (d.kind === "videoMerge") return "video";
     if (d.kind === "video" || d.kind === "motion") return "video";
     if (d.kind === "image" || d.kind === "variation" || d.kind === "upscale") return "image";
     return null;
@@ -484,6 +487,10 @@ function targetHandleForNewNodeFromSourceKind(
     if (kind === "motion") {
       if (sourceKind === "text") return "text";
       if (sourceKind === "image") return "startImage";
+      if (sourceKind === "video") return "inVideo";
+      return null;
+    }
+    if (kind === "videoMerge") {
       if (sourceKind === "video") return "inVideo";
       return null;
     }
@@ -1975,6 +1982,18 @@ function WorkflowReactFlowChrome({
                         setFrameOpen(false);
                       }}
                       onClick={() => addNode("upscale")}
+                    />
+                    <WorkflowAddPaletteRow
+                      icon={GitMerge}
+                      label="Merge Videos"
+                      iconShellClass="border-teal-400/45 bg-teal-950/75"
+                      draggable
+                      onDragStart={(e) => {
+                        setDragPayload(e, "videoMerge");
+                        setAddOpen(false);
+                        setFrameOpen(false);
+                      }}
+                      onClick={() => addNode("videoMerge")}
                     />
                     <WorkflowAddPaletteRow
                       icon={UserRound}
@@ -5245,6 +5264,13 @@ export function WorkflowFlowWorkspace({
                   onClick={() => placeNodeAtPicker("upscale")}
                 >
                   Image upscaler
+                </button>
+                <button
+                  type="button"
+                  className="rounded-lg border border-white/10 bg-white/[0.06] px-3 py-2 text-left text-[13px] font-medium text-white/90 transition hover:border-teal-400/35 hover:bg-teal-500/15"
+                  onClick={() => placeNodeAtPicker("videoMerge")}
+                >
+                  Merge videos
                 </button>
                 <button
                   type="button"

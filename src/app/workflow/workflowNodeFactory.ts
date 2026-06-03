@@ -75,6 +75,15 @@ function genDefaultsForKind(
       quantity: 1,
     };
   }
+  if (kind === "videoMerge") {
+    return {
+      prompt: "",
+      model: "",
+      aspectRatio: "9:16",
+      resolution: "720p",
+      quantity: 1,
+    };
+  }
   return {
     prompt: "",
     model: "nano",
@@ -98,6 +107,7 @@ export function buildAdAssetNode(
     assistant: "Assistant",
     upscale: "Image Upscaler",
     website: "Website",
+    videoMerge: "Merge Videos",
   };
 
   const genDefaults = genDefaultsForKind(kind);

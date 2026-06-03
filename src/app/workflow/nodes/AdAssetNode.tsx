@@ -27,6 +27,7 @@ import {
   RotateCcw,
   Sparkles,
   Globe2,
+  GitMerge,
   Maximize2,
   Download,
   Type,
@@ -109,6 +110,10 @@ import {
   WORKFLOW_IMAGE_GENERATOR_REFERENCE_MAX,
   splitAssistantOutputToListLines,
   primeRemoteMediaForDisplay,
+  collectWorkflowMergeVideoUrls,
+  runWorkflowVideoMerge,
+  WORKFLOW_VIDEO_MERGE_MIN,
+  WORKFLOW_VIDEO_MERGE_MAX,
 } from "../workflowNodeRun";
 import { workflowVideoExportPixelDimensions } from "../workflowVideoExportDimensions";
 import { WorkflowNodeContextToolbar } from "./WorkflowNodeContextToolbar";
@@ -124,7 +129,7 @@ import {
 
 export type AdAssetNodeData = {
   label: string;
-  kind: "image" | "video" | "motion" | "variation" | "assistant" | "upscale" | "website";
+  kind: "image" | "video" | "motion" | "variation" | "assistant" | "upscale" | "website" | "videoMerge";
   /** Generation prompt */
   prompt?: string;
   /** Last prompt text actually used on run (includes linked inputs composition). */
@@ -248,6 +253,12 @@ const kindConfig = {
     previewTint: "from-cyan-500/[0.08] via-transparent to-black/40",
     title: "Website",
     promptPlaceholder: "Paste a product URL to extract Link-to-Ad assets…",
+  },
+  videoMerge: {
+    icon: GitMerge,
+    previewTint: "from-teal-500/[0.08] via-transparent to-black/40",
+    title: "Merge Videos",
+    promptPlaceholder: "",
   },
 } as const;
 
@@ -1856,6 +1867,10 @@ function AdAssetNodeBase({ id, data, selected }: NodeProps<AdAssetNodeType>) {
       validTargets.add("inVideo");
     }
 
+    if (data.kind === "videoMerge") {
+      validTargets.add("inVideo");
+    }
+
     if (data.kind === "video") {
       if (videoModelHasStartFrame) {
         validTargets.add("startImage");
@@ -2075,6 +2090,16 @@ function AdAssetNodeBase({ id, data, selected }: NodeProps<AdAssetNodeType>) {
   const seedanceVideoRefUrls = useMemo(
     () => (seedanceVideoRefSignature ? seedanceVideoRefSignature.split("|").filter(Boolean) : []),
     [seedanceVideoRefSignature],
+  );
+
+  const mergeVideoInputCount = useStore(
+    useCallback(
+      (s) => {
+        if (data.kind !== "videoMerge") return 0;
+        return collectWorkflowMergeVideoUrls(s.nodes, s.edges, id).length;
+      },
+      [data.kind, id],
+    ),
   );
 
   useEffect(() => {
@@ -2612,6 +2637,42 @@ function AdAssetNodeBase({ id, data, selected }: NodeProps<AdAssetNodeType>) {
           description: e instanceof Error ? e.message : "Try again.",
         });
         emitRunLog("error", `Assistant failed: ${e instanceof Error ? e.message : "Unknown error"}`);
+      } finally {
+        setGenerating(false);
+        emitRunFinished(ok);
+      }
+      return;
+    }
+
+    if (data.kind === "videoMerge") {
+      const mergeUrls = collectWorkflowMergeVideoUrls(nodes, edges, id);
+      if (mergeUrls.length < WORKFLOW_VIDEO_MERGE_MIN) {
+        toast.error("Connect at least 2 videos", {
+          description: `Wire ${WORKFLOW_VIDEO_MERGE_MIN} or more video outputs to the Videos input (top-to-bottom order on canvas).`,
+        });
+        emitRunFinished(false);
+        emitRunLog("error", "Video merge blocked: fewer than 2 videos connected.");
+        return;
+      }
+      emitRunLog("info", `Video merge started (${mergeUrls.length} clips).`);
+      setGenerating(true);
+      let ok = false;
+      try {
+        const { videoUrl } = await runWorkflowVideoMerge(mergeUrls);
+        primeRemoteMediaForDisplay(videoUrl);
+        patch(id, {
+          outputPreviewUrl: videoUrl,
+          outputMediaKind: "video",
+          outputGeneratedAt: Date.now(),
+        });
+        toast.success("Videos merged");
+        ok = true;
+        emitRunLog("success", `Video merge finished (${mergeUrls.length} clips).`);
+      } catch (e) {
+        toast.error("Video merge failed", {
+          description: e instanceof Error ? e.message : "Try again.",
+        });
+        emitRunLog("error", `Video merge failed: ${e instanceof Error ? e.message : "Unknown error"}`);
       } finally {
         setGenerating(false);
         emitRunFinished(ok);
@@ -3753,6 +3814,112 @@ function AdAssetNodeBase({ id, data, selected }: NodeProps<AdAssetNodeType>) {
     window.addEventListener("workflow:run-node", onRunNode as EventListener);
     return () => window.removeEventListener("workflow:run-node", onRunNode as EventListener);
   }, [id, onGenerate]);
+
+  if (data.kind === "videoMerge") {
+    const mergeCardWidth = Math.max(cardWidthPx, 280);
+    const mergePreviewUrl = data.outputPreviewUrl?.trim() || "";
+    const mergeHasOutput = Boolean(mergePreviewUrl);
+    return (
+      <>
+        <WorkflowNodeContextToolbar nodeId={id} onRun={runThisNodeOnly} onRunFromHere={runFromHere} />
+        <div
+          className="relative flex items-end gap-1"
+          onMouseEnter={() => window.dispatchEvent(new CustomEvent("workflow:hover-node", { detail: { nodeId: id } }))}
+          onMouseLeave={() => window.dispatchEvent(new CustomEvent("workflow:unhover-node"))}
+        >
+          <div className="nodrag nopan flex shrink-0 flex-col gap-1 pb-3">
+            <div className={cn(workflowPortBubbleShellClass, "nodrag nopan relative")}>
+              <Handle
+                id="inVideo"
+                type="target"
+                position={Position.Left}
+                className={workflowPortTargetBubbleHandleClass}
+                aria-label="Videos to merge"
+                title="Connect multiple video outputs. Clips merge top-to-bottom on the canvas."
+                onPointerDown={(e) => handleInputBubblePointerDown(e, "inVideo")}
+              />
+              <span className={workflowPortBubbleIconClass} aria-hidden>
+                <Clapperboard className="h-4 w-4" strokeWidth={2} aria-hidden="true" />
+              </span>
+              <span
+                className="pointer-events-none absolute -right-0.5 -top-1 z-[3] rounded px-[3px] py-px text-[8px] font-bold tabular-nums leading-none text-white/70 shadow-[0_1px_6px_rgba(0,0,0,0.65)] ring-1 ring-white/12"
+                style={{
+                  background:
+                    mergeVideoInputCount >= WORKFLOW_VIDEO_MERGE_MAX
+                      ? "rgba(251,113,133,0.35)"
+                      : "rgba(24,24,27,0.92)",
+                }}
+                aria-hidden
+              >
+                {mergeVideoInputCount}/{WORKFLOW_VIDEO_MERGE_MAX}
+              </span>
+            </div>
+          </div>
+
+          <div
+            className={cn(
+              "relative overflow-visible rounded-2xl border border-white/[0.08] bg-[#121212]/98 px-3 pb-3 pt-2.5 shadow-[0_12px_40px_rgba(0,0,0,0.5)] backdrop-blur-sm",
+              selected ? "ring-2 ring-violet-500/85 ring-offset-2 ring-offset-[#06070d]" : "",
+            )}
+            style={{ width: mergeCardWidth }}
+            onPointerDown={(e) => e.stopPropagation()}
+          >
+            <div className="nodrag nopan absolute -right-10 top-2 z-[7]">
+              <div className={cn(workflowPortBubbleShellClass, "nodrag nopan relative")}>
+                <Handle
+                  id="out"
+                  type="source"
+                  position={Position.Right}
+                  className={workflowPortSourceBubbleHandleClass}
+                  aria-label="Merged video output"
+                  title="Merged video output"
+                />
+                <span className="pointer-events-none absolute inset-0 z-[1] flex items-center justify-center text-[11px] font-bold leading-none text-violet-200/90">
+                  <Play className="h-3.5 w-3.5" strokeWidth={2} aria-hidden="true" />
+                </span>
+              </div>
+            </div>
+
+            <div className="mb-2 flex items-center gap-2">
+              <Icon className="h-4 w-4 shrink-0 text-white/75" strokeWidth={2} aria-hidden />
+              <p className="min-w-0 truncate text-[13px] font-semibold tracking-tight text-white">{displayTitle}</p>
+            </div>
+
+            <div
+              className="relative overflow-hidden rounded-xl border border-white/[0.08] bg-black/50"
+              style={{ width: frame.width, height: frame.height, maxWidth: "100%" }}
+            >
+              {mergeHasOutput ? (
+                <video
+                  src={mergePreviewUrl}
+                  className="h-full w-full object-cover"
+                  controls
+                  playsInline
+                  preload="metadata"
+                />
+              ) : (
+                <div className="flex h-full w-full flex-col items-center justify-center gap-2 px-4 text-center">
+                  <GitMerge className="h-8 w-8 text-teal-300/50" strokeWidth={1.75} aria-hidden />
+                  <p className="text-[11px] leading-snug text-white/45">
+                    Connect {WORKFLOW_VIDEO_MERGE_MIN}+ videos, then Run to concatenate into one clip.
+                  </p>
+                </div>
+              )}
+              {generating ? (
+                <div className="absolute inset-0 flex items-center justify-center bg-black/55 backdrop-blur-[1px]">
+                  <Loader2 className="h-7 w-7 animate-spin text-white/85" aria-hidden />
+                </div>
+              ) : null}
+            </div>
+
+            <p className="mt-2 text-[10px] leading-snug text-white/40">
+              Order follows canvas layout (top to bottom). Free — no credits.
+            </p>
+          </div>
+        </div>
+      </>
+    );
+  }
 
   if (data.kind === "website") {
     const websiteCardWidth = Math.max(cardWidthPx, 520);

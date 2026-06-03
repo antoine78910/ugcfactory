@@ -8,7 +8,8 @@ export function isRunnableWorkflowAdAssetKind(kind: AdAssetNodeData["kind"] | un
     kind === "video" ||
     kind === "motion" ||
     kind === "assistant" ||
-    kind === "website"
+    kind === "website" ||
+    kind === "videoMerge"
   );
 }
 

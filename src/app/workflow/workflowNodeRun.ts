@@ -39,7 +39,7 @@ import {
   validateStudioVideoJobDuration,
 } from "@/lib/studioVideoModelCapabilities";
 import { SEEDANCE_PRO_MAX_VIDEO_URLS, SEEDANCE_PRO_PROMPT_MAX_CHARS } from "@/lib/piapiSeedance";
-import { uploadBlobUrlToCdn } from "@/lib/uploadBlobUrlToCdn";
+import { uploadBlobUrlToCdn, uploadFileToCdn } from "@/lib/uploadBlobUrlToCdn";
 import { guardedFetch } from "@/lib/guardedFetch";
 import { isTaskTerminallyDeadButRetryable } from "@/lib/providerTransientError";
 import { appendWorkflowRunCorrelationToLabel } from "@/lib/workflowRunCorrelation";
@@ -702,6 +702,99 @@ export function collectLinkedVideoUrlsForHandles(
     urls.push(url);
   }
   return urls;
+}
+
+export const WORKFLOW_VIDEO_MERGE_MIN = 2;
+export const WORKFLOW_VIDEO_MERGE_MAX = 20;
+
+/** Video URLs wired to a Merge Videos node, ordered top-to-bottom then left-to-right on canvas. */
+export function collectWorkflowMergeVideoUrls(
+  nodes: Node[],
+  edges: Edge[],
+  targetNodeId: string,
+): string[] {
+  const byId = new Map(nodes.map((n) => [n.id, n]));
+  const incoming = edges
+    .filter((e) => e.target === targetNodeId && (e.targetHandle ?? "in") === "inVideo")
+    .sort((a, b) => {
+      const na = byId.get(a.source);
+      const nb = byId.get(b.source);
+      const ya = na?.position.y ?? 0;
+      const yb = nb?.position.y ?? 0;
+      if (ya !== yb) return ya - yb;
+      return (na?.position.x ?? 0) - (nb?.position.x ?? 0);
+    });
+
+  const urls: string[] = [];
+  const seen = new Set<string>();
+  for (const e of incoming) {
+    const src = byId.get(e.source);
+    if (!src) continue;
+    if (src.type === "promptList") {
+      const d = src.data as PromptListNodeData;
+      const srcHandle = e.sourceHandle ?? "out";
+      const kind = promptListOutputKind(d);
+      if (!(srcHandle === "outVideo" || (srcHandle === "out" && kind === "video"))) continue;
+      for (const line of (d.lines ?? []).map((x) => x.trim()).filter(Boolean)) {
+        if (!isProbablyVideoUrl(line) || seen.has(line)) continue;
+        seen.add(line);
+        urls.push(line);
+      }
+      continue;
+    }
+    if (src.type === "imageRef") {
+      const d = src.data as ImageRefNodeData;
+      if (d.mediaKind !== "video") continue;
+      const url = d.imageUrl?.trim();
+      if (!url || seen.has(url)) continue;
+      seen.add(url);
+      urls.push(url);
+      continue;
+    }
+    if (src.type !== "adAsset") continue;
+    const d = src.data as AdAssetNodeData;
+    const out = d.outputPreviewUrl?.trim();
+    const ref = d.referencePreviewUrl?.trim();
+    const url = out || ref;
+    if (!url || seen.has(url)) continue;
+    const kind = d.outputMediaKind ?? d.referenceMediaKind;
+    if (kind !== "video") continue;
+    seen.add(url);
+    urls.push(url);
+  }
+  return urls.slice(0, WORKFLOW_VIDEO_MERGE_MAX);
+}
+
+export async function runWorkflowVideoMerge(videoUrls: string[]): Promise<{ videoUrl: string }> {
+  const resolved = await resolveLocalWorkflowMediaUrlsForServer(videoUrls);
+  if (resolved.length < WORKFLOW_VIDEO_MERGE_MIN) {
+    throw new Error("At least 2 videos are required to merge.");
+  }
+
+  const { blocked, response: res } = await guardedFetch("/api/media/merge", {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({ urls: resolved }),
+  });
+  if (blocked) throw new Error("Insufficient credits.");
+  if (!res.ok) {
+    const raw = await res.text().catch(() => "");
+    let message = raw.replace(/\s+/g, " ").trim() || `Merge failed (${res.status}).`;
+    try {
+      const parsed = JSON.parse(raw) as { error?: unknown };
+      if (typeof parsed?.error === "string" && parsed.error.trim()) message = parsed.error.trim();
+    } catch {
+      /* ignore */
+    }
+    throw new Error(message);
+  }
+
+  const blob = await res.blob();
+  const file = new File([blob], `workflow-merged-${crypto.randomUUID()}.mp4`, {
+    type: blob.type || "video/mp4",
+  });
+  const videoUrl = await uploadFileToCdn(file);
+  return { videoUrl };
 }
 
 export function resolveWorkflowImagePickerModel(raw: string): StudioImageKiePickerModelId {
