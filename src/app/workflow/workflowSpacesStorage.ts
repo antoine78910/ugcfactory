@@ -140,6 +140,56 @@ function maybeMigrateLegacyUnscopedIntoScope(scope: string) {
 }
 
 /**
+ * After a signed-in session disappears (deleted Auth project, signed out),
+ * leftover libraries still live under `u:<userId>`. Copy them into `guest`
+ * so `/workflow` keeps working without login. Existing guest rows win.
+ */
+function maybeMigrateUserScopesIntoGuest(scope: string) {
+  if (typeof window === "undefined") return;
+  if (scope !== "guest") return;
+
+  const guestKey = indexKeyV2("guest");
+  const guestIdx = parseIndex(localStorage.getItem(guestKey));
+  const guestIds = new Set(guestIdx.spaces.map((s) => s.id));
+  let mutated = false;
+
+  const indexPrefix = "youry-workflow-spaces-index-v2:u:";
+  const keys: string[] = [];
+  for (let i = 0; i < localStorage.length; i++) {
+    const key = localStorage.key(i);
+    if (key && key.startsWith(indexPrefix)) keys.push(key);
+  }
+
+  for (const key of keys) {
+    const userScope = key.slice("youry-workflow-spaces-index-v2:".length);
+    if (!userScope.startsWith("u:")) continue;
+    const userIdx = parseIndex(localStorage.getItem(key));
+    for (const s of userIdx.spaces) {
+      if (guestIds.has(s.id)) continue;
+      const raw = localStorage.getItem(workflowSpaceStorageKey(userScope, s.id));
+      if (raw) {
+        try {
+          localStorage.setItem(workflowSpaceStorageKey("guest", s.id), raw);
+        } catch {
+          /* quota */
+        }
+      }
+      guestIdx.spaces.push({ ...s });
+      guestIds.add(s.id);
+      mutated = true;
+    }
+  }
+
+  if (!mutated) return;
+  guestIdx.spaces.sort((a, b) => b.updatedAt - a.updatedAt);
+  try {
+    localStorage.setItem(guestKey, JSON.stringify(guestIdx));
+  } catch {
+    /* quota */
+  }
+}
+
+/**
  * First login quality-of-life migration:
  * if the authenticated scope is empty but guest scope has workflows from local usage,
  * copy guest index + space payloads into the user scope so modules remain visible after sign-in.
@@ -178,6 +228,7 @@ export function loadSpacesIndex(scope: string): IndexV1 {
   if (typeof window === "undefined") return defaultIndex();
   maybeMigrateGuestScopeIntoUserScope(scope);
   maybeMigrateLegacyUnscopedIntoScope(scope);
+  maybeMigrateUserScopesIntoGuest(scope);
   return parseIndex(localStorage.getItem(indexKeyV2(scope)));
 }
 

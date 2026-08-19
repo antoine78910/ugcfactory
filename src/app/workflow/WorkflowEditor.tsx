@@ -5391,6 +5391,9 @@ export function WorkflowEditor({
       const id = data.session?.user?.id ?? null;
       setStorageScope(getWorkflowStorageScope(id));
       setAuthUserId(id);
+    }).catch(() => {
+      setStorageScope(getWorkflowStorageScope(null));
+      setAuthUserId(null);
     });
     const { data: sub } = sb.auth.onAuthStateChange((_event, session) => {
       const id = session?.user?.id ?? null;
@@ -6520,6 +6523,8 @@ export function WorkflowTemplatePreview({
     }
     void sb.auth.getSession().then(({ data }) => {
       setStorageScope(getWorkflowStorageScope(data.session?.user?.id ?? null));
+    }).catch(() => {
+      setStorageScope(getWorkflowStorageScope(null));
     });
     const { data: sub } = sb.auth.onAuthStateChange((_event, session) => {
       setStorageScope(getWorkflowStorageScope(session?.user?.id ?? null));

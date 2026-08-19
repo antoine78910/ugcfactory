@@ -152,6 +152,10 @@ export function WorkflowSpacesLanding() {
       setAuthUserId(id);
       if (data.session?.user) void refreshCommunityTemplates();
       else setCommunityTemplates([]);
+    }).catch(() => {
+      setStorageScope(getWorkflowStorageScope(null));
+      setAuthUserId(null);
+      setCommunityTemplates([]);
     });
     const { data: sub } = sb.auth.onAuthStateChange((_event, session) => {
       const id = session?.user?.id ?? null;
