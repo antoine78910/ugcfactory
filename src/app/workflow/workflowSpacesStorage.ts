@@ -182,11 +182,7 @@ function maybeMigrateUserScopesIntoGuest(scope: string) {
 
   if (!mutated) return;
   guestIdx.spaces.sort((a, b) => b.updatedAt - a.updatedAt);
-  try {
-    localStorage.setItem(guestKey, JSON.stringify(guestIdx));
-  } catch {
-    /* quota */
-  }
+  saveSpacesIndex("guest", guestIdx);
 }
 
 /**
@@ -232,23 +228,57 @@ export function loadSpacesIndex(scope: string): IndexV1 {
   return parseIndex(localStorage.getItem(indexKeyV2(scope)));
 }
 
-export function saveSpacesIndex(scope: string, index: IndexV1) {
-  if (typeof window === "undefined") return;
+export function saveSpacesIndex(scope: string, index: IndexV1): boolean {
+  if (typeof window === "undefined") return false;
+  const key = indexKeyV2(scope);
   try {
-    localStorage.setItem(indexKeyV2(scope), JSON.stringify(index));
+    localStorage.setItem(key, JSON.stringify(index));
+    return true;
   } catch {
-    /* quota */
+    try {
+      const stripped: IndexV1 = {
+        v: 1,
+        spaces: index.spaces.map((s) => ({
+          id: s.id,
+          name: s.name,
+          updatedAt: s.updatedAt,
+          publishedCommunityTemplateId: s.publishedCommunityTemplateId,
+        })),
+      };
+      localStorage.setItem(key, JSON.stringify(stripped));
+      return true;
+    } catch {
+      return false;
+    }
   }
 }
 
-export function createSpace(scope: string, name = "Untitled workflow"): WorkflowSpaceMeta {
+export function createSpace(scope: string, name = "Untitled workflow"): WorkflowSpaceMeta | null {
   const id = typeof crypto !== "undefined" && crypto.randomUUID ? crypto.randomUUID() : `s-${Date.now()}`;
   const meta: WorkflowSpaceMeta = { id, name, updatedAt: Date.now() };
   const index = loadSpacesIndex(scope);
   index.spaces = [{ ...meta }, ...index.spaces];
-  saveSpacesIndex(scope, index);
+  const savedIndex = saveSpacesIndex(scope, index);
   const fresh = defaultWorkflowProject();
   saveWorkflowProjectRaw(scope, id, { ...fresh, onboardingDismissed: false });
+  if (!savedIndex) return null;
+  if (!loadSpacesIndex(scope).spaces.some((s) => s.id === id)) return null;
+  return meta;
+}
+
+/** Adds `spaceId` to the local index if missing so a Create navigation can still open. */
+export function ensureLocalWorkflowSpace(
+  scope: string,
+  spaceId: string,
+  name = "Untitled workflow",
+): WorkflowSpaceMeta {
+  const index = loadSpacesIndex(scope);
+  const existing = index.spaces.find((s) => s.id === spaceId);
+  if (existing) return existing;
+  const meta: WorkflowSpaceMeta = { id: spaceId, name, updatedAt: Date.now() };
+  index.spaces = [{ ...meta }, ...index.spaces];
+  saveSpacesIndex(scope, index);
+  saveWorkflowProjectRaw(scope, spaceId, { ...defaultWorkflowProject(), onboardingDismissed: false });
   return meta;
 }
 
@@ -313,6 +343,7 @@ export function createSpaceFromTemplate(
     metaTpl?.name ||
     "From template";
   const meta = createSpace(scope, `${base} (copy)`);
+  if (!meta) return null;
   saveWorkflowProjectRaw(scope, meta.id, project);
   touchSpaceUpdated(scope, meta.id);
   return meta;

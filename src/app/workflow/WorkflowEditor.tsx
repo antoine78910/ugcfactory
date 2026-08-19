@@ -112,6 +112,7 @@ import { buildWorkflowPreviewDataUrl } from "./workflowPreviewRenderer";
 import {
   createSpace,
   createSpaceFromTemplate,
+  ensureLocalWorkflowSpace,
   getWorkflowStorageScope,
   loadProjectForSpace,
   loadSpacesIndex,
@@ -5573,7 +5574,15 @@ export function WorkflowEditor({
       return;
     }
     if (authUserId === null) {
-      router.replace("/workflow");
+      const local = ensureLocalWorkflowSpace(storageScope, resolvedSpaceId);
+      setSpaceSource("local");
+      setSpaceRole(null);
+      setSpaceName(local.name);
+      setPublishedTemplateId(local.publishedCommunityTemplateId ?? null);
+      setWorkflowProject(loadProjectForSpace(storageScope, resolvedSpaceId));
+      skipNextLocalSaveRef.current = true;
+      loadRunHistory();
+      setWorkflowHydrated(true);
       return;
     }
 
@@ -6085,6 +6094,10 @@ export function WorkflowEditor({
       const scope = getWorkflowStorageScope(authUserId);
       const label = `${spaceName.trim() || "Workflow"} (copy)`;
       const meta = createSpace(scope, label);
+      if (!meta) {
+        toast.error("Could not duplicate this workflow. Browser storage is full.");
+        return;
+      }
       saveProjectForSpace(scope, meta.id, liveProject);
       toast.success("Copy created in your workflows.");
       router.push(`/workflow/space/${encodeURIComponent(meta.id)}`);

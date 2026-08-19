@@ -330,8 +330,19 @@ export function WorkflowSpacesLanding() {
     if (storageScope === null) return;
     const nextName = newWorkflowName.trim() || "Untitled workflow";
     const meta = createSpace(storageScope, nextName);
+    if (!meta) {
+      toast.error("Could not create this workflow on this device. Browser storage is full.");
+      return;
+    }
     setNewWorkflowDialogOpen(false);
-    router.push(`/workflow/space/${encodeURIComponent(meta.id)}`);
+    const href = `/workflow/space/${encodeURIComponent(meta.id)}`;
+    router.push(href);
+    window.setTimeout(() => {
+      const path = window.location.pathname;
+      if (!path.includes(`/workflow/space/${meta.id}`)) {
+        window.location.assign(href);
+      }
+    }, 700);
   };
 
   const openTemplate = (id: string) => {
@@ -386,6 +397,10 @@ export function WorkflowSpacesLanding() {
         }
         const copyName = `${row.name.trim() || "Untitled workflow"} (copy)`;
         const meta = createSpace(storageScope, copyName);
+        if (!meta) {
+          toast.error("Could not duplicate this workflow. Browser storage is full.");
+          return;
+        }
         saveProjectForSpace(storageScope, meta.id, sourceProject);
         updateSpaceMeta(storageScope, meta.id, {
           previewDataUrl: row.previewDataUrl ?? undefined,

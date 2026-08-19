@@ -125,6 +125,10 @@ export default function WorkflowInvitePage() {
       const sharedBy = (accepted.invitedBy ?? info?.invitedBy ?? "shared").trim();
       const copyName = `${source.name || "Shared workflow"} (from ${sharedBy})`;
       const meta = createSpace(scope, copyName);
+      if (!meta) {
+        toast.error("Could not create a template copy. Browser storage is full.");
+        return;
+      }
       saveProjectForSpace(scope, meta.id, source.state);
       toast.success("Template copy created in your workflows.");
       router.push(`/workflow/space/${encodeURIComponent(meta.id)}`);

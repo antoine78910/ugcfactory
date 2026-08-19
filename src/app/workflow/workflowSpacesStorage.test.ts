@@ -90,3 +90,55 @@ test("loadSpacesIndex(guest) keeps existing guest spaces and does not overwrite 
   const project = loadProjectForSpace("guest", SPACE_ID);
   assert.equal((project.pages[0].nodes[0].data as { text?: string }).text, "guest");
 });
+
+test("createSpace still appears in the guest index when preview payloads exceed quota", async () => {
+  const store = new Map<string, string>();
+  const localStorage = {
+    getItem(key: string) {
+      return store.has(key) ? store.get(key)! : null;
+    },
+    setItem(key: string, value: string) {
+      const next = String(value);
+      // Simulate a full index (previews + new space) overflowing quota.
+      if (next.includes("Brand new") && next.includes("data:image")) {
+        throw new Error("QuotaExceededError");
+      }
+      store.set(key, next);
+    },
+    removeItem(key: string) {
+      store.delete(key);
+    },
+    clear() {
+      store.clear();
+    },
+    key(index: number) {
+      return [...store.keys()][index] ?? null;
+    },
+    get length() {
+      return store.size;
+    },
+  };
+  (globalThis as { window?: unknown; localStorage?: typeof localStorage }).window = globalThis;
+  (globalThis as { localStorage?: typeof localStorage }).localStorage = localStorage;
+
+  store.set(
+    "youry-workflow-spaces-index-v2:guest",
+    JSON.stringify({
+      v: 1,
+      spaces: [
+        {
+          id: SPACE_ID,
+          name: "Old pipeline",
+          updatedAt: 1,
+          previewDataUrl: `data:image/svg+xml;charset=utf-8,${"A".repeat(6_000)}`,
+        },
+      ],
+    }),
+  );
+
+  const { createSpace, loadSpacesIndex } = await import("./workflowSpacesStorage.ts");
+  const meta = createSpace("guest", "Brand new");
+  assert.ok(meta);
+  const idx = loadSpacesIndex("guest");
+  assert.equal(idx.spaces.some((s) => s.id === meta!.id && s.name === "Brand new"), true);
+});
