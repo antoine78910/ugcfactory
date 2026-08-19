@@ -1126,7 +1126,7 @@ export type WorkflowRunImageParams = {
 
 function isLocalOnlyWorkflowMediaUrl(url: string): boolean {
   const u = url.trim().toLowerCase();
-  return u.startsWith("blob:") || u.startsWith("data:");
+  return u.startsWith("blob:") || u.startsWith("data:") || u.startsWith("idb:");
 }
 
 function mimeFromDataUrl(url: string): string | undefined {
@@ -1140,6 +1140,31 @@ function mimeFromDataUrl(url: string): string | undefined {
 async function resolveLocalWorkflowMediaUrlForServer(url: string): Promise<string> {
   const u = url.trim();
   if (!u || !isLocalOnlyWorkflowMediaUrl(u)) return u;
+  if (u.toLowerCase().startsWith("idb:")) {
+    const { getWorkflowLocalMedia } = await import("./workflowLocalMedia");
+    const blob = await getWorkflowLocalMedia(u);
+    if (!blob) throw new Error("Saved media is missing on this device.");
+    const mime = blob.type || "image/png";
+    const ext = /^video\//i.test(mime)
+      ? mime.includes("webm")
+        ? ".webm"
+        : mime.includes("quicktime")
+          ? ".mov"
+          : ".mp4"
+      : mime.includes("jpeg") || mime.includes("jpg")
+        ? ".jpg"
+        : mime.includes("webp")
+          ? ".webp"
+          : mime.includes("gif")
+            ? ".gif"
+            : ".png";
+    const file = new File([blob], `workflow-media-${crypto.randomUUID()}${ext}`, { type: mime });
+    const hosted = await uploadFileToCdn(file, { kind: mime.startsWith("video/") ? "video" : "image" });
+    if (hosted.trim().toLowerCase().startsWith("idb:")) {
+      throw new Error("Cloud storage is unavailable, so this local image cannot be sent to generation yet.");
+    }
+    return hosted;
+  }
   const dataMime = u.startsWith("data:") ? mimeFromDataUrl(u) : undefined;
   const fallbackMime =
     dataMime && /^image\//i.test(dataMime)
@@ -1203,6 +1228,12 @@ async function loadImageElementFromBlob(blob: Blob): Promise<HTMLImageElement> {
 async function fetchImageBlobForWorkflow(url: string): Promise<Blob> {
   const trimmed = url.trim();
   if (!trimmed) throw new Error("Missing image URL.");
+  if (trimmed.toLowerCase().startsWith("idb:")) {
+    const { getWorkflowLocalMedia } = await import("./workflowLocalMedia");
+    const blob = await getWorkflowLocalMedia(trimmed);
+    if (!blob) throw new Error("Saved image is missing on this device.");
+    return blob;
+  }
   if (isLocalOnlyWorkflowMediaUrl(trimmed)) {
     const r = await fetch(trimmed, { cache: "no-store" });
     if (!r.ok) throw new Error(`Could not read local image (${r.status}).`);

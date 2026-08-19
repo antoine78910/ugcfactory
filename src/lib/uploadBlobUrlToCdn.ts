@@ -8,6 +8,7 @@ import {
   assertStudioUploadForKind,
   inferStudioUploadKind,
 } from "@/lib/studioUploadValidation";
+import { putWorkflowLocalMedia } from "@/app/workflow/workflowLocalMedia";
 
 /** Stay under typical Vercel serverless request body limits (~4.5 MB); larger files go direct to Supabase. */
 const VERCEL_SAFE_BODY_BYTES = 3.5 * 1024 * 1024;
@@ -178,18 +179,25 @@ export async function uploadFileToCdn(
   const useDirect =
     file.size > VERCEL_SAFE_BODY_BYTES || mime.startsWith("video/") || mime.startsWith("audio/");
 
-  if (useDirect) {
-    try {
-      return await uploadViaSupabaseDirect(file);
-    } catch (err) {
-      if (file.size <= VERCEL_SAFE_BODY_BYTES) {
-        return uploadViaNextApi(file);
+  try {
+    if (useDirect) {
+      try {
+        return await uploadViaSupabaseDirect(file);
+      } catch (err) {
+        if (file.size <= VERCEL_SAFE_BODY_BYTES) {
+          return await uploadViaNextApi(file);
+        }
+        throw err instanceof Error ? err : new Error("Upload failed");
       }
+    }
+    return await uploadViaNextApi(file);
+  } catch (err) {
+    try {
+      return await putWorkflowLocalMedia(file);
+    } catch {
       throw err instanceof Error ? err : new Error("Upload failed");
     }
   }
-
-  return uploadViaNextApi(file);
 }
 
 /**

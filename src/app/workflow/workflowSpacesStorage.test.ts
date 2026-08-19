@@ -142,3 +142,36 @@ test("createSpace still appears in the guest index when preview payloads exceed 
   const idx = loadSpacesIndex("guest");
   assert.equal(idx.spaces.some((s) => s.id === meta!.id && s.name === "Brand new"), true);
 });
+
+test("saveProjectForSpace keeps indexedDB image pointers instead of stripping them", async () => {
+  const store = new Map<string, string>();
+  installLocalStorage(store);
+  const { saveProjectForSpace, loadProjectForSpace } = await import("./workflowSpacesStorage.ts");
+  const project = {
+    v: 1 as const,
+    activePageId: "p1",
+    pages: [
+      {
+        id: "p1",
+        name: "Page 1",
+        nodes: [
+          {
+            id: "n1",
+            type: "imageRef",
+            position: { x: 0, y: 0 },
+            data: {
+              label: "Photo",
+              imageUrl: "idb:media-1",
+              source: "upload",
+              mediaKind: "image",
+            },
+          },
+        ],
+        edges: [],
+      },
+    ],
+  };
+  saveProjectForSpace("guest", "space-media", project as never);
+  const loaded = loadProjectForSpace("guest", "space-media");
+  assert.equal((loaded.pages[0].nodes[0].data as { imageUrl?: string }).imageUrl, "idb:media-1");
+});

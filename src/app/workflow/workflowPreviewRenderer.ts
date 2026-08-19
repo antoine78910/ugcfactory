@@ -202,6 +202,7 @@ function isUsableImageUrl(url: string | null | undefined): url is string {
   const t = url.trim();
   if (!t) return false;
   if (t.startsWith("blob:")) return false; // not embeddable into a saved SVG
+  if (t.startsWith("idb:")) return false;
   return true;
 }
 

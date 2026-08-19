@@ -14,6 +14,8 @@ import { isVideoFile, measureImageAspectFromObjectUrl, measureVideoAspectFromObj
 import { WorkflowMediaTrimDialog } from "../WorkflowMediaTrimDialog";
 import { workflowDisableSpellcheck } from "../workflowDisableSpellcheck";
 import { triggerWorkflowMediaDownload } from "../workflowMediaDownload";
+import { getWorkflowLocalMedia, isWorkflowIdbMediaUrl } from "../workflowLocalMedia";
+import { useWorkflowMediaSrc } from "../useWorkflowMediaSrc";
 import { useWorkflowNodePatch } from "../workflowNodePatchContext";
 import { useWorkflowReadOnly } from "../workflowReadOnlyContext";
 import { WorkflowNodeContextToolbar } from "./WorkflowNodeContextToolbar";
@@ -109,10 +111,23 @@ async function extractVideoFrameJpegDataUrl(video: HTMLVideoElement, end: boolea
 async function extractVideoFrameJpegDataUrlFromUrl(videoUrl: string, end: boolean): Promise<string> {
   const trimmed = videoUrl.trim();
   if (!trimmed) throw new Error("Missing video URL.");
-  const bust = trimmed.includes("?") ? `${trimmed}&_wf_extract=${Date.now()}` : `${trimmed}?_wf_extract=${Date.now()}`;
-  const res = await fetch(`/api/download?url=${encodeURIComponent(bust)}`, { cache: "no-store" });
-  if (!res.ok) throw new Error(`Could not download video (${res.status}).`);
-  const blob = await res.blob();
+  let blob: Blob;
+  if (isWorkflowIdbMediaUrl(trimmed) || trimmed.startsWith("blob:") || trimmed.startsWith("data:")) {
+    if (isWorkflowIdbMediaUrl(trimmed)) {
+      const local = await getWorkflowLocalMedia(trimmed);
+      if (!local) throw new Error("Saved video is missing on this device.");
+      blob = local;
+    } else {
+      const res = await fetch(trimmed, { cache: "no-store" });
+      if (!res.ok) throw new Error("Could not read local video.");
+      blob = await res.blob();
+    }
+  } else {
+    const bust = trimmed.includes("?") ? `${trimmed}&_wf_extract=${Date.now()}` : `${trimmed}?_wf_extract=${Date.now()}`;
+    const res = await fetch(`/api/download?url=${encodeURIComponent(bust)}`, { cache: "no-store" });
+    if (!res.ok) throw new Error(`Could not download video (${res.status}).`);
+    blob = await res.blob();
+  }
   const objectUrl = URL.createObjectURL(blob);
   const v = document.createElement("video");
   v.preload = "auto";
@@ -162,6 +177,7 @@ function ImageRefNodeBase({ id, data, selected }: NodeProps<ImageRefNodeType>) {
   const frame = useMemo(() => frameDimensions(data.intrinsicAspect), [data.intrinsicAspect]);
   const cardWidth = frame.width + CARD_PAD_X;
   const isVideo = data.mediaKind === "video";
+  const mediaSrc = useWorkflowMediaSrc(data.imageUrl);
   const outputBubbleShellClass =
     "workflow-port-create-cursor nodrag nopan relative h-8 w-8 shrink-0 rounded-full border border-transparent bg-transparent shadow-none";
   const outputBubbleHandleClass =
@@ -504,7 +520,7 @@ function ImageRefNodeBase({ id, data, selected }: NodeProps<ImageRefNodeType>) {
           <div className="relative overflow-hidden rounded-none" style={{ width: frame.width, height: frame.height }}>
             {isVideo ? (
               <video
-                src={data.imageUrl}
+                src={mediaSrc}
                 className="h-full w-full object-cover"
                 muted
                 loop
@@ -514,7 +530,7 @@ function ImageRefNodeBase({ id, data, selected }: NodeProps<ImageRefNodeType>) {
             ) : (
               // eslint-disable-next-line @next/next/no-img-element
               <img
-                src={data.imageUrl}
+                src={mediaSrc}
                 alt={data.label}
                 className="h-full w-full object-cover"
                 draggable={false}
@@ -549,7 +565,7 @@ function ImageRefNodeBase({ id, data, selected }: NodeProps<ImageRefNodeType>) {
                   type="button"
                   onClick={() => {
                     const fallback = isVideo ? "workflow-video.mp4" : "workflow-image.jpg";
-                    triggerWorkflowMediaDownload(data.imageUrl, fallback);
+                    triggerWorkflowMediaDownload(mediaSrc || data.imageUrl, fallback);
                   }}
                   className="workflow-node-interactive nodrag nopan rounded-lg bg-black/50 p-1.5 text-white/80 backdrop-blur-sm transition hover:bg-black/70 hover:text-white"
                   title="Download"
@@ -677,7 +693,7 @@ function ImageRefNodeBase({ id, data, selected }: NodeProps<ImageRefNodeType>) {
                   onClick={(e) => {
                     e.stopPropagation();
                     const fallback = isVideo ? "workflow-video.mp4" : "workflow-image.jpg";
-                    triggerWorkflowMediaDownload(data.imageUrl, fallback);
+                    triggerWorkflowMediaDownload(mediaSrc || data.imageUrl, fallback);
                   }}
                 >
                   <Download className="h-5 w-5" />
@@ -696,7 +712,7 @@ function ImageRefNodeBase({ id, data, selected }: NodeProps<ImageRefNodeType>) {
               </div>
               {isVideo ? (
                 <video
-                  src={data.imageUrl}
+                  src={mediaSrc}
                   className="h-[92vh] w-[96vw] object-contain"
                   controls
                   autoPlay
@@ -705,7 +721,7 @@ function ImageRefNodeBase({ id, data, selected }: NodeProps<ImageRefNodeType>) {
               ) : (
                 // eslint-disable-next-line @next/next/no-img-element
                 <img
-                  src={data.imageUrl}
+                  src={mediaSrc}
                   alt={data.label}
                   className="h-[92vh] w-[96vw] object-contain"
                   onClick={(e) => e.stopPropagation()}
