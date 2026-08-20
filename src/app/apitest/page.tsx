@@ -123,17 +123,11 @@ export default function ApiTestPage() {
                 API test
               </span>
             </div>
-            <h1 className="text-3xl font-bold tracking-tight text-white md:text-4xl">Personal API keys (sandbox)</h1>
+            <h1 className="text-3xl font-bold tracking-tight text-white md:text-4xl">Personal API keys</h1>
             <p className="max-w-xl text-sm leading-relaxed text-white/50">
-              This page is only for accounts listed in{" "}
-              <code className="rounded bg-white/10 px-1.5 py-0.5 font-mono text-xs text-white/70">
-                API_TEST_ALLOWED_EMAILS
-              </code>
-              . Keys stay in your browser (localStorage), same as on{" "}
-              <Link href="/credits" className="text-cyan-300/90 underline-offset-4 hover:underline">
-                /credits
-              </Link>
-              . With personal keys enabled and filled in, the studio can bypass platform credit checks for the matching
+              On the free plan, generations use your Kie (and optional PiAPI) keys so usage is billed on your
+              provider account. Keys stay in your browser (localStorage). Paid plans can keep using platform
+              credits instead. With personal keys enabled, the studio bypasses platform credit checks for matching
               flows.
             </p>
           </header>

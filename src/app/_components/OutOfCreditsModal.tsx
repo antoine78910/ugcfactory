@@ -4,6 +4,7 @@ import { useCallback, useEffect, useState } from "react";
 import Link from "next/link";
 import { Zap, X } from "lucide-react";
 import { OUT_OF_CREDITS_EVENT, type OutOfCreditsDetail } from "@/lib/guardedFetch";
+import { dispatchPersonalApiKeyRequired } from "@/lib/personalApiKeyEvents";
 
 const PLAN_RANK: Record<string, number> = { free: 0, starter: 1, growth: 2, pro: 3, scale: 4 };
 
@@ -21,7 +22,16 @@ export default function OutOfCreditsModal() {
   useEffect(() => {
     function handler(e: Event) {
       const ce = e as CustomEvent<OutOfCreditsDetail>;
-      if (ce.detail) setDetail(ce.detail);
+      if (!ce.detail) return;
+      // Free plan: never show credit paywall — route to Kie BYOK instead.
+      if (ce.detail.planId === "free") {
+        dispatchPersonalApiKeyRequired({
+          message:
+            "On the free plan, add your Kie API key so generations are billed on your Kie account.",
+        });
+        return;
+      }
+      setDetail(ce.detail);
     }
     window.addEventListener(OUT_OF_CREDITS_EVENT, handler as EventListener);
     return () => window.removeEventListener(OUT_OF_CREDITS_EVENT, handler as EventListener);
@@ -31,7 +41,6 @@ export default function OutOfCreditsModal() {
 
   if (!detail) return null;
 
-  const isFree = detail.planId === "free";
   const upgradeLabel = nextPlanLabel(detail.planId);
 
   return (
@@ -54,37 +63,37 @@ export default function OutOfCreditsModal() {
             <Zap className="h-5 w-5" />
           </div>
           <div>
-            <h2 className="text-lg font-semibold text-white">Crédits insuffisants</h2>
+            <h2 className="text-lg font-semibold text-white">Not enough credits</h2>
             <p className="mt-1 text-sm leading-relaxed text-white/60">
-              Cette génération coûte{" "}
-              <span className="font-semibold text-white">{detail.need}</span> crédits, il t&apos;en reste{" "}
-              <span className="font-semibold text-white">{detail.have}</span>.
+              This generation costs{" "}
+              <span className="font-semibold text-white">{detail.need}</span> credits, you have{" "}
+              <span className="font-semibold text-white">{detail.have}</span> left.
             </p>
           </div>
         </div>
 
         <div className="mt-6 grid gap-3 sm:grid-cols-2">
-          {(isFree || upgradeLabel) && (
+          {upgradeLabel ? (
             <Link
               href="/pricing"
               onClick={close}
               className="flex flex-col items-start gap-1 rounded-xl border border-violet-500/40 bg-violet-500/10 p-4 text-left transition hover:border-violet-400 hover:bg-violet-500/15"
             >
               <span className="text-[11px] font-semibold uppercase tracking-wide text-violet-300">
-                {isFree ? "Plans payants" : `Upgrade vers ${upgradeLabel}`}
+                Upgrade to {upgradeLabel}
               </span>
-              <span className="text-sm text-white/85">
-                {isFree ? "Voir les plans et débloquer plus de crédits/mois" : `Plus de crédits/mois sur ${upgradeLabel}`}
-              </span>
+              <span className="text-sm text-white/85">More credits per month on {upgradeLabel}</span>
             </Link>
-          )}
+          ) : null}
           <Link
             href="/credits"
             onClick={close}
             className="flex flex-col items-start gap-1 rounded-xl border border-amber-500/40 bg-amber-500/10 p-4 text-left transition hover:border-amber-400 hover:bg-amber-500/15"
           >
-            <span className="text-[11px] font-semibold uppercase tracking-wide text-amber-300">Achat ponctuel</span>
-            <span className="text-sm text-white/85">Acheter un pack de crédits</span>
+            <span className="text-[11px] font-semibold uppercase tracking-wide text-amber-300">
+              One-time purchase
+            </span>
+            <span className="text-sm text-white/85">Buy a credit pack</span>
           </Link>
         </div>
       </div>

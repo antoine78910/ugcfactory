@@ -9,6 +9,7 @@ import {
   isPlatformCreditBypassActive,
 } from "@/app/_components/CreditsPlanContext";
 import { guardedFetch } from "@/lib/guardedFetch";
+import { dispatchPersonalApiKeyRequired } from "@/lib/personalApiKeyEvents";
 import { refundPlatformCredits } from "@/lib/refundPlatformCredits";
 import { Loader2, Plus, Sparkles, UserRound } from "lucide-react";
 import { toast } from "sonner";
@@ -544,6 +545,13 @@ export default function StudioImagePanel({ onChangeVoice }: StudioImagePanelProp
       numImages: n,
     });
     if (!creditBypass && creditsRef.current < chargeTotal) {
+      if (planId === "free") {
+        dispatchPersonalApiKeyRequired({
+          message:
+            "On the free plan, add your Kie API key so image generations bill your Kie account.",
+        });
+        return;
+      }
       setBilling({ open: true, reason: "credits", required: chargeTotal });
       return;
     }

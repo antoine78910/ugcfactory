@@ -3,6 +3,7 @@ export const runtime = "nodejs";
 import { NextResponse } from "next/server";
 import { requireSupabaseUser } from "@/lib/supabase/requireUser";
 import { hasPersonalApiKey } from "@/lib/personalApiBypass";
+import { assertPersonalApiForFreePlan } from "@/lib/personalApiRequired";
 import {
   canUseStudioImagePickerModel,
   parseAccountPlan,
@@ -72,6 +73,13 @@ export async function POST(req: Request) {
   const dbPlan = await getUserPlan(user.id);
   const accountPlan = dbPlan !== "free" ? dbPlan : parseAccountPlan(body.accountPlan);
   const personalKey = hasPersonalApiKey(body.personalApiKey) ? body.personalApiKey!.trim() : undefined;
+  {
+    const freeGate = await assertPersonalApiForFreePlan({
+      userId: user.id,
+      personalApiKey: personalKey,
+    });
+    if (freeGate) return freeGate;
+  }
   if (!personalKey) {
     if (!canUseStudioImagePickerModel(accountPlan, model)) {
       return NextResponse.json(

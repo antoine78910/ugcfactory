@@ -3,6 +3,7 @@ export const runtime = "nodejs";
 import { NextResponse } from "next/server";
 import { kieMarketCreateTask } from "@/lib/kieMarket";
 import { hasPersonalApiKey } from "@/lib/personalApiBypass";
+import { assertPersonalApiForFreePlan } from "@/lib/personalApiRequired";
 import {
   canUseMotionControl,
   parseAccountPlan,
@@ -87,6 +88,13 @@ export async function POST(req: Request) {
   const clippingBypass = body.clippingMotionControl === true;
 
   const personalKey = hasPersonalApiKey(body.personalApiKey) ? body.personalApiKey.trim() : undefined;
+  {
+    const freeGate = await assertPersonalApiForFreePlan({
+      userId: user.id,
+      personalApiKey: personalKey,
+    });
+    if (freeGate) return freeGate;
+  }
   let dbPlanResolved: string | null = null;
   if (!personalKey) {
     const dbPlan = await getUserPlan(user.id);

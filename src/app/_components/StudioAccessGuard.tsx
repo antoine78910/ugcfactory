@@ -136,8 +136,8 @@ function PaymentRecoveryForm({
 }
 
 /**
- * Keeps users without an active $1 trial (with credits) or paid plan off studio tool routes.
- * They are sent to onboarding setup (paywall) instead.
+ * Blocks studio tool routes when access is denied (e.g. delinquent payment).
+ * Free users are allowed in; they use personal Kie keys (BYOK) instead of a paywall.
  */
 export function StudioAccessGuard() {
   const pathname = usePathname() ?? "";
@@ -165,7 +165,8 @@ export function StudioAccessGuard() {
       setOpen(true);
       return;
     }
-    router.replace("/onboarding?step=setup");
+    // No payment issue: free / unpaid users keep studio access (BYOK). Avoid paywall redirect.
+    return;
   }, [ctx, pathname, router]);
 
   useEffect(() => {

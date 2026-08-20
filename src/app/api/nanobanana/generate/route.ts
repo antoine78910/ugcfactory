@@ -4,6 +4,7 @@ import { NextResponse } from "next/server";
 import { createStudioKieImageTasks } from "@/lib/studioKieImageTask";
 import type { NanoBananaImageSize, NanoBananaProAspectRatio, NanoBananaProResolution } from "@/lib/nanobanana";
 import { hasPersonalApiKey } from "@/lib/personalApiBypass";
+import { assertPersonalApiForFreePlan } from "@/lib/personalApiRequired";
 import {
   canUseStudioImagePickerModel,
   parseAccountPlan,
@@ -104,6 +105,13 @@ export async function POST(req: Request) {
     return NextResponse.json({ error: "Invalid image model." }, { status: 400 });
   }
   const personalKey = hasPersonalApiKey(body.personalApiKey) ? body.personalApiKey.trim() : undefined;
+  {
+    const freeGate = await assertPersonalApiForFreePlan({
+      userId: user.id,
+      personalApiKey: personalKey,
+    });
+    if (freeGate) return freeGate;
+  }
   if (!personalKey && !getEnv("KIE_API_KEY")?.trim()) {
     serverLog("nanobanana_generate_config", { error: "missing_kie_key" });
     return NextResponse.json(

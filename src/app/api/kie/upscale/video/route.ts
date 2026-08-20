@@ -5,6 +5,7 @@ import { getAppUrl, getEnv } from "@/lib/env";
 import { kieMarketCreateTask } from "@/lib/kieMarket";
 import { logGenerationFailure, userFacingProviderErrorOrDefault } from "@/lib/generationUserMessage";
 import { hasPersonalApiKey } from "@/lib/personalApiBypass";
+import { assertPersonalApiForFreePlan } from "@/lib/personalApiRequired";
 import { KIE_TOPAZ_VIDEO_UPSCALE_MODEL, topazVideoUpscaleCredits } from "@/lib/pricing";
 import { requireSupabaseUser } from "@/lib/supabase/requireUser";
 import { getUserPlan } from "@/lib/supabase/getUserPlan";
@@ -82,6 +83,13 @@ export async function POST(req: Request) {
   }
 
   const personalKey = hasPersonalApiKey(body.personalApiKey) ? body.personalApiKey.trim() : undefined;
+  {
+    const freeGate = await assertPersonalApiForFreePlan({
+      userId: user.id,
+      personalApiKey: personalKey,
+    });
+    if (freeGate) return freeGate;
+  }
 
   const videoUrl = (body.videoUrl ?? "").trim();
   if (!videoUrl || !/^https?:\/\//i.test(videoUrl)) {

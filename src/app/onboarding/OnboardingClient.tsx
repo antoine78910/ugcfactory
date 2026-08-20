@@ -8,6 +8,7 @@ import { Input } from "@/components/ui/input";
 import { DATAFAST_GOALS, trackDatafastGoal } from "@/lib/analytics/datafastGoals";
 import { cn } from "@/lib/utils";
 import SetupClient from "@/app/setup/SetupClient";
+import { sectionToPath } from "@/lib/studioPaths";
 
 const OTHER_MAX_LEN = 160;
 
@@ -145,7 +146,8 @@ export default function OnboardingClient() {
       work_type: payloadWorkType(workType, workOtherText),
       referral_source: payloadReferral(referralSource, referralOtherText),
     });
-    router.push("/onboarding?step=setup");
+    // Skip subscription paywall for new users — free plan uses their own Kie API key (BYOK).
+    router.push(sectionToPath("link_to_ad"));
     void fetch("/api/onboarding", {
       method: "POST",
       credentials: "include",

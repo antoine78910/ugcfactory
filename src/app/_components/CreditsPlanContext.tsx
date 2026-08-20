@@ -160,6 +160,26 @@ export function isPersonalApiActive(): boolean {
   return getPersonalApiKey() !== undefined;
 }
 
+/** Persist + enable a Kie personal API key (free / BYOK path). */
+export function saveAndEnablePersonalApiKey(raw: string): boolean {
+  if (typeof window === "undefined") return false;
+  const key = raw.trim();
+  if (!key) return false;
+  lsSet(LS_PERSONAL_API_KEY, key);
+  lsSet(LS_PERSONAL_API_ENABLED, "1");
+  return true;
+}
+
+/** Persist + enable a PiAPI personal key when Seedance/PiAPI routes are used. */
+export function saveAndEnablePersonalPiapiApiKey(raw: string): boolean {
+  if (typeof window === "undefined") return false;
+  const key = raw.trim();
+  if (!key) return false;
+  lsSet(LS_PIAPI_PERSONAL_KEY, key);
+  lsSet(LS_PIAPI_PERSONAL_ENABLED, "1");
+  return true;
+}
+
 /** Returns the user's provider key when provider mode is active, or undefined. */
 export function getPersonalPiapiApiKey(): string | undefined {
   if (typeof window === "undefined") return undefined;

@@ -34,6 +34,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { CreditCostBadge } from "@/app/_components/CreditCostBadge";
 import { UploadBusyOverlay } from "@/app/_components/UploadBusyOverlay";
 import { guardedFetch } from "@/lib/guardedFetch";
+import { dispatchPersonalApiKeyRequired } from "@/lib/personalApiKeyEvents";
 import { absolutizeImageUrl } from "@/lib/imageUrl";
 import {
   allProductUrlsForNanoBanana,
@@ -1604,6 +1605,14 @@ export default function LinkToAdUniverse({
       if (isPlatformCreditBypassActive()) return true;
       const k = Math.max(0, Math.floor(cost));
       if (k <= 0) return true;
+      // Free plan: ask for Kie BYOK instead of the subscription paywall.
+      if (planId === "free") {
+        dispatchPersonalApiKeyRequired({
+          message:
+            "On the free plan, add your Kie API key so Link to Ad generations bill your Kie account.",
+        });
+        return false;
+      }
       if (creditsBalanceRef.current < k) {
         setLtaCreditModal({
           current: creditsBalanceRef.current,
@@ -1614,7 +1623,7 @@ export default function LinkToAdUniverse({
       }
       return true;
     },
-    [],
+    [planId],
   );
 
   /** Deduct from wallet once on URL Generate; keep ref/frozen in sync with that charge. */

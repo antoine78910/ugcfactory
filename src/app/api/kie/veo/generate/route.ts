@@ -9,6 +9,7 @@ import {
   type KieVeoModel,
 } from "@/lib/kie";
 import { hasPersonalApiKey } from "@/lib/personalApiBypass";
+import { assertPersonalApiForFreePlan } from "@/lib/personalApiRequired";
 import { canUseVeoApiModel, parseAccountPlan, veoUpgradeMessage } from "@/lib/subscriptionModelAccess";
 import { logGenerationFailure, userFacingProviderErrorOrDefault } from "@/lib/generationUserMessage";
 import { requireSupabaseUser } from "@/lib/supabase/requireUser";
@@ -60,6 +61,13 @@ export async function POST(req: Request) {
   }
   const personalKey =
     body && hasPersonalApiKey(body.personalApiKey) ? body.personalApiKey.trim() : undefined;
+  {
+    const freeGate = await assertPersonalApiForFreePlan({
+      userId: user.id,
+      personalApiKey: personalKey,
+    });
+    if (freeGate) return freeGate;
+  }
   let dbPlanResolved: string | null = null;
   if (!personalKey) {
     const dbPlan = await getUserPlan(user.id);

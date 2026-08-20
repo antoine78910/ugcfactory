@@ -14,6 +14,7 @@ import {
 } from "@/app/_components/CreditsPlanContext";
 import { userMessageFromCaughtError } from "@/lib/generationUserMessage";
 import { guardedFetch } from "@/lib/guardedFetch";
+import { dispatchPersonalApiKeyRequired } from "@/lib/personalApiKeyEvents";
 import { refundPlatformCredits } from "@/lib/refundPlatformCredits";
 import { StudioBillingDialog } from "@/app/_components/StudioBillingDialog";
 import { StudioOutputPane } from "@/app/_components/StudioEmptyExamples";
@@ -369,6 +370,12 @@ export default function StudioAvatarPanel({
     }
     const creditBypass = isPlatformCreditBypassActive();
     if (!creditBypass && creditsRef.current < credits) {
+      if (planId === "free") {
+        dispatchPersonalApiKeyRequired({
+          message: "On the free plan, add your Kie API key so avatar generations bill your Kie account.",
+        });
+        return;
+      }
       setBilling({ open: true, reason: "credits", required: credits });
       return;
     }
@@ -510,6 +517,12 @@ export default function StudioAvatarPanel({
     }
     const creditBypass = isPlatformCreditBypassActive();
     if (!creditBypass && creditsRef.current < avatar360Credits) {
+      if (planId === "free") {
+        dispatchPersonalApiKeyRequired({
+          message: "On the free plan, add your Kie API key so avatar generations bill your Kie account.",
+        });
+        return;
+      }
       setBilling({ open: true, reason: "credits", required: avatar360Credits });
       return;
     }

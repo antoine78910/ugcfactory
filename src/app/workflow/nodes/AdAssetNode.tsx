@@ -45,9 +45,11 @@ import {
   isPlatformCreditBypassActive,
   useCreditsPlan,
 } from "@/app/_components/CreditsPlanContext";
+import { dispatchPersonalApiKeyRequired } from "@/lib/personalApiKeyEvents";
 import { WorkflowMediaTrimDialog } from "../WorkflowMediaTrimDialog";
 import {
   detailedMessageFromCaughtError,
+  userFacingProviderError,
   userFacingProviderErrorOrDefault,
   userMessageFromCaughtError,
 } from "@/lib/generationUserMessage";
@@ -380,6 +382,35 @@ function isWorkflowResolvedMediaLine(line: string): boolean {
   if (t.startsWith(WORKFLOW_PENDING_MEDIA_PREFIX)) return false;
   if (t.startsWith(WORKFLOW_ERROR_MEDIA_PREFIX)) return false;
   return true;
+}
+
+/** Best-effort user-facing reason from a failed media list line (`__workflow_error_media__:…`). */
+function messageFromWorkflowMediaErrorLine(line: string): string | null {
+  const t = line.trim();
+  if (!t.startsWith(WORKFLOW_ERROR_MEDIA_PREFIX)) return null;
+  const raw = t.slice(WORKFLOW_ERROR_MEDIA_PREFIX.length);
+  try {
+    const decoded = decodeURIComponent(raw);
+    try {
+      const parsed = JSON.parse(decoded) as { message?: unknown };
+      if (typeof parsed.message === "string" && parsed.message.trim()) {
+        return userFacingProviderError(parsed.message.trim());
+      }
+    } catch {
+      if (decoded.trim()) return userFacingProviderError(decoded.trim());
+    }
+  } catch {
+    /* ignore */
+  }
+  return null;
+}
+
+function firstWorkflowMediaBatchError(lines: string[]): string | null {
+  for (const line of lines) {
+    const msg = messageFromWorkflowMediaErrorLine(line);
+    if (msg) return msg;
+  }
+  return null;
 }
 
 /** Race window (ms) within which a freshly-started run is allowed to adopt a server-side workflow row that was created without a synced task id. */
@@ -2513,9 +2544,15 @@ function AdAssetNodeBase({ id, data, selected }: NodeProps<AdAssetNodeType>) {
           : WORKFLOW_ASSISTANT_CREDITS_BY_MODEL[assistantModel] ?? 0;
       const creditBypass = isPlatformCreditBypassActive();
       if (!creditBypass && assistantCharge > 0 && creditsRef.current < assistantCharge) {
-        toast.error("Not enough credits", {
-          description: `You need ${assistantCharge} credits for this run.`,
-        });
+        if (planId === "free") {
+          dispatchPersonalApiKeyRequired({
+            message: "On the free plan, add your Kie API key so workflow runs bill your Kie account.",
+          });
+        } else {
+          toast.error("Not enough credits", {
+            description: `You need ${assistantCharge} credits for this run.`,
+          });
+        }
         emitRunFinished(false);
         emitRunLog("error", `Assistant blocked: not enough credits (${assistantCharge}).`);
         return;
@@ -2958,7 +2995,13 @@ function AdAssetNodeBase({ id, data, selected }: NodeProps<AdAssetNodeType>) {
       const runCount = Math.max(1, batchPrompts?.length ?? 1);
       const charge = perRunCharge * runCount;
       if (!creditBypass && creditsRef.current < charge) {
-        toast.error("Not enough credits", { description: `You need ${charge} credits for this run.` });
+        if (planId === "free") {
+          dispatchPersonalApiKeyRequired({
+            message: "On the free plan, add your Kie API key so workflow runs bill your Kie account.",
+          });
+        } else {
+          toast.error("Not enough credits", { description: `You need ${charge} credits for this run.` });
+        }
         emitRunFinished(false);
         emitRunLog("error", `Image generation blocked: not enough credits (${charge}).`);
         return;
@@ -3109,8 +3152,11 @@ function AdAssetNodeBase({ id, data, selected }: NodeProps<AdAssetNodeType>) {
           }
           const failedCount = imageResultLines.length - imageResults.length;
           if (failedCount > 0) {
+            const reason = firstWorkflowMediaBatchError(imageResultLines);
             toast.message(`Batch done (${imageResults.length}/${imageResultLines.length})`, {
-              description: `${failedCount} item(s) failed. See list cards for Dismiss / Regenerate.`,
+              description:
+                reason ??
+                `${failedCount} item(s) failed. See list cards for Dismiss / Regenerate.`,
             });
           } else {
             toast.success(`Batch done (${imageResults.length})`, {
@@ -3169,8 +3215,13 @@ function AdAssetNodeBase({ id, data, selected }: NodeProps<AdAssetNodeType>) {
           if (imageResults.length === promptsForRun.length) {
             toast.success("Image ready");
           } else {
-            toast.error("Some images failed", {
-              description: "Check the connected list to dismiss or regenerate failed items.",
+            const reason = firstWorkflowMediaBatchError(imageResultLines);
+            toast.error(reason ? "Image generation failed" : "Some images failed", {
+              description:
+                reason ??
+                (progressListId
+                  ? "Check the connected list to dismiss or regenerate failed items."
+                  : "Sign in on this app, re-upload reference images, then try again."),
             });
           }
         }
@@ -3255,7 +3306,13 @@ function AdAssetNodeBase({ id, data, selected }: NodeProps<AdAssetNodeType>) {
       const runCount = Math.max(1, batchPrompts?.length ?? 1);
       const mCharge = perMotionCharge * runCount;
       if (!creditBypass && creditsRef.current < mCharge) {
-        toast.error("Not enough credits", { description: `You need ${mCharge} credits for this run.` });
+        if (planId === "free") {
+          dispatchPersonalApiKeyRequired({
+            message: "On the free plan, add your Kie API key so workflow runs bill your Kie account.",
+          });
+        } else {
+          toast.error("Not enough credits", { description: `You need ${mCharge} credits for this run.` });
+        }
         emitRunFinished(false);
         emitRunLog("error", `Motion control blocked: not enough credits (${mCharge}).`);
         return;
@@ -3360,7 +3417,13 @@ function AdAssetNodeBase({ id, data, selected }: NodeProps<AdAssetNodeType>) {
     const runCount = Math.max(1, batchPrompts?.length ?? 1);
     const vCharge = perVideoCharge * runCount;
     if (!creditBypass && creditsRef.current < vCharge) {
-      toast.error("Not enough credits", { description: `You need ${vCharge} credits for this run.` });
+      if (planId === "free") {
+        dispatchPersonalApiKeyRequired({
+          message: "On the free plan, add your Kie API key so workflow runs bill your Kie account.",
+        });
+      } else {
+        toast.error("Not enough credits", { description: `You need ${vCharge} credits for this run.` });
+      }
       emitRunFinished(false);
       emitRunLog("error", `Video generation blocked: not enough credits (${vCharge}).`);
       return;

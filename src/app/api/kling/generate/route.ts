@@ -19,6 +19,7 @@ import {
   SEEDANCE_PRO_PROMPT_MAX_CHARS,
 } from "@/lib/piapiSeedance";
 import { hasPersonalApiKey } from "@/lib/personalApiBypass";
+import { assertPersonalApiForFreePlan } from "@/lib/personalApiRequired";
 import {
   canUseStudioVideoModel,
   parseAccountPlan,
@@ -657,6 +658,14 @@ export async function POST(req: Request) {
 
   const personalKey = hasPersonalApiKey(body.personalApiKey) ? body.personalApiKey.trim() : undefined;
   const piapiKey = hasPersonalApiKey(body.piapiApiKey) ? body.piapiApiKey.trim() : undefined;
+  {
+    const freeGate = await assertPersonalApiForFreePlan({
+      userId: user.id,
+      personalApiKey: personalKey,
+      piapiApiKey: piapiKey,
+    });
+    if (freeGate) return freeGate;
+  }
   let dbPlanResolved: string | null = null;
   if (!personalKey && !piapiKey) {
     // Fetch plan from DB (server-side); fall back to client claim only if table not yet available

@@ -80,6 +80,7 @@ import {
 } from "@/lib/mergeStudioHistoryWithLocal";
 import { isKieServableReferenceImageUrl } from "@/lib/kieSoraReferenceImage";
 import { guardedFetch } from "@/lib/guardedFetch";
+import { dispatchPersonalApiKeyRequired } from "@/lib/personalApiKeyEvents";
 import { refundPlatformCredits } from "@/lib/refundPlatformCredits";
 import { calculateVideoCredits } from "@/lib/linkToAd/generationCredits";
 import { calculateStudioVideoEditCredits } from "@/lib/pricing";
@@ -3536,6 +3537,13 @@ export default function StudioVideoPanel({
     }
     const creditBypass = isPlatformCreditBypassActive();
     if (!creditBypass && creditsRef.current < editCredits) {
+      if (planId === "free") {
+        dispatchPersonalApiKeyRequired({
+          message:
+            "On the free plan, add your Kie API key so video edits bill your Kie account.",
+        });
+        return;
+      }
       setBilling({ open: true, reason: "credits", required: editCredits, studioMode: "video_edit" });
       return;
     }
@@ -3826,6 +3834,13 @@ export default function StudioVideoPanel({
     }
     const creditBypassCreate = isPlatformCreditBypassActive();
     if (!creditBypassCreate && creditsRef.current < credits) {
+      if (planId === "free") {
+        dispatchPersonalApiKeyRequired({
+          message:
+            "On the free plan, add your Kie API key so video generations bill your Kie account.",
+        });
+        return;
+      }
       setBilling({ open: true, reason: "credits", required: credits, studioMode: "video" });
       return;
     }
