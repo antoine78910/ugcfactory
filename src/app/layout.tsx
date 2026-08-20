@@ -109,6 +109,14 @@ export default function RootLayout({
         <link rel="dns-prefetch" href="https://datafa.st" />
         <link rel="dns-prefetch" href="https://cdn.heyo.so" />
         <link rel="dns-prefetch" href="https://scripts.clarity.ms" />
+        {/* Catch ChunkLoadError before React hydrates (stale tab after deploy). */}
+        <Script
+          id="chunk-load-recovery"
+          strategy="beforeInteractive"
+          dangerouslySetInnerHTML={{
+            __html: `(function(){try{var K="youry_chunk_reload_at",C=20000;function bad(m,n){return n==="ChunkLoadError"||/ChunkLoadError|Failed to load chunk|Loading chunk/i.test(String(m||""));}function go(r){try{var t=Number(sessionStorage.getItem(K)||"0");if(isFinite(t)&&Date.now()-t<C)return;sessionStorage.setItem(K,String(Date.now()));}catch(e){}location.reload();}window.addEventListener("error",function(e){var err=e&&e.error;if(bad(e&&e.message,err&&err.name))go(e&&e.message);});window.addEventListener("unhandledrejection",function(e){var r=e&&e.reason;var m=r&&r.message?r.message:String(r||"");var n=r&&r.name;if(bad(m,n))go(m);});}catch(e){}})();`,
+          }}
+        />
       </head>
       <body
         className={`${geistSans.variable} ${geistMono.variable} antialiased`}
