@@ -34,6 +34,8 @@ const PRESERVE_VERBATIM_PATTERNS: RegExp[] = [
   /klingelements/i,
   /\bsubscription upgrade required\b/i,
   /\bplan_upgrade_required\b/i,
+  /cloud storage is unavailable/i,
+  /sign in is required for image generation/i,
 ];
 
 function shouldPreserveVerbatim(s: string): boolean {
@@ -77,8 +79,11 @@ export function userFacingProviderError(raw: string | null | undefined): string 
   if (/credit|balance|quota|insufficient|payment required|\b402\b/.test(lower)) {
     return "Credits or quota issue. Check your API key or billing.";
   }
+  if (/cloud storage is unavailable|local image cannot be sent to generation/i.test(lower)) {
+    return "Cloud storage is unavailable, so this local image cannot be sent to generation yet. Reconnect Supabase Storage or sign in, then re-upload.";
+  }
   if (/unauthor|\b401\b|forbidden|\b403\b|signature|invalid key|apikey|api key rejected/.test(lower)) {
-    return "The request was rejected (authentication or permissions). Check your API keys.";
+    return "Sign in is required for image generation (or your Supabase project is unreachable). Check auth / database connection.";
   }
   if (/not found|\b404\b|expired|does not exist|task not found/.test(lower)) {
     return "A resource was missing or expired (for example the image link). Re-upload and try again.";

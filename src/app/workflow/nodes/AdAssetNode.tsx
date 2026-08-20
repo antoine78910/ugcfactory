@@ -2842,12 +2842,21 @@ function AdAssetNodeBase({ id, data, selected }: NodeProps<AdAssetNodeType>) {
       return;
     }
 
-    const shouldFanOutAsModules =
-      (data.kind === "image" || data.kind === "video" || data.kind === "motion") &&
+    /**
+     * Image ×N used to spawn N Image Generator clones. Prefer one generator + a
+     * media results list (same UX as prompt-list batches). Video/motion still fan
+     * out as modules when quantity > 1.
+     */
+    const expandImageQuantityToResultsList =
+      data.kind === "image" &&
       quantity > 1 &&
       !(batchPrompts?.length && batchPrompts.length > 1) &&
-      !(data.kind === "image" && data.imageWorkflowPreset === "profile_360");
-    const perNodeQuantity = shouldFanOutAsModules ? 1 : quantity;
+      data.imageWorkflowPreset !== "profile_360";
+    const shouldFanOutAsModules =
+      (data.kind === "video" || data.kind === "motion") &&
+      quantity > 1 &&
+      !(batchPrompts?.length && batchPrompts.length > 1);
+    const perNodeQuantity = shouldFanOutAsModules || expandImageQuantityToResultsList ? 1 : quantity;
 
     if (shouldFanOutAsModules) {
       const self = nodes.find((n) => n.id === id);
@@ -2966,8 +2975,13 @@ function AdAssetNodeBase({ id, data, selected }: NodeProps<AdAssetNodeType>) {
       const progressiveImageUrls: string[] = [];
       let pendingImageTaskIds: string[] = [];
       try {
-        promptsForRun = batchPrompts?.length ? batchPrompts : [singlePrompt];
-        const shouldBuildProgressList = fromPromptList && promptsForRun.length > 1;
+        promptsForRun = batchPrompts?.length
+          ? batchPrompts
+          : expandImageQuantityToResultsList
+            ? Array.from({ length: quantity }, () => singlePrompt)
+            : [singlePrompt];
+        const shouldBuildProgressList =
+          (fromPromptList || expandImageQuantityToResultsList) && promptsForRun.length > 1;
         const nodeRef = nodes.find((n) => n.id === id);
         if (shouldBuildProgressList && nodeRef) {
           const pendingSlots = promptsForRun.map((_, idx) => `${WORKFLOW_PENDING_MEDIA_PREFIX}${idx}`);
