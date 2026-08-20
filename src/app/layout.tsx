@@ -6,6 +6,7 @@ import { Toaster } from "@/components/ui/sonner";
 import HeyoInit from "@/app/_components/HeyoInit";
 import ClarityInit from "@/app/_components/ClarityInit";
 import { DubAnalyticsInit } from "@/app/_components/DubAnalyticsInit";
+import { ChunkLoadRecovery } from "@/app/_components/ChunkLoadRecovery";
 import { RouteAwareAppProviders } from "@/app/_components/RouteAwareAppProviders";
 
 const defaultTitle = "Youry";
@@ -136,6 +137,7 @@ export default function RootLayout({
           first-party chunk. See `RouteAwareAppProviders` for the routing rule.
         */}
         <RouteAwareAppProviders>
+          <ChunkLoadRecovery />
           <HeyoInit />
           <ClarityInit />
           {children}
