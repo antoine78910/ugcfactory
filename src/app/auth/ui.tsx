@@ -85,8 +85,16 @@ export default function AuthClient({ mode = "signin", redirectTo }: { mode?: Aut
       router.push(redirectTo || "/");
       router.refresh();
     } catch (err) {
-      toast.error("Sign in error", {
-        description: err instanceof Error ? err.message : "Unknown error",
+      const raw = err instanceof Error ? err.message : "Unknown error";
+      const lower = raw.toLowerCase();
+      const looksMissingAccount =
+        lower.includes("invalid login credentials") ||
+        lower.includes("invalid_credentials") ||
+        lower.includes("user not found");
+      toast.error(looksMissingAccount ? "No account on this workspace yet" : "Sign in error", {
+        description: looksMissingAccount
+          ? "This Supabase project was reset — create a new account (Sign up), then sign in."
+          : raw,
       });
     } finally {
       setIsLoading(false);
