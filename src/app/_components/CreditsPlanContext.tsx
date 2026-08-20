@@ -160,23 +160,13 @@ export function isPersonalApiActive(): boolean {
   return getPersonalApiKey() !== undefined;
 }
 
-/** Persist + enable a Kie personal API key (free / BYOK path). */
+/** Persist + enable a Kie personal API key (free / BYOK path via kie.ai). */
 export function saveAndEnablePersonalApiKey(raw: string): boolean {
   if (typeof window === "undefined") return false;
   const key = raw.trim();
   if (!key) return false;
   lsSet(LS_PERSONAL_API_KEY, key);
   lsSet(LS_PERSONAL_API_ENABLED, "1");
-  return true;
-}
-
-/** Persist + enable a PiAPI personal key when Seedance/PiAPI routes are used. */
-export function saveAndEnablePersonalPiapiApiKey(raw: string): boolean {
-  if (typeof window === "undefined") return false;
-  const key = raw.trim();
-  if (!key) return false;
-  lsSet(LS_PIAPI_PERSONAL_KEY, key);
-  lsSet(LS_PIAPI_PERSONAL_ENABLED, "1");
   return true;
 }
 
@@ -205,11 +195,11 @@ export function isPersonalElevenLabsActive(): boolean {
 }
 
 /**
- * When a personal provider key is enabled, skip platform credit charges and balance checks
- * in the studio (you bill the provider directly).
+ * When a personal Kie API key is enabled, skip platform credit charges and balance checks
+ * in the studio (you bill kie.ai directly).
  */
 export function isPlatformCreditBypassActive(): boolean {
-  return isPersonalApiActive() || isPersonalPiapiActive();
+  return isPersonalApiActive();
 }
 
 export type AccountPlanId = "free" | SubscriptionPlanId;

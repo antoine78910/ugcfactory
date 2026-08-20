@@ -74,7 +74,6 @@ import {
 import {
   useCreditsPlan,
   getPersonalApiKey,
-  getPersonalPiapiApiKey,
   isPlatformCreditBypassActive,
 } from "@/app/_components/CreditsPlanContext";
 import { StudioBillingDialog } from "@/app/_components/StudioBillingDialog";
@@ -1685,8 +1684,8 @@ export default function LinkToAdUniverse({
     await registerFailedStudioGeneration({
       kind: STUDIO_GENERATION_KIND_LINK_TO_AD_VIDEO,
       label,
-      provider: "piapi",
-      model: "seedance (PiAPI)",
+      provider: "kie-market",
+      model: "seedance (Kie)",
       errorMessage,
       ...(productUrl ? { inputUrls: [productUrl] } : {}),
     });
@@ -1892,7 +1891,7 @@ export default function LinkToAdUniverse({
   const [isVideoPromptLoading, setIsVideoPromptLoading] = useState(false);
   const [isKlingSubmitting, setIsKlingSubmitting] = useState(false);
   const [klingPollTaskId, setKlingPollTaskId] = useState<string | null>(null);
-  /** PiAPI queue hints (if provider exposes them on status payload). */
+  /** Provider queue hints (if exposed on status payload). */
   const [klingWaitEstimateSeconds, setKlingWaitEstimateSeconds] = useState<number | null>(null);
   const [klingQueuePosition, setKlingQueuePosition] = useState<number | null>(null);
   /** Lightbox: full reference image (source is often 9:16; grid shows 3:4 crop). */
@@ -4741,8 +4740,7 @@ export default function LinkToAdUniverse({
     // ~12 minutes max wait (enough for most generations).
     const maxAttempts = Math.ceil((12 * 60 * 1000) / sleepMs);
     const pKey = getPersonalApiKey();
-    const piKey = getPersonalPiapiApiKey();
-    const keyParam = `${pKey ? `&personalApiKey=${encodeURIComponent(pKey)}` : ""}${piKey ? `&piapiApiKey=${encodeURIComponent(piKey)}` : ""}`;
+    const keyParam = pKey ? `&personalApiKey=${encodeURIComponent(pKey)}` : "";
     for (let attempt = 0; attempt < maxAttempts; attempt++) {
       if (signal?.aborted) {
         throw new DOMException("Aborted", "AbortError");
@@ -5611,8 +5609,7 @@ export default function LinkToAdUniverse({
     async function tick() {
       try {
         const nKey = getPersonalApiKey();
-        const nPiKey = getPersonalPiapiApiKey();
-        const nParam = `${nKey ? `&personalApiKey=${encodeURIComponent(nKey)}` : ""}${nPiKey ? `&piapiApiKey=${encodeURIComponent(nPiKey)}` : ""}`;
+        const nParam = nKey ? `&personalApiKey=${encodeURIComponent(nKey)}` : "";
         const res = await fetchWithRetry(`/api/nanobanana/task?taskId=${encodeURIComponent(taskId)}${nParam}`, {
           cache: "no-store",
         });
@@ -5947,7 +5944,6 @@ export default function LinkToAdUniverse({
         duration: apiDuration,
         aspectRatio: "9:16",
         personalApiKey: getPersonalApiKey(),
-        piapiApiKey: getPersonalPiapiApiKey(),
       };
       let json: { taskId?: string; error?: string } | undefined;
       let blockedByCredits = false;
@@ -5996,12 +5992,11 @@ export default function LinkToAdUniverse({
               kind: STUDIO_GENERATION_KIND_LINK_TO_AD_VIDEO,
               label: angLabel,
               taskId: json.taskId,
-              provider: "piapi",
+              provider: "kie-market",
               model: generatePayload.marketModel,
               aspectRatio: "9:16",
               creditsCharged: 0,
               personalApiKey: getPersonalApiKey(),
-              piapiApiKey: getPersonalPiapiApiKey(),
               ...(productUrl ? { inputUrls: [productUrl] } : {}),
             }),
           });
@@ -6241,8 +6236,7 @@ export default function LinkToAdUniverse({
           throw new Error("Seedance Preview generation is still processing after 12 hours.");
         }
         const kKey = getPersonalApiKey();
-        const kPiKey = getPersonalPiapiApiKey();
-        const kParam = `${kKey ? `&personalApiKey=${encodeURIComponent(kKey)}` : ""}${kPiKey ? `&piapiApiKey=${encodeURIComponent(kPiKey)}` : ""}`;
+        const kParam = kKey ? `&personalApiKey=${encodeURIComponent(kKey)}` : "";
         const res = await fetch(`/api/kling/status?taskId=${encodeURIComponent(taskId)}${kParam}`, { cache: "no-store" });
         const json = (await res.json()) as {
           data?: {

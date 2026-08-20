@@ -657,17 +657,15 @@ export async function POST(req: Request) {
   }
 
   const personalKey = hasPersonalApiKey(body.personalApiKey) ? body.personalApiKey.trim() : undefined;
-  const piapiKey = hasPersonalApiKey(body.piapiApiKey) ? body.piapiApiKey.trim() : undefined;
   {
     const freeGate = await assertPersonalApiForFreePlan({
       userId: user.id,
       personalApiKey: personalKey,
-      piapiApiKey: piapiKey,
     });
     if (freeGate) return freeGate;
   }
   let dbPlanResolved: string | null = null;
-  if (!personalKey && !piapiKey) {
+  if (!personalKey) {
     // Fetch plan from DB (server-side); fall back to client claim only if table not yet available
     const dbPlan = await getUserPlan(user.id);
     dbPlanResolved = dbPlan;
@@ -684,7 +682,7 @@ export async function POST(req: Request) {
     }
   }
 
-  const usesPersonalApi = Boolean(personalKey || piapiKey);
+  const usesPersonalApi = Boolean(personalKey);
   const admin = createSupabaseServiceClient();
   const email = await resolveAuthUserEmail(user, admin);
   const charges = shouldChargePlatformCredits({ usesPersonalApi, email });

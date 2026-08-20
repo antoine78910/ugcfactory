@@ -4,7 +4,6 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   useCreditsPlan,
   getPersonalApiKey,
-  getPersonalPiapiApiKey,
   isPersonalApiActive,
   isPlatformCreditBypassActive,
 } from "@/app/_components/CreditsPlanContext";
@@ -392,7 +391,6 @@ export default function StudioImagePanel({ onChangeVoice }: StudioImagePanelProp
           body: JSON.stringify({
             kind: STUDIO_IMAGE_LIBRARY_KIND_PARAM,
             personalApiKey: getPersonalApiKey() ?? undefined,
-            piapiApiKey: getPersonalPiapiApiKey() ?? undefined,
           }),
         });
         if (!res.ok) return;

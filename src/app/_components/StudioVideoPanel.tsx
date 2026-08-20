@@ -70,7 +70,6 @@ import {
 import {
   useCreditsPlan,
   getPersonalApiKey,
-  getPersonalPiapiApiKey,
   isPersonalApiActive,
   isPlatformCreditBypassActive,
 } from "@/app/_components/CreditsPlanContext";
@@ -892,7 +891,6 @@ async function registerStudioTask(params: {
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
         ...params,
-        piapiApiKey: getPersonalPiapiApiKey() ?? undefined,
       }),
     });
     if (!res.ok) {
@@ -1393,7 +1391,6 @@ export default function StudioVideoPanel({
           body: JSON.stringify({
             kind: STUDIO_VIDEO_LIBRARY_KIND_PARAM,
             personalApiKey: getPersonalApiKey() ?? undefined,
-            piapiApiKey: getPersonalPiapiApiKey() ?? undefined,
           }),
         });
         if (!res.ok) return;
@@ -3981,7 +3978,6 @@ export default function StudioVideoPanel({
     void (async () => {
       try {
         const pKey = getPersonalApiKey();
-        const piKey = getPersonalPiapiApiKey() ?? undefined;
         if (snap.family === "sora") {
           const { blocked, response: res } = await guardedFetch("/api/kling/generate", {
             method: "POST",
@@ -4133,7 +4129,6 @@ export default function StudioVideoPanel({
           sound: studioVideoSupportsNativeAudio(snap.modelId) ? snap.soundOn : undefined,
           mode: isKling30 || isKling25Turbo || isKling26 || isSora2Pro ? snap.klingMode : undefined,
           personalApiKey: pKey,
-          piapiApiKey: piKey,
         };
         if (Array.isArray(geminiOmniSnap) && geminiOmniSnap.length) {
           klingGenerateBody.geminiOmniMedia = geminiOmniSnap;

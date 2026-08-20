@@ -5,24 +5,20 @@ import Link from "next/link";
 import { KeyRound, X } from "lucide-react";
 import { toast } from "sonner";
 
-import {
-  saveAndEnablePersonalApiKey,
-  saveAndEnablePersonalPiapiApiKey,
-} from "@/app/_components/CreditsPlanContext";
+import { saveAndEnablePersonalApiKey } from "@/app/_components/CreditsPlanContext";
 import {
   PERSONAL_API_KEY_REQUIRED_EVENT,
   type PersonalApiKeyRequiredDetail,
 } from "@/lib/personalApiKeyEvents";
 
 /**
- * Shown when a free-plan user tries to generate without a personal Kie/PiAPI key.
- * Keys stay in localStorage and are sent with generation requests (BYOK).
+ * Shown when a free-plan user tries to generate without a personal Kie API key.
+ * Keys stay in localStorage and are sent with generation requests (BYOK via kie.ai).
  */
 export default function PersonalApiKeyModal() {
   const [open, setOpen] = useState(false);
   const [message, setMessage] = useState<string | null>(null);
   const [kieKey, setKieKey] = useState("");
-  const [piapiKey, setPiapiKey] = useState("");
   const [showKie, setShowKie] = useState(false);
 
   useEffect(() => {
@@ -38,16 +34,13 @@ export default function PersonalApiKeyModal() {
   const close = useCallback(() => setOpen(false), []);
 
   function save() {
-    const kieOk = saveAndEnablePersonalApiKey(kieKey);
-    if (piapiKey.trim()) saveAndEnablePersonalPiapiApiKey(piapiKey);
-    if (!kieOk) {
+    if (!saveAndEnablePersonalApiKey(kieKey)) {
       toast.error("Paste your Kie API key to continue.");
       return;
     }
-    toast.success("Kie API key saved. Generations will bill your Kie account.");
+    toast.success("Kie API key saved. Generations will bill your kie.ai account.");
     setOpen(false);
     setKieKey("");
-    setPiapiKey("");
   }
 
   if (!open) return null;
@@ -78,14 +71,14 @@ export default function PersonalApiKeyModal() {
             <h2 className="text-lg font-semibold text-white">Add your Kie API key</h2>
             <p className="mt-1 text-sm leading-relaxed text-white/60">
               {message?.trim() ||
-                "On the free plan, generations use your Kie account directly. No platform credits required."}
+                "On the free plan, generations use your kie.ai account directly. No platform credits required."}
             </p>
           </div>
         </div>
 
-        <div className="mt-5 space-y-3">
+        <div className="mt-5">
           <label className="block space-y-1.5">
-            <span className="text-xs font-medium text-white/50">Kie API key</span>
+            <span className="text-xs font-medium text-white/50">Kie API key (kie.ai)</span>
             <div className="flex gap-2">
               <input
                 type={showKie ? "text" : "password"}
@@ -103,17 +96,6 @@ export default function PersonalApiKeyModal() {
                 {showKie ? "Hide" : "Show"}
               </button>
             </div>
-          </label>
-          <label className="block space-y-1.5">
-            <span className="text-xs font-medium text-white/50">PiAPI key (optional)</span>
-            <input
-              type="password"
-              value={piapiKey}
-              onChange={(e) => setPiapiKey(e.target.value)}
-              placeholder="Only if you use PiAPI / Seedance routes"
-              autoComplete="off"
-              className="h-11 w-full rounded-xl border border-white/15 bg-black/40 px-3 text-sm text-white placeholder:text-white/30 focus:border-violet-400/50 focus:outline-none"
-            />
           </label>
         </div>
 

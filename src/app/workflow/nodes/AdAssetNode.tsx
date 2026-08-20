@@ -41,7 +41,6 @@ import { toast } from "sonner";
 
 import {
   getPersonalApiKey,
-  getPersonalPiapiApiKey,
   isPlatformCreditBypassActive,
   useCreditsPlan,
 } from "@/app/_components/CreditsPlanContext";
@@ -1429,7 +1428,6 @@ function AdAssetNodeBase({ id, data, selected }: NodeProps<AdAssetNodeType>) {
           body: JSON.stringify({
             kind: "workflow",
             personalApiKey: getPersonalApiKey()?.trim() || undefined,
-            piapiApiKey: getPersonalPiapiApiKey()?.trim() || undefined,
           }),
         });
         const json = (await res.json().catch(() => ({}))) as {
@@ -2944,7 +2942,6 @@ function AdAssetNodeBase({ id, data, selected }: NodeProps<AdAssetNodeType>) {
     }
 
     const personalKey = getPersonalApiKey()?.trim() || undefined;
-    const piapiKey = getPersonalPiapiApiKey()?.trim() || undefined;
     const creditBypass = isPlatformCreditBypassActive();
     const refUrl = data.referencePreviewUrl?.trim();
     const refImageForImageGen =
@@ -3664,7 +3661,6 @@ function AdAssetNodeBase({ id, data, selected }: NodeProps<AdAssetNodeType>) {
           const { videoUrl } = await runWorkflowVideoJob({
             planId,
             personalApiKey: personalKey,
-            piapiApiKey: piapiKey,
             prompt: p,
             model,
             aspectRatio,

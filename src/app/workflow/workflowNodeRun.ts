@@ -1857,7 +1857,6 @@ export async function runWorkflowVideoJob(params: WorkflowRunVideoParams): Promi
 async function runWorkflowVideoJobOnce(params: WorkflowRunVideoParams): Promise<{ videoUrl: string; taskId: string }> {
   const modelId = resolveWorkflowVideoModelId(params.model);
   const pKey = params.personalApiKey;
-  const piKey = params.piapiApiKey;
   const startRaw = params.referenceImageUrl?.trim() || params.linkedImageUrl?.trim() || "";
   const startResolvedUrl = startRaw ? await resolveLocalWorkflowMediaUrlForServer(startRaw) : undefined;
   const endRaw = params.endImageUrl?.trim() || "";
@@ -2043,7 +2042,7 @@ async function runWorkflowVideoJobOnce(params: WorkflowRunVideoParams): Promise<
     return { videoUrl: finalUrl, taskId: json.taskId };
   }
 
-  if (!pKey && !piKey && !canUseStudioVideoModel(params.planId, modelId)) {
+  if (!pKey && !canUseStudioVideoModel(params.planId, modelId)) {
     throw new Error(studioVideoUpgradeMessage(params.planId, modelId) ?? "Subscription upgrade required for this model.");
   }
 
@@ -2165,7 +2164,6 @@ async function runWorkflowVideoJobOnce(params: WorkflowRunVideoParams): Promise<
       mode: isKling30 || isKling25Turbo || isKling26 || isSoraPicker ? quality : undefined,
       multiShots: isKling30 ? false : undefined,
       personalApiKey: pKey,
-      piapiApiKey: piKey,
     };
     const { blocked: genBlocked, response: genRes } = await guardedFetch("/api/kling/generate", {
       method: "POST",
@@ -2184,7 +2182,6 @@ async function runWorkflowVideoJobOnce(params: WorkflowRunVideoParams): Promise<
       const debugPayload = {
         ...generatePayload,
         personalApiKey: generatePayload.personalApiKey ? "[redacted]" : undefined,
-        piapiApiKey: generatePayload.piapiApiKey ? "[redacted]" : undefined,
       };
       console.error("[workflow.video] /api/kling/generate failed", {
         status: genRes.status,
@@ -2255,11 +2252,10 @@ async function runWorkflowVideoJobOnce(params: WorkflowRunVideoParams): Promise<
     model: modelId,
     creditsCharged: credits,
     personalApiKey: pKey,
-    piapiApiKey: piKey,
     inputUrls: registerInputUrls,
   });
 
-  const url = await pollKlingVideo(genJson.taskId, pKey, piKey);
+  const url = await pollKlingVideo(genJson.taskId, pKey);
   const finalUrl = await completeStudioGenerationTask(genJson.taskId, url);
   return { videoUrl: finalUrl, taskId: genJson.taskId };
 }
