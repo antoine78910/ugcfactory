@@ -1740,6 +1740,7 @@ export default function StudioVideoPanel({
   }, [HIDE_VIDEO_EDIT_TAB, tab]);
 
   useEffect(() => {
+    if (isPersonalApiActive()) return;
     if (canUseStudioVideoModel(planId, modelId)) return;
     const next = VIDEO_MODEL_ACCESS_ORDER.find((id) => canUseStudioVideoModel(planId, id));
     if (!next) return;
@@ -1749,6 +1750,7 @@ export default function StudioVideoPanel({
   }, [planId, modelId]);
 
   useEffect(() => {
+    if (isPersonalApiActive()) return;
     if (canUseStudioVideoEditPicker(planId, editPickerId)) return;
     const next = VIDEO_EDIT_PICKER_ACCESS_ORDER.find((id) => canUseStudioVideoEditPicker(planId, id));
     if (next) setEditPickerId(next);
