@@ -435,6 +435,8 @@ export default function StudioImagePanel({ onChangeVoice }: StudioImagePanelProp
   }, [model, aspectOptions, aspect]);
 
   useEffect(() => {
+    // Personal Kie key (BYOK) unlocks all image models in the picker; do not force a downgrade.
+    if (isPersonalApiActive()) return;
     if (canUseStudioImagePickerModel(planId, model)) return;
     setModel("nano");
   }, [planId, model]);

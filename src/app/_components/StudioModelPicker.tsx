@@ -507,6 +507,11 @@ export function StudioModelPicker({
               }}
               role="listbox"
               aria-label="Choose model"
+              onMouseDown={(e) => {
+                // Keep the portal open through the full click (document mousedown
+                // outside-handler must not unmount the list before onClick fires).
+                e.stopPropagation();
+              }}
             >
               <ModelPickerPanelBody
                 q={q}
