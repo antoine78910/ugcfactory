@@ -212,11 +212,11 @@ function WorkflowGroupNodeBase({ id, data, selected, width, height }: NodeProps<
       <WorkflowNodeContextToolbar
         nodeId={id}
         onUngroup={ungroup}
-        onRun={() =>
-          toast.message("Run group", {
-            description: "End-to-end runs for every module in this group will be available soon.",
-          })
-        }
+        onRun={() => {
+          window.dispatchEvent(
+            new CustomEvent("workflow:run-group", { detail: { groupId: id } }),
+          );
+        }}
       />
       <NodeResizer
         minWidth={200}

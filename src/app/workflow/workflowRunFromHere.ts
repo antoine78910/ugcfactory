@@ -168,6 +168,39 @@ export function planWorkflowRunFromHere(
   return { runnableIds, orderedRunIds };
 }
 
+/** Runnable AdAsset children inside a workflow group frame (`parentId === groupId`). */
+export function collectWorkflowGroupRunnableIds(groupId: string, nodes: Node[]): string[] {
+  const gid = groupId.trim();
+  if (!gid) return [];
+  return nodes.filter((n) => n.parentId === gid && isRunnableNode(n)).map((n) => n.id);
+}
+
+/**
+ * Plan a sequential run of every runnable generator in a group.
+ * Edge dependencies inside the group are respected; otherwise top→bottom / left→right.
+ */
+export function planWorkflowRunGroup(
+  groupId: string,
+  nodes: Node[],
+  edges: Edge[],
+): { runnableIds: string[]; orderedRunIds: string[] } {
+  const runnableIds = collectWorkflowGroupRunnableIds(groupId, nodes);
+  if (!runnableIds.length) return { runnableIds: [], orderedRunIds: [] };
+
+  const byId = new Map(nodes.map((n) => [n.id, n]));
+  const byPosition = [...runnableIds].sort((a, b) => {
+    const na = byId.get(a);
+    const nb = byId.get(b);
+    const ya = na?.position.y ?? 0;
+    const yb = nb?.position.y ?? 0;
+    if (Math.abs(ya - yb) > 8) return ya - yb;
+    return (na?.position.x ?? 0) - (nb?.position.x ?? 0);
+  });
+  const startId = byPosition[0]!;
+  const orderedRunIds = orderWorkflowRunFromHereIds(byPosition, nodes, edges, startId);
+  return { runnableIds: byPosition, orderedRunIds };
+}
+
 /** Step indices of runnable ancestors for UI (run-from-here plan popover). */
 export function workflowRunFromHereParentStepIndices(
   orderedRunIds: string[],

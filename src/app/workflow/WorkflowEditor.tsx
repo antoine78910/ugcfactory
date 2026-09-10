@@ -197,7 +197,7 @@ import {
   workflowVideoModelHasStartFrame,
   workflowVideoOrderedElementImageRefs,
 } from "./workflowNodeRun";
-import { planWorkflowRunFromHere } from "./workflowRunFromHere";
+import { planWorkflowRunFromHere, planWorkflowRunGroup } from "./workflowRunFromHere";
 import { WorkflowMediaTrimDialog } from "./WorkflowMediaTrimDialog";
 
 /** Matches `workflowNodeFactory` default for new Video Generator nodes (picker chaining eligibility). */
@@ -4012,6 +4012,60 @@ export function WorkflowFlowWorkspace({
         window.addEventListener("workflow:node-run-finished", onFinished as EventListener);
       });
 
+    const runOrderedNodes = async (
+      orderedRunIds: string[],
+      snapNodes: WorkflowCanvasNode[],
+      snapEdges: Edge[],
+      toastTitle: string,
+    ) => {
+      setRunFromHereParamLock(true);
+      try {
+        const byId = new Map(snapNodes.map((n) => [n.id, n]));
+        const estimatedCredits = orderedRunIds.reduce((sum, nid) => {
+          const n = byId.get(nid);
+          if (!n || n.type !== "adAsset") return sum;
+          const d = n.data as AdAssetNodeData;
+          return sum + estimateWorkflowAdAssetRunCredits(d, nid, snapNodes, snapEdges);
+        }, 0);
+        const creditsLabel =
+          estimatedCredits > 0
+            ? `${orderedRunIds.length} node(s) queued • ~${Math.round(estimatedCredits)} credits (charged step-by-step).`
+            : `${orderedRunIds.length} node(s) queued.`;
+        toast.message(toastTitle, { description: creditsLabel });
+        for (let i = 0; i < orderedRunIds.length; i++) {
+          const nodeId = orderedRunIds[i]!;
+          const live = nodesEdgesRef.current ?? { nodes: snapNodes, edges: snapEdges };
+          const liveNodes = live.nodes as WorkflowCanvasNode[];
+          const liveEdges = live.edges;
+          const runDetail: {
+            nodeId: string;
+            promptOverride?: string;
+          } = { nodeId };
+          const target = liveNodes.find((n) => n.id === nodeId);
+          if (target?.type === "adAsset") {
+            const kind = (target.data as AdAssetNodeData).kind;
+            if (kind === "image" || kind === "video" || kind === "motion") {
+              const assistantTexts = collectUpstreamAssistantTexts(liveNodes, liveEdges, nodeId);
+              if (assistantTexts.length) {
+                runDetail.promptOverride = assistantTexts.join("\n\n");
+              }
+            }
+          }
+          window.dispatchEvent(new CustomEvent("workflow:run-node", { detail: runDetail }));
+          const ok = await waitForNodeRun(nodeId);
+          if (!ok) {
+            toast.error("Run chain stopped", {
+              description: `Node ${i + 1}/${orderedRunIds.length} failed or timed out.`,
+            });
+            return;
+          }
+        }
+        toast.success(toastTitle === "Run group" ? "Group run completed" : "Run chain completed");
+      } finally {
+        setRunFromHereParamLock(false);
+      }
+    };
+
     const onRunFromHere = (ev: Event) => {
       const detail = (ev as CustomEvent<{ nodeId?: string }>).detail;
       const startId = detail?.nodeId?.trim();
@@ -4031,57 +4085,37 @@ export function WorkflowFlowWorkspace({
         return;
       }
 
-      void (async () => {
-        setRunFromHereParamLock(true);
-        try {
-          const estimatedCredits = orderedRunIds.reduce((sum, nid) => {
-            const n = byId.get(nid);
-            if (!n || n.type !== "adAsset") return sum;
-            const d = n.data as AdAssetNodeData;
-            return sum + estimateWorkflowAdAssetRunCredits(d, nid, snapNodes, snapEdges);
-          }, 0);
-          const creditsLabel =
-            estimatedCredits > 0
-              ? `${orderedRunIds.length} node(s) queued • ~${Math.round(estimatedCredits)} credits (charged step-by-step).`
-              : `${orderedRunIds.length} node(s) queued.`;
-          toast.message("Run from here", { description: creditsLabel });
-          for (let i = 0; i < orderedRunIds.length; i++) {
-            const nodeId = orderedRunIds[i]!;
-            const live = nodesEdgesRef.current ?? { nodes: snapNodes, edges: snapEdges };
-            const liveNodes = live.nodes as WorkflowCanvasNode[];
-            const liveEdges = live.edges;
-            const runDetail: {
-              nodeId: string;
-              promptOverride?: string;
-            } = { nodeId };
-            const target = liveNodes.find((n) => n.id === nodeId);
-            if (target?.type === "adAsset") {
-              const kind = (target.data as AdAssetNodeData).kind;
-              if (kind === "image" || kind === "video" || kind === "motion") {
-                const assistantTexts = collectUpstreamAssistantTexts(liveNodes, liveEdges, nodeId);
-                if (assistantTexts.length) {
-                  runDetail.promptOverride = assistantTexts.join("\n\n");
-                }
-              }
-            }
-            window.dispatchEvent(new CustomEvent("workflow:run-node", { detail: runDetail }));
-            const ok = await waitForNodeRun(nodeId);
-            if (!ok) {
-              toast.error("Run chain stopped", {
-                description: `Node ${i + 1}/${orderedRunIds.length} failed or timed out.`,
-              });
-              return;
-            }
-          }
-          toast.success("Run chain completed");
-        } finally {
-          setRunFromHereParamLock(false);
-        }
-      })();
+      void runOrderedNodes(orderedRunIds, snapNodes, snapEdges, "Run from here");
+    };
+
+    const onRunGroup = (ev: Event) => {
+      const detail = (ev as CustomEvent<{ groupId?: string }>).detail;
+      const groupId = detail?.groupId?.trim();
+      if (!groupId) return;
+
+      const snap = nodesEdgesRef.current ?? { nodes, edges };
+      const snapNodes = snap.nodes as WorkflowCanvasNode[];
+      const snapEdges = snap.edges;
+      const group = snapNodes.find((n) => n.id === groupId && n.type === "workflowGroup");
+      if (!group) return;
+
+      const { orderedRunIds } = planWorkflowRunGroup(groupId, snapNodes, snapEdges);
+      if (!orderedRunIds.length) {
+        toast.message("Nothing runnable in this group", {
+          description: "Add image, video, motion, assistant, website, or merge modules to the group first.",
+        });
+        return;
+      }
+
+      void runOrderedNodes(orderedRunIds, snapNodes, snapEdges, "Run group");
     };
 
     window.addEventListener("workflow:run-from-here", onRunFromHere as EventListener);
-    return () => window.removeEventListener("workflow:run-from-here", onRunFromHere as EventListener);
+    window.addEventListener("workflow:run-group", onRunGroup as EventListener);
+    return () => {
+      window.removeEventListener("workflow:run-from-here", onRunFromHere as EventListener);
+      window.removeEventListener("workflow:run-group", onRunGroup as EventListener);
+    };
   }, [edges, nodes, readOnly]);
 
   const activeName = activePage?.name ?? "Page";
