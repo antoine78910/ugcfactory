@@ -176,16 +176,56 @@ export function collectWorkflowGroupRunnableIds(groupId: string, nodes: Node[]):
 }
 
 /**
- * Plan a sequential run of every runnable generator in a group.
- * Edge dependencies inside the group are respected; otherwise top→bottom / left→right.
+ * Parallel run waves among a set of runnable ids.
+ * Independent nodes share a wave; edge deps keep upstream before downstream.
+ */
+export function buildWorkflowRunParallelWaves(runnableIds: string[], edges: Edge[]): string[][] {
+  if (!runnableIds.length) return [];
+  const runSet = new Set(runnableIds);
+  const indegree = new Map<string, number>();
+  const children = new Map<string, string[]>();
+  for (const id of runnableIds) {
+    indegree.set(id, 0);
+    children.set(id, []);
+  }
+  for (const e of edges) {
+    if (!runSet.has(e.source) || !runSet.has(e.target) || e.source === e.target) continue;
+    children.get(e.source)!.push(e.target);
+    indegree.set(e.target, (indegree.get(e.target) ?? 0) + 1);
+  }
+
+  const waves: string[][] = [];
+  const remaining = new Set(runnableIds);
+  while (remaining.size) {
+    const wave = [...remaining].filter((id) => (indegree.get(id) ?? 0) === 0);
+    if (!wave.length) {
+      // Cycle / unresolved — run the rest together rather than stalling.
+      waves.push([...remaining]);
+      break;
+    }
+    waves.push(wave);
+    for (const id of wave) {
+      remaining.delete(id);
+      for (const child of children.get(id) ?? []) {
+        if (!remaining.has(child)) continue;
+        indegree.set(child, Math.max(0, (indegree.get(child) ?? 1) - 1));
+      }
+    }
+  }
+  return waves;
+}
+
+/**
+ * Plan a parallel group run: every runnable child, in dependency waves.
+ * Unconnected generators all start together.
  */
 export function planWorkflowRunGroup(
   groupId: string,
   nodes: Node[],
   edges: Edge[],
-): { runnableIds: string[]; orderedRunIds: string[] } {
+): { runnableIds: string[]; orderedRunIds: string[]; parallelWaves: string[][] } {
   const runnableIds = collectWorkflowGroupRunnableIds(groupId, nodes);
-  if (!runnableIds.length) return { runnableIds: [], orderedRunIds: [] };
+  if (!runnableIds.length) return { runnableIds: [], orderedRunIds: [], parallelWaves: [] };
 
   const byId = new Map(nodes.map((n) => [n.id, n]));
   const byPosition = [...runnableIds].sort((a, b) => {
@@ -196,9 +236,9 @@ export function planWorkflowRunGroup(
     if (Math.abs(ya - yb) > 8) return ya - yb;
     return (na?.position.x ?? 0) - (nb?.position.x ?? 0);
   });
-  const startId = byPosition[0]!;
-  const orderedRunIds = orderWorkflowRunFromHereIds(byPosition, nodes, edges, startId);
-  return { runnableIds: byPosition, orderedRunIds };
+  const parallelWaves = buildWorkflowRunParallelWaves(byPosition, edges);
+  const orderedRunIds = parallelWaves.flat();
+  return { runnableIds: byPosition, orderedRunIds, parallelWaves };
 }
 
 /** Step indices of runnable ancestors for UI (run-from-here plan popover). */
