@@ -327,7 +327,7 @@ const VARIATION_MODELS: { value: string; label: string }[] = [
   { value: "faithful", label: "Faithful" },
 ];
 
-const IMAGE_ASPECTS = ["1:1", "4:5", "9:16", "16:9", "3:2"] as const;
+const IMAGE_ASPECTS = ["auto", "1:1", "4:5", "9:16", "16:9", "3:2"] as const;
 const VIDEO_ASPECTS = ["9:16", "16:9", "1:1"] as const;
 const VARIATION_ASPECTS = ["1:1", "4:5", "9:16", "16:9"] as const;
 
@@ -1155,7 +1155,12 @@ function AdAssetNodeBase({ id, data, selected }: NodeProps<AdAssetNodeType>) {
     titleEditing;
 
   const prompt = data.prompt ?? "";
-  const defaultAspect = data.kind === "video" ? "9:16" : "1:1";
+  const defaultAspect =
+    data.kind === "video" || data.kind === "motion"
+      ? "9:16"
+      : data.kind === "image"
+        ? "auto"
+        : "1:1";
   const aspectRatio = data.aspectRatio ?? defaultAspect;
 
   const closeAssistant = () => {
@@ -5757,7 +5762,7 @@ function AdAssetNodeBase({ id, data, selected }: NodeProps<AdAssetNodeType>) {
                   <SelectContent className={selectContentClass} position="popper">
                     {aspects.map((r) => (
                       <SelectItem key={r} value={r} className="text-[12px] focus:bg-violet-500/20">
-                        {aspectIcon(r)} {r}
+                        {aspectIcon(r)} {r === "auto" ? "Auto" : r}
                       </SelectItem>
                     ))}
                   </SelectContent>

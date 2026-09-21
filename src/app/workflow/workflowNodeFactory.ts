@@ -87,7 +87,7 @@ function genDefaultsForKind(
   return {
     prompt: "",
     model: "nano",
-    aspectRatio: "1:1",
+    aspectRatio: "auto",
     resolution: "1024",
     quantity: 1,
   };
