@@ -138,6 +138,8 @@ export type AdAssetNodeData = {
   /** Model id (workflow-local; studio wiring later) */
   model?: string;
   aspectRatio?: string;
+  /** Set after legacy 1:1 → auto migration (or on new image nodes). */
+  imageAspectAutoMigrated?: boolean;
   resolution?: string;
   /** Image / variation batch count */
   quantity?: number;
@@ -2355,6 +2357,16 @@ function AdAssetNodeBase({ id, data, selected }: NodeProps<AdAssetNodeType>) {
       patch(id, { videoDurationSec: coerced });
     }
   }, [data.kind, data.videoDurationSec, id, model, patch]);
+
+  useEffect(() => {
+    if (data.kind !== "image" || data.imageWorkflowPreset === "profile_360") return;
+    if (data.imageAspectAutoMigrated) return;
+    const ar = (data.aspectRatio ?? "").trim();
+    patch(id, {
+      aspectRatio: !ar || ar === "1:1" ? "auto" : ar,
+      imageAspectAutoMigrated: true,
+    });
+  }, [data.aspectRatio, data.imageAspectAutoMigrated, data.imageWorkflowPreset, data.kind, id, patch]);
 
   useEffect(() => {
     if (data.kind !== "image" || data.imageWorkflowPreset !== "profile_360") return;
@@ -5749,15 +5761,21 @@ function AdAssetNodeBase({ id, data, selected }: NodeProps<AdAssetNodeType>) {
                   <span className="truncate text-[9px] text-white/75">{aspectRatio}</span>
                 </div>
               ) : (
-                <Select value={aspectRatio} onValueChange={(v) => patch(id, { aspectRatio: v })} onOpenChange={setAspectMenuOpen}>
+                <Select
+                  value={(aspects as readonly string[]).includes(aspectRatio) ? aspectRatio : "auto"}
+                  onValueChange={(v) => patch(id, { aspectRatio: v })}
+                  onOpenChange={setAspectMenuOpen}
+                >
                   <SelectTrigger
                     size="sm"
-                    className={cn(selectTriggerClass, generatorSelectTriggerExtras, "min-w-0 max-w-[3.35rem] shrink-0")}
+                    className={cn(selectTriggerClass, generatorSelectTriggerExtras, "min-w-0 max-w-[3.75rem] shrink-0")}
                   >
                     <span className="mr-0.5 shrink-0 text-[9px] text-white/45" aria-hidden>
                       {aspectIcon(aspectRatio)}
                     </span>
-                    <SelectValue />
+                    <SelectValue placeholder="Auto">
+                      {aspectRatio === "auto" ? "Auto" : aspectRatio}
+                    </SelectValue>
                   </SelectTrigger>
                   <SelectContent className={selectContentClass} position="popper">
                     {aspects.map((r) => (

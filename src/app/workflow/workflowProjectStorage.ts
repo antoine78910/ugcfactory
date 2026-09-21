@@ -56,6 +56,55 @@ export function migrateAssistantLegacyTextEdges(
   });
 }
 
+/**
+ * Upgrade legacy image generators that still use the old factory default (1:1) to Auto.
+ * Per-node `imageAspectAutoMigrated` ensures intentional 1:1 choices after the upgrade stick.
+ */
+export function migrateWorkflowImageAspectToAuto(nodes: WorkflowCanvasNode[]): WorkflowCanvasNode[] {
+  let changed = false;
+  const next = nodes.map((n) => {
+    if (n.type !== "adAsset") return n;
+    const d = n.data as {
+      kind?: string;
+      aspectRatio?: string;
+      imageWorkflowPreset?: string;
+      imageAspectAutoMigrated?: boolean;
+    };
+    if (d.kind !== "image") return n;
+    if (d.imageWorkflowPreset === "profile_360") return n;
+    if (d.imageAspectAutoMigrated) return n;
+    changed = true;
+    const ar = (d.aspectRatio ?? "").trim();
+    const nextAspect = !ar || ar === "1:1" ? "auto" : ar;
+    return {
+      ...n,
+      data: {
+        ...n.data,
+        aspectRatio: nextAspect,
+        imageAspectAutoMigrated: true,
+      },
+    };
+  });
+  return changed ? next : nodes;
+}
+
+/** Apply img aspect + edge migrations on a project (local or cloud). */
+export function normalizeWorkflowProjectState(project: WorkflowProjectStateV1): WorkflowProjectStateV1 {
+  let touched = false;
+  const pages = project.pages.map((p) => {
+    const nodes = migrateWorkflowImageAspectToAuto(p.nodes);
+    if (nodes === p.nodes) return p;
+    touched = true;
+    return {
+      ...p,
+      nodes,
+      edges: migrateWorkflowEdges(nodes, p.edges),
+    };
+  });
+  if (!touched) return project;
+  return { ...project, pages };
+}
+
 /** Apply all edge normalizations when loading or mutating a workflow page. */
 export function migrateWorkflowEdges(nodes: WorkflowCanvasNode[], edges: Edge[]): Edge[] {
   return migrateAssistantLegacyTextEdges(
@@ -167,7 +216,8 @@ function parseProject(raw: string | null): WorkflowProjectStateV1 | null {
     const p = JSON.parse(raw) as Partial<WorkflowProjectStateV1>;
     if (p?.v !== 1 || !Array.isArray(p.pages) || p.pages.length === 0) return null;
     const pages: WorkflowFlowPage[] = p.pages.map((x, i) => {
-      const nodes = (Array.isArray(x?.nodes) ? x.nodes : []) as WorkflowCanvasNode[];
+      const rawNodes = (Array.isArray(x?.nodes) ? x.nodes : []) as WorkflowCanvasNode[];
+      const nodes = migrateWorkflowImageAspectToAuto(rawNodes);
       const rawEdges = Array.isArray(x?.edges) ? x.edges : [];
       return {
         id: typeof x?.id === "string" ? x.id : `p-${i}`,

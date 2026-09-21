@@ -104,6 +104,8 @@ import {
   defaultWorkflowProject,
   duplicateWorkflowPage,
   migrateWorkflowEdges,
+  migrateWorkflowImageAspectToAuto,
+  normalizeWorkflowProjectState,
   newPage,
   shouldShowWorkflowOnboarding,
   type WorkflowProjectStateV1,
@@ -3040,11 +3042,12 @@ export function WorkflowFlowWorkspace({
       skipHistoryCommitRef.current = true;
       undoStackRef.current = [];
       redoStackRef.current = [];
-      lastSnapshotRef.current = cloneWorkflowCanvasSnapshot(p.nodes, p.edges);
+      const migratedNodes = migrateWorkflowImageAspectToAuto(p.nodes as WorkflowCanvasNode[]);
+      lastSnapshotRef.current = cloneWorkflowCanvasSnapshot(migratedNodes, p.edges);
       setNodes(
-        ensureWorkflowNodesSelectable(p.nodes.map((n) => ({ ...n, selected: false }))),
+        ensureWorkflowNodesSelectable(migratedNodes.map((n) => ({ ...n, selected: false }))),
       );
-      setEdges(migrateWorkflowEdges(p.nodes as WorkflowCanvasNode[], p.edges));
+      setEdges(migrateWorkflowEdges(migratedNodes, p.edges));
       setFrameOpen(false);
       setPlacementPicker(null);
       setTool("select");
@@ -5702,6 +5705,11 @@ export function WorkflowEditor({
       cancelled = true;
     };
   }, [resolvedSpaceId, router, storageScope, runHistoryStorageKey, authUserId, shareTokenTrimmed]);
+
+  useEffect(() => {
+    if (!workflowHydrated) return;
+    setWorkflowProject((prev) => normalizeWorkflowProjectState(prev));
+  }, [workflowHydrated]);
 
   useEffect(() => {
     if (!workflowHydrated || storageScope === null) return;

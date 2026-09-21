@@ -116,6 +116,9 @@ export function buildAdAssetNode(
     label: options?.label ?? labels[kind],
     ...genDefaults,
   };
+  if (kind === "image") {
+    data.imageAspectAutoMigrated = true;
+  }
     if (kind === "assistant") {
     data.assistantModel = "gpt-5o";
     data.assistantMode = "input";

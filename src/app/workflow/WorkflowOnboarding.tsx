@@ -9,13 +9,14 @@ import type { AdAssetNodeData, AdAssetNodeType } from "./nodes/AdAssetNode";
 
 const genDefaults = (kind: AdAssetNodeData["kind"]): Pick<
   AdAssetNodeData,
-  "prompt" | "model" | "aspectRatio" | "resolution" | "quantity"
+  "prompt" | "model" | "aspectRatio" | "resolution" | "quantity" | "imageAspectAutoMigrated"
 > => ({
   prompt: "",
   model: kind === "video" ? "kling-3.0/video" : kind === "assistant" ? "creative" : "nano",
-  aspectRatio: kind === "video" ? "9:16" : "1:1",
+  aspectRatio: kind === "video" ? "9:16" : kind === "image" ? "auto" : "1:1",
   resolution: kind === "video" ? "720p" : "1024",
   quantity: 1,
+  ...(kind === "image" ? { imageAspectAutoMigrated: true as const } : {}),
 });
 
 export type WorkflowStarterKind = "stock" | "media" | "image_gen" | "video_gen" | "assistant";
