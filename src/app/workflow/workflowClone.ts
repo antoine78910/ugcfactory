@@ -40,8 +40,58 @@ function isGroupCloneableChildNode(
 }
 
 /**
+ * Groups to clone for a selection:
+ * - explicitly selected group frames, plus
+ * - parent groups of selected children (so marquee / multi-select of modules still copies the frames).
+ * Explicit groups take all children; inferred groups only take the selected children.
+ */
+export function resolveWorkflowGroupsToClone(
+  allNodes: WorkflowCanvasNode[],
+  selected: WorkflowCanvasNode[],
+): {
+  groups: WorkflowGroupNodeType[];
+  explicitGroupIds: Set<string>;
+  groupIds: Set<string>;
+  selectedChildIds: Set<string>;
+} {
+  const byId = new Map(allNodes.map((n) => [n.id, n]));
+  const explicitGroups = selected.filter((n): n is WorkflowGroupNodeType => n.type === "workflowGroup");
+  const explicitGroupIds = new Set(explicitGroups.map((g) => g.id));
+  const selectedChildIds = new Set(
+    selected.filter((n) => isGroupCloneableChildNode(n)).map((n) => n.id),
+  );
+
+  const groupIds = new Set(explicitGroupIds);
+  for (const n of selected) {
+    if (!isGroupCloneableChildNode(n)) continue;
+    const parentId = n.parentId;
+    if (!parentId || groupIds.has(parentId)) continue;
+    const parent = byId.get(parentId);
+    if (parent?.type === "workflowGroup") groupIds.add(parentId);
+  }
+
+  const groups: WorkflowGroupNodeType[] = [];
+  for (const gid of groupIds) {
+    const g = byId.get(gid);
+    if (g?.type === "workflowGroup") groups.push(g);
+  }
+
+  return { groups, explicitGroupIds, groupIds, selectedChildIds };
+}
+
+function shouldCloneGroupChild(
+  childId: string,
+  groupId: string,
+  explicitGroupIds: Set<string>,
+  selectedChildIds: Set<string>,
+): boolean {
+  return explicitGroupIds.has(groupId) || selectedChildIds.has(childId);
+}
+
+/**
  * Node refs that belong to the current selection (same rules as duplicate / cut).
- * Groups include all child generators from the graph; loose generators skip children of selected groups.
+ * Groups include their children (all if the group is selected, else only selected children).
+ * Loose generators skip children already covered by those groups.
  */
 export function collectWorkflowSelectionNodeRefs(
   allNodes: WorkflowCanvasNode[],
@@ -51,12 +101,12 @@ export function collectWorkflowSelectionNodeRefs(
 
   const out: WorkflowCanvasNode[] = [];
   const addedIds = new Set<string>();
+  const { groups, explicitGroupIds, groupIds, selectedChildIds } = resolveWorkflowGroupsToClone(
+    allNodes,
+    selected,
+  );
 
-  const selectedGroups = selected.filter((n): n is WorkflowGroupNodeType => n.type === "workflowGroup");
-  const selectedGroupIds = new Set(selectedGroups.map((g) => g.id));
-
-  for (const g of selectedGroups) {
-    const groupNode = allNodes.find((x) => x.id === g.id) ?? g;
+  for (const groupNode of groups) {
     if (!addedIds.has(groupNode.id)) {
       out.push(groupNode);
       addedIds.add(groupNode.id);
@@ -66,6 +116,7 @@ export function collectWorkflowSelectionNodeRefs(
         n.parentId === groupNode.id && isGroupCloneableChildNode(n),
     );
     for (const c of children) {
+      if (!shouldCloneGroupChild(c.id, groupNode.id, explicitGroupIds, selectedChildIds)) continue;
       if (!addedIds.has(c.id)) {
         out.push(c);
         addedIds.add(c.id);
@@ -77,7 +128,7 @@ export function collectWorkflowSelectionNodeRefs(
   for (const a of selectedAssets) {
     if (addedIds.has(a.id)) continue;
     const parentId = a.parentId;
-    if (parentId && selectedGroupIds.has(parentId)) continue;
+    if (parentId && groupIds.has(parentId)) continue;
     const nodeRef = allNodes.find((x) => x.id === a.id) ?? a;
     if (!addedIds.has(nodeRef.id)) {
       out.push(nodeRef);
@@ -99,7 +150,7 @@ export function collectWorkflowSelectionNodeRefs(
   for (const r of selectedImageRefs) {
     if (addedIds.has(r.id)) continue;
     const parentId = r.parentId;
-    if (parentId && selectedGroupIds.has(parentId)) continue;
+    if (parentId && groupIds.has(parentId)) continue;
     const nodeRef = allNodes.find((x) => x.id === r.id) ?? r;
     if (!addedIds.has(nodeRef.id)) {
       out.push(nodeRef);
@@ -110,6 +161,8 @@ export function collectWorkflowSelectionNodeRefs(
   const selectedTextPrompts = selected.filter((n): n is TextPromptNodeType => n.type === "textPrompt");
   for (const t of selectedTextPrompts) {
     if (addedIds.has(t.id)) continue;
+    const parentId = t.parentId;
+    if (parentId && groupIds.has(parentId)) continue;
     const nodeRef = allNodes.find((x) => x.id === t.id) ?? t;
     if (!addedIds.has(nodeRef.id)) {
       out.push(nodeRef);
@@ -119,6 +172,8 @@ export function collectWorkflowSelectionNodeRefs(
   const selectedPromptLists = selected.filter((n): n is PromptListNodeType => n.type === "promptList");
   for (const l of selectedPromptLists) {
     if (addedIds.has(l.id)) continue;
+    const parentId = l.parentId;
+    if (parentId && groupIds.has(parentId)) continue;
     const nodeRef = allNodes.find((x) => x.id === l.id) ?? l;
     if (!addedIds.has(nodeRef.id)) {
       out.push(nodeRef);
@@ -181,7 +236,9 @@ export function buildClonedWorkflowEdges(allEdges: Edge[], idMap: Map<string, st
 }
 
 /**
- * Clone selected workflow groups (with all child generators) and/or selected generator nodes.
+ * Clone selected workflow groups (with child generators) and/or selected generator nodes.
+ * Parent groups of selected children are cloned even if the group frame was not selected,
+ * so duplicates are not trapped inside the original frames.
  * Preserves internal wiring and reconnects upstream inputs from nodes left on the canvas.
  */
 export function cloneWorkflowSelection(
@@ -189,8 +246,10 @@ export function cloneWorkflowSelection(
   allEdges: Edge[],
   selected: WorkflowCanvasNode[],
 ): CloneWorkflowResult | null {
-  const selectedGroups = selected.filter((n): n is WorkflowGroupNodeType => n.type === "workflowGroup");
-  const selectedGroupIds = new Set(selectedGroups.map((g) => g.id));
+  const { groups, explicitGroupIds, groupIds, selectedChildIds } = resolveWorkflowGroupsToClone(
+    allNodes,
+    selected,
+  );
 
   const refs = collectWorkflowSelectionNodeRefs(allNodes, selected);
   if (!refs?.length) return null;
@@ -200,7 +259,7 @@ export function cloneWorkflowSelection(
   const selectIds: string[] = [];
 
   let groupIndex = 0;
-  for (const g of selectedGroups) {
+  for (const g of groups) {
     const ox = DX * (groupIndex + 1);
     const oy = DY * (groupIndex + 1);
     groupIndex += 1;
@@ -211,7 +270,9 @@ export function cloneWorkflowSelection(
 
     const children = allNodes.filter(
       (n): n is AdAssetNodeType | ImageRefNodeType | TextPromptNodeType | PromptListNodeType =>
-        n.parentId === oldGid && isGroupCloneableChildNode(n),
+        n.parentId === oldGid &&
+        isGroupCloneableChildNode(n) &&
+        shouldCloneGroupChild(n.id, oldGid, explicitGroupIds, selectedChildIds),
     );
     for (const c of children) {
       idMap.set(c.id, crypto.randomUUID());
@@ -279,20 +340,18 @@ export function cloneWorkflowSelection(
     if (idMap.has(a.id)) continue;
 
     const parentId = a.parentId;
-    if (parentId && selectedGroupIds.has(parentId)) continue;
+    if (parentId && groupIds.has(parentId)) continue;
 
     const newId = crypto.randomUUID();
     idMap.set(a.id, newId);
 
+    // Never keep a lingering parentId — grouped nodes are handled above.
     const base: AdAssetNodeType = {
       id: newId,
       type: "adAsset",
-      position: !parentId
-        ? { x: a.position.x + DX, y: a.position.y + DY }
-        : { x: a.position.x + DX * 0.5, y: a.position.y + DY * 0.5 },
+      position: { x: a.position.x + DX, y: a.position.y + DY },
       data: structuredClone(a.data),
       selected: false,
-      ...(parentId ? { parentId, extent: "parent" as const } : {}),
     };
     nodesToAdd.push(base);
     selectIds.push(newId);
@@ -321,33 +380,20 @@ export function cloneWorkflowSelection(
     if (idMap.has(r.id)) continue;
 
     const parentId = r.parentId;
-    if (parentId && selectedGroupIds.has(parentId)) continue;
+    if (parentId && groupIds.has(parentId)) continue;
 
     const newId = crypto.randomUUID();
     idMap.set(r.id, newId);
 
     const data = clonePortableImageRefData(r.data);
-    nodesToAdd.push(
-      parentId
-        ? {
-            id: newId,
-            type: "imageRef",
-            parentId,
-            extent: "parent" as const,
-            position: { x: r.position.x + DX * 0.5, y: r.position.y + DY * 0.5 },
-            data,
-            selected: false,
-            zIndex: r.zIndex,
-          }
-        : {
-            id: newId,
-            type: "imageRef",
-            position: { x: r.position.x + DX, y: r.position.y + DY },
-            data,
-            selected: false,
-            zIndex: r.zIndex,
-          },
-    );
+    nodesToAdd.push({
+      id: newId,
+      type: "imageRef",
+      position: { x: r.position.x + DX, y: r.position.y + DY },
+      data,
+      selected: false,
+      zIndex: r.zIndex,
+    });
     selectIds.push(newId);
   }
 

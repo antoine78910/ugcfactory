@@ -158,9 +158,24 @@ export function remapPastedWorkflowPayload(
     }
     if (n.type === "textPrompt") {
       const t = n as TextPromptNodeType;
+      const mappedParent = t.parentId ? idMap.get(t.parentId) : undefined;
+      if (mappedParent) {
+        return {
+          ...t,
+          id: newId,
+          parentId: mappedParent,
+          extent: "parent" as const,
+          position: { ...t.position },
+          selected: false,
+          data: structuredClone(t.data),
+          zIndex: t.zIndex ?? 1,
+        } satisfies TextPromptNodeType;
+      }
       return {
         ...t,
         id: newId,
+        parentId: undefined,
+        extent: undefined,
         selected: false,
         position: {
           x: t.position.x + PASTE_DX,
@@ -172,9 +187,24 @@ export function remapPastedWorkflowPayload(
     }
     if (n.type === "promptList") {
       const l = n as PromptListNodeType;
+      const mappedParent = l.parentId ? idMap.get(l.parentId) : undefined;
+      if (mappedParent) {
+        return {
+          ...l,
+          id: newId,
+          parentId: mappedParent,
+          extent: "parent" as const,
+          position: { ...l.position },
+          selected: false,
+          data: structuredClone(l.data),
+          zIndex: l.zIndex ?? 1,
+        } satisfies PromptListNodeType;
+      }
       return {
         ...l,
         id: newId,
+        parentId: undefined,
+        extent: undefined,
         selected: false,
         position: {
           x: l.position.x + PASTE_DX,
@@ -200,6 +230,8 @@ export function remapPastedWorkflowPayload(
     return {
       ...a,
       id: newId,
+      parentId: undefined,
+      extent: undefined,
       selected: false,
       position: {
         x: a.position.x + PASTE_DX,
