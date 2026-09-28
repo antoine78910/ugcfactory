@@ -1,6 +1,7 @@
 /**
  * Which Studio image/video models each subscription tier may use.
- * Policy: Starter includes paid-model access unless a model is explicitly gated higher.
+ * Policy: paid tiers keep their minimum rank. The free plan can select every known model
+ * (generation still requires a personal Kie key so usage is billed on their Kie account).
  */
 
 import type { AppSection } from "@/lib/studioPaths";
@@ -19,8 +20,9 @@ export type AccountPlanId = "free" | SubscriptionPlanId;
 const ORDER: AccountPlanId[] = ["free", "starter", "growth", "pro", "scale"];
 
 /**
- * Effective tier for gating. **Free** is treated like **Starter** (rank 1) so credit-pack users
- * get the same studio model access as the first paid tier.
+ * Effective tier for paid-plan comparisons (complimentary vs Stripe).
+ * Free stays at Starter rank here so a gifted paid plan still wins over a Stripe-free account.
+ * Model access for free is granted separately in the `canUseStudio*` helpers.
  */
 export function planRank(planId: AccountPlanId): number {
   if (planId === "free") return 1;
@@ -76,13 +78,26 @@ const VEO_BODY_MODEL_MIN_RANK: Record<string, number> = {
   veo3_lite: VIDEO_MIN_RANK.veo3_lite,
 };
 
+function isKnownStudioImagePickerId(pickerId: string): boolean {
+  const id = pickerId.trim();
+  return (
+    id === "nano" ||
+    id === "pro" ||
+    isStudioSeedreamImagePickerId(id) ||
+    isStudioGoogleNanoBananaPickerId(id) ||
+    isStudioGptImage2PickerModelId(id)
+  );
+}
+
 export function canUseStudioImageModel(planId: AccountPlanId, model: "nano" | "pro"): boolean {
+  if (planId === "free") return true;
   return planRank(planId) >= IMAGE_MIN_RANK[model];
 }
 
-/** Studio Image picker row id (`nano` / `pro` / Seedream_*). Seedream = same minimum tier as NanoBanana Pro (Growth+). */
+/** Studio Image picker row id (`nano` / `pro` / Seedream_*). Seedream = same minimum tier as NanoBanana Pro (Growth+). Free can use every known picker. */
 export function canUseStudioImagePickerModel(planId: AccountPlanId, pickerId: string): boolean {
   const id = pickerId.trim();
+  if (planId === "free") return isKnownStudioImagePickerId(id);
   if (id === "nano" || id === "pro") return canUseStudioImageModel(planId, id);
   if (isStudioSeedreamImagePickerId(id)) return planRank(planId) >= IMAGE_MIN_RANK.pro;
   if (isStudioGoogleNanoBananaPickerId(id)) {
@@ -120,6 +135,7 @@ export function canUseStudioVideoModel(planId: AccountPlanId, marketModelId: str
   const id = normalizeVideoModelForGate(marketModelId.trim());
   const min = VIDEO_MIN_RANK[id];
   if (min === undefined) return false;
+  if (planId === "free") return true;
   return planRank(planId) >= min;
 }
 
@@ -127,6 +143,7 @@ export function canUseStudioVideoEditPicker(planId: AccountPlanId, editPickerId:
   const id = editPickerId.trim();
   const min = VIDEO_EDIT_PICKER_MIN_RANK[id];
   if (min === undefined) return false;
+  if (planId === "free") return true;
   return planRank(planId) >= min;
 }
 
@@ -134,6 +151,7 @@ export function canUseVeoApiModel(planId: AccountPlanId, veoModel: string | unde
   const key = (veoModel ?? "veo3_lite").trim();
   const min = VEO_BODY_MODEL_MIN_RANK[key];
   if (min === undefined) return false;
+  if (planId === "free") return true;
   return planRank(planId) >= min;
 }
 
