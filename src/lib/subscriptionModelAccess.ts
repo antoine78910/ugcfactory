@@ -9,6 +9,7 @@ import { isSubscriptionPlanId, type SubscriptionPlanId } from "@/lib/stripe/subs
 import {
   STUDIO_UNIFIED_IMAGE_PICKER_IDS,
   isStudioGoogleNanoBananaPickerId,
+  isStudioGptImage25PickerModelId,
   isStudioGptImage2PickerModelId,
   isStudioSeedreamImagePickerId,
 } from "@/lib/studioImageModels";
@@ -85,7 +86,8 @@ function isKnownStudioImagePickerId(pickerId: string): boolean {
     id === "pro" ||
     isStudioSeedreamImagePickerId(id) ||
     isStudioGoogleNanoBananaPickerId(id) ||
-    isStudioGptImage2PickerModelId(id)
+    isStudioGptImage2PickerModelId(id) ||
+    isStudioGptImage25PickerModelId(id)
   );
 }
 
@@ -103,7 +105,7 @@ export function canUseStudioImagePickerModel(planId: AccountPlanId, pickerId: st
   if (isStudioGoogleNanoBananaPickerId(id)) {
     return planRank(planId) >= IMAGE_MIN_RANK.pro;
   }
-  if (isStudioGptImage2PickerModelId(id)) {
+  if (isStudioGptImage2PickerModelId(id) || isStudioGptImage25PickerModelId(id)) {
     return planRank(planId) >= IMAGE_MIN_RANK.pro;
   }
   return false;
@@ -175,7 +177,7 @@ export function minPlanForStudioImagePicker(pickerId: string): AccountPlanId {
   if (isStudioGoogleNanoBananaPickerId(id)) {
     return planIdAtMinRank(IMAGE_MIN_RANK.pro);
   }
-  if (isStudioGptImage2PickerModelId(id)) {
+  if (isStudioGptImage2PickerModelId(id) || isStudioGptImage25PickerModelId(id)) {
     return planIdAtMinRank(IMAGE_MIN_RANK.pro);
   }
   return "scale";
@@ -276,12 +278,21 @@ const STUDIO_IMAGE_PICKER_LABELS: Record<string, string> = {
   seedream_50_lite: "Seedream 5.0 Lite",
   seedream_50_lite_text_to_image: "Seedream 5.0 Lite",
   seedream_50_lite_image_to_image: "Seedream 5.0 Lite",
+  seedream_50_pro: "Seedream 5.0 Pro",
+  seedream_50_pro_text_to_image: "Seedream 5.0 Pro",
+  seedream_50_pro_image_to_image: "Seedream 5.0 Pro",
   google_nano_banana: "NanoBanana 2",
   nanobanana_standard: "NanoBanana 2",
   google_nano_banana_edit: "NanoBanana 2",
   gpt_image_2: "GPT Image 2",
   gpt_image_2_text_to_image: "GPT Image 2",
   gpt_image_2_image_to_image: "GPT Image 2",
+  gpt_image_2_5_flare: "GPT Image 2.5 Flare",
+  gpt_image_2_5_flare_text_to_image: "GPT Image 2.5 Flare",
+  gpt_image_2_5_flare_image_to_image: "GPT Image 2.5 Flare",
+  gpt_image_2_5_sunburst: "GPT Image 2.5 Sunburst",
+  gpt_image_2_5_sunburst_text_to_image: "GPT Image 2.5 Sunburst",
+  gpt_image_2_5_sunburst_image_to_image: "GPT Image 2.5 Sunburst",
 };
 
 export function studioImagePickerDisplayLabel(pickerId: string): string {
@@ -395,6 +406,14 @@ export const SUBSCRIPTION_MODEL_MATRIX_ROWS: SubscriptionModelMatrixRow[] = [
   },
   {
     label: "Seedream 5.0",
+    tiers: tierBools(IMAGE_MIN_RANK.pro),
+  },
+  {
+    label: "Seedream 5.0 Pro",
+    tiers: tierBools(IMAGE_MIN_RANK.pro),
+  },
+  {
+    label: "GPT Image 2.5",
     tiers: tierBools(IMAGE_MIN_RANK.pro),
   },
   { label: "Kling 2.5 Turbo", tiers: tierBools(VIDEO_MIN_RANK["kling-2.5-turbo/video"]) },

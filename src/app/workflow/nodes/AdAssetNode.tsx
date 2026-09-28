@@ -270,8 +270,11 @@ const IMAGE_MODELS: { value: string; label: string }[] = [
   { value: "nano", label: "NanoBanana 2" },
   { value: "seedream_45", label: "Seedream 4.5" },
   { value: "seedream_50_lite", label: "Seedream 5.0 Lite" },
+  { value: "seedream_50_pro", label: "Seedream 5.0 Pro" },
   { value: "google_nano_banana", label: "Google Nano Banana" },
   { value: "gpt_image_2", label: "GPT Image 2" },
+  { value: "gpt_image_2_5_flare", label: "GPT Image 2.5 Flare" },
+  { value: "gpt_image_2_5_sunburst", label: "GPT Image 2.5 Sunburst" },
 ];
 
 const VIDEO_MODELS: { value: string; label: string }[] = [

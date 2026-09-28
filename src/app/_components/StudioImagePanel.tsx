@@ -47,6 +47,7 @@ import {
   studioImagePickerUpgradeMessage,
 } from "@/lib/subscriptionModelAccess";
 import {
+  isStudioGptImage25PickerModelId,
   isStudioImageKiePickerModelId,
   isStudioSeedreamImagePickerId,
   studioImageModelSupportsResolutionPicker,
@@ -112,6 +113,14 @@ const IMAGE_MODEL_PICKER_ITEMS: StudioModelPickerItem[] = [
     searchText: "seedream 5.0 lite text to image image to image",
   },
   {
+    id: "seedream_50_pro",
+    label: "Seedream 5.0 Pro",
+    icon: "seedream",
+    newBadge: true,
+    ...studioImagePickerCardHints("seedream_50_pro"),
+    searchText: "seedream 5.0 pro text to image image to image",
+  },
+  {
     id: "google_nano_banana",
     label: "Google Nano Banana",
     icon: "google",
@@ -122,9 +131,24 @@ const IMAGE_MODEL_PICKER_ITEMS: StudioModelPickerItem[] = [
     id: "gpt_image_2",
     label: "GPT Image 2",
     icon: "gpt_image_2",
-    newBadge: true,
     ...studioImagePickerCardHints("gpt_image_2"),
     searchText: "gpt image 2 openai text to image image to image",
+  },
+  {
+    id: "gpt_image_2_5_flare",
+    label: "GPT Image 2.5 Flare",
+    icon: "gpt_image_2",
+    newBadge: true,
+    ...studioImagePickerCardHints("gpt_image_2_5_flare"),
+    searchText: "gpt image 2.5 flare openai fast text to image image to image",
+  },
+  {
+    id: "gpt_image_2_5_sunburst",
+    label: "GPT Image 2.5 Sunburst",
+    icon: "gpt_image_2",
+    newBadge: true,
+    ...studioImagePickerCardHints("gpt_image_2_5_sunburst"),
+    searchText: "gpt image 2.5 sunburst openai quality text to image image to image",
   },
 ];
 
@@ -136,8 +160,11 @@ const STUDIO_LIGHTBOX_EDIT_MODEL_OPTIONS: StudioImageLightboxEditModelOption[] =
   { value: "nano", label: "NanoBanana 2" },
   { value: "seedream_45", label: "Seedream 4.5" },
   { value: "seedream_50_lite", label: "Seedream 5.0 Lite" },
+  { value: "seedream_50_pro", label: "Seedream 5.0 Pro" },
   { value: "google_nano_banana", label: "Google Nano Banana" },
   { value: "gpt_image_2", label: "GPT Image 2" },
+  { value: "gpt_image_2_5_flare", label: "GPT Image 2.5 Flare" },
+  { value: "gpt_image_2_5_sunburst", label: "GPT Image 2.5 Sunburst" },
 ];
 
 async function uploadReferenceFile(file: File): Promise<string> {
@@ -420,7 +447,7 @@ export default function StudioImagePanel({ onChangeVoice }: StudioImagePanelProp
 
   const aspectOptions = useMemo(() => {
     if (model === "nano") return NANO_BANANA_2_ASPECT_RATIOS;
-    if (model === "pro") return ["auto", ...ASPECT_RATIOS_PRO] as const;
+    if (model === "pro" || isStudioGptImage25PickerModelId(model)) return ["auto", ...ASPECT_RATIOS_PRO] as const;
     if (isStudioSeedreamImagePickerId(model)) return ASPECT_RATIOS_PRO;
     return NANO_BANANA_2_ASPECT_RATIOS;
   }, [model]);

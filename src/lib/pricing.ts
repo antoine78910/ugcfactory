@@ -5,6 +5,7 @@
 
 import {
   isStudioGoogleNanoBananaPickerId,
+  isStudioGptImage25PickerModelId,
   isStudioGptImage2PickerModelId,
   isStudioSeedreamImagePickerId,
   isStudioUnifiedSeedreamPickerId,
@@ -281,6 +282,37 @@ export const IMAGE_MODEL = {
   gpt_image_2: gptImage2Tier({
     model: "gpt_image_2",
     cost_usd: 0.06,
+    fal_list_price_usd: null,
+  }),
+  /** GPT Image 2.5 (KIE): 1K $0.03, 2K $0.05, 4K $0.08. Same for Flare and Sunburst. */
+  gpt_image_2_5_1k: gptImage2Tier({
+    model: "gpt_image_2_5_1k",
+    cost_usd: 0.03,
+    fal_list_price_usd: null,
+  }),
+  gpt_image_2_5_2k: gptImage2Tier({
+    model: "gpt_image_2_5_2k",
+    cost_usd: 0.05,
+    fal_list_price_usd: null,
+  }),
+  gpt_image_2_5_4k: gptImage2Tier({
+    model: "gpt_image_2_5_4k",
+    cost_usd: 0.08,
+    fal_list_price_usd: null,
+  }),
+  seedream_50_pro: fixedImageModelCredits({
+    model: "seedream_50_pro",
+    credits: 2,
+    fal_list_price_usd: null,
+  }),
+  seedream_50_pro_text_to_image: fixedImageModelCredits({
+    model: "seedream_50_pro_text_to_image",
+    credits: 2,
+    fal_list_price_usd: null,
+  }),
+  seedream_50_pro_image_to_image: fixedImageModelCredits({
+    model: "seedream_50_pro_image_to_image",
+    credits: 2,
     fal_list_price_usd: null,
   }),
 };
@@ -653,6 +685,11 @@ export function studioImageCreditsPerOutput(opts: {
 }): number {
   if (isStudioGptImage2PickerModelId(opts.studioModel)) {
     return IMAGE_MODEL.gpt_image_2_text_to_image.credits;
+  }
+  if (isStudioGptImage25PickerModelId(opts.studioModel)) {
+    if (opts.resolution === "4K") return IMAGE_MODEL.gpt_image_2_5_4k.credits;
+    if (opts.resolution === "2K") return IMAGE_MODEL.gpt_image_2_5_2k.credits;
+    return IMAGE_MODEL.gpt_image_2_5_1k.credits;
   }
   if (isStudioSeedreamImagePickerId(opts.studioModel) || isStudioUnifiedSeedreamPickerId(opts.studioModel)) {
     return IMAGE_MODEL[opts.studioModel].credits;

@@ -7,6 +7,7 @@ import {
   type KieGoogleImageResolution,
 } from "@/lib/kieGoogleImage";
 import { buildKieGptImage2Input, kieMarketModelForGptImage2Picker } from "@/lib/kieGptImage2";
+import { buildKieGptImage25Input, kieMarketModelForGptImage25Picker } from "@/lib/kieGptImage25";
 import {
   buildKieSeedreamInput,
   kieMarketModelForSeedreamPicker,
@@ -14,9 +15,11 @@ import {
 import type { NanoBananaImageSize, NanoBananaProAspectRatio, NanoBananaProResolution } from "@/lib/nanobanana";
 import { hasPersonalApiKey } from "@/lib/personalApiBypass";
 import {
+  isStudioGptImage25ResolvedPickerId,
   isStudioGptImage2ResolvedPickerId,
   isStudioSeedreamImagePickerId,
   resolveStudioImageModelForReferences,
+  studioGptImage25PickerRequiresReferenceImages,
   studioGptImage2PickerRequiresReferenceImages,
   studioSeedreamPickerRequiresReferenceImages,
   type StudioImageKiePickerModelId,
@@ -136,6 +139,44 @@ export async function createStudioKieImageTasks(input: StudioKieImageTaskInput):
       return { taskId, model, kieModel };
     }
     const taskIds = await Promise.all(Array.from({ length: num }, () => runGpt()));
+    return { taskIds, model, kieModel };
+  }
+
+  if (isStudioGptImage25ResolvedPickerId(model)) {
+    const normalizedRefs = await normalizeKieNanoBananaImageInputUrls(imageUrlsRaw);
+    if (studioGptImage25PickerRequiresReferenceImages(model)) {
+      if (!normalizedRefs?.length) {
+        throw new Error("Add at least one reference image for GPT Image 2.5 image-to-image.");
+      }
+    }
+    const kieModel = kieMarketModelForGptImage25Picker(model);
+    const aspectFor = input.aspectRatio ?? input.imageSize ?? "auto";
+    const cappedRefs = studioGptImage25PickerRequiresReferenceImages(model)
+      ? normalizedRefs?.slice(0, 16)
+      : undefined;
+    const gptInput = buildKieGptImage25Input({
+      pickerId: model,
+      prompt,
+      aspectRatio: typeof aspectFor === "string" ? aspectFor : "auto",
+      resolution,
+      imageUrls: cappedRefs,
+    });
+
+    const runGpt25 = () =>
+      kieMarketCreateTask(
+        {
+          model: kieModel,
+          callBackUrl,
+          input: gptInput,
+        },
+        personalKey,
+      );
+
+    if (num <= 1) {
+      const taskId = await runGpt25();
+      return { taskId, model, kieModel };
+    }
+    const taskIds = await Promise.all(Array.from({ length: num }, () => runGpt25()));
     return { taskIds, model, kieModel };
   }
 

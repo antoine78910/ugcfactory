@@ -32,6 +32,11 @@ export function studioImagePickerCardHints(id: StudioImageKiePickerModelId): {
         resolution: "Seedream 5 Lite",
         durationRange: "Text or reference image",
       };
+    case "seedream_50_pro":
+      return {
+        resolution: "1K / 2K",
+        durationRange: "Text or reference image",
+      };
     case "google_nano_banana":
       return {
         resolution: "Google pipeline",
@@ -41,6 +46,16 @@ export function studioImagePickerCardHints(id: StudioImageKiePickerModelId): {
       return {
         resolution: "GPT Image 2, high",
         durationRange: "Text or reference image",
+      };
+    case "gpt_image_2_5_flare":
+      return {
+        resolution: "1K / 2K / 4K",
+        durationRange: "Fast, text or reference",
+      };
+    case "gpt_image_2_5_sunburst":
+      return {
+        resolution: "1K / 2K / 4K",
+        durationRange: "Quality, text or reference",
       };
     default: {
       const s = id as string;
