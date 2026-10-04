@@ -5781,8 +5781,13 @@ export function WorkflowEditor({
           (storedLocalProject === null ||
             (countWorkflowProjectNodes(storedLocalProject) === 0 &&
               countWorkflowProjectNodes(cloud?.state) > 0));
+        const cloudEmptyVsLocal =
+          Boolean(cloud) &&
+          countWorkflowProjectNodes(cloud?.state) === 0 &&
+          countWorkflowProjectNodes(storedLocalProject) > 0;
         const preferCloud =
           Boolean(cloud) &&
+          !cloudEmptyVsLocal &&
           (localMissingOrEmptyVsCloud ||
             (Number.isFinite(cloudUpdatedAtMs) && cloudUpdatedAtMs > localUpdatedAtMs));
 
