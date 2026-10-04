@@ -116,6 +116,7 @@ import {
   duplicateWorkflowPage,
   migrateWorkflowEdges,
   migrateWorkflowImageAspectToAuto,
+  countWorkflowProjectNodes,
   normalizeWorkflowProjectState,
   newPage,
   shouldShowWorkflowOnboarding,
@@ -128,6 +129,7 @@ import {
   ensureLocalWorkflowSpace,
   getWorkflowStorageScope,
   loadProjectForSpace,
+  loadProjectForSpaceOrNull,
   loadSpacesIndex,
   saveProjectForSpace,
   updateSpaceMeta,
@@ -5755,7 +5757,8 @@ export function WorkflowEditor({
       if (authUserId === undefined) {
         return;
       }
-      const localProject = loadProjectForSpace(storageScope, resolvedSpaceId);
+      const storedLocalProject = loadProjectForSpaceOrNull(storageScope, resolvedSpaceId);
+      const localProject = storedLocalProject ?? loadProjectForSpace(storageScope, resolvedSpaceId);
       const localUpdatedAtMs = Number(localMeta.updatedAt) || 0;
       if (!authUserId) {
         setSpaceSource("local");
@@ -5771,10 +5774,17 @@ export function WorkflowEditor({
         const cloud = await fetchCloudWorkflowSpace(resolvedSpaceId);
         if (cancelled) return;
         const cloudUpdatedAtMs = cloud?.updatedAt ? Date.parse(cloud.updatedAt) : NaN;
+        // A missing/empty local copy must never win over a cloud copy that has content:
+        // the local index timestamp can be newer than the stored project (failed quota writes).
+        const localMissingOrEmptyVsCloud =
+          Boolean(cloud) &&
+          (storedLocalProject === null ||
+            (countWorkflowProjectNodes(storedLocalProject) === 0 &&
+              countWorkflowProjectNodes(cloud?.state) > 0));
         const preferCloud =
           Boolean(cloud) &&
-          Number.isFinite(cloudUpdatedAtMs) &&
-          cloudUpdatedAtMs > localUpdatedAtMs;
+          (localMissingOrEmptyVsCloud ||
+            (Number.isFinite(cloudUpdatedAtMs) && cloudUpdatedAtMs > localUpdatedAtMs));
 
         if (preferCloud && cloud) {
           lastCloudUpdatedAtRef.current = cloud.updatedAt;
@@ -5862,6 +5872,15 @@ export function WorkflowEditor({
     if (!workflowHydrated) return;
     setWorkflowProject((prev) => normalizeWorkflowProjectState(prev));
   }, [workflowHydrated]);
+
+  /** True once this space had nodes in the current session, so an empty canvas means the user cleared it. */
+  const sessionHadNodesRef = useRef(false);
+  useEffect(() => {
+    sessionHadNodesRef.current = false;
+  }, [resolvedSpaceId]);
+  useEffect(() => {
+    if (workflowHydrated && countWorkflowProjectNodes(workflowProject) > 0) sessionHadNodesRef.current = true;
+  }, [workflowHydrated, workflowProject]);
 
   useEffect(() => {
     if (!workflowHydrated || storageScope === null) return;
@@ -5997,6 +6016,7 @@ export function WorkflowEditor({
           state: workflowProject,
           publishedCommunityTemplateId: publishedTemplateId,
           expectedUpdatedAt: lastCloudUpdatedAtRef.current,
+          allowEmpty: sessionHadNodesRef.current,
         });
         if (res.ok) {
           if (res.updatedAt) lastCloudUpdatedAtRef.current = res.updatedAt;
@@ -6032,6 +6052,7 @@ export function WorkflowEditor({
               state: workflowProject,
               publishedCommunityTemplateId: publishedTemplateId,
               expectedUpdatedAt: resolvedUpdatedAt,
+              allowEmpty: sessionHadNodesRef.current,
             });
             if (retry.ok && retry.updatedAt) lastCloudUpdatedAtRef.current = retry.updatedAt;
           }
@@ -6255,6 +6276,7 @@ export function WorkflowEditor({
           state: workflowProject,
           publishedCommunityTemplateId: publishedId,
           expectedUpdatedAt: lastCloudUpdatedAtRef.current,
+          allowEmpty: sessionHadNodesRef.current,
         }).then((res) => {
           if (res.ok && res.updatedAt) lastCloudUpdatedAtRef.current = res.updatedAt;
         });
@@ -6505,6 +6527,7 @@ export function WorkflowEditor({
             state: workflowProject,
             publishedCommunityTemplateId: publishedTemplateId,
             expectedUpdatedAt: lastCloudUpdatedAtRef.current,
+            allowEmpty: sessionHadNodesRef.current,
           });
           if (!res.ok) {
             return {

@@ -41,6 +41,15 @@ function isValidProject(p: unknown): p is WorkflowProjectStateV1 {
   return o.v === 1 && typeof o.activePageId === "string" && Array.isArray(o.pages);
 }
 
+function countProjectNodes(state: unknown): number {
+  const pages = (state as { pages?: unknown } | null)?.pages;
+  if (!Array.isArray(pages)) return 0;
+  return pages.reduce(
+    (s: number, p: unknown) => s + (Array.isArray((p as { nodes?: unknown })?.nodes) ? (p as { nodes: unknown[] }).nodes.length : 0),
+    0,
+  );
+}
+
 /**
  * GET /api/workflow/spaces/[spaceId]
  * Returns the cloud-stored project state for a space the caller can access.
@@ -138,6 +147,7 @@ export async function PUT(req: Request, ctx: Ctx) {
     previewDataUrl?: unknown;
     publishedCommunityTemplateId?: unknown;
     expectedUpdatedAt?: unknown;
+    allowEmpty?: unknown;
   };
   if (!isValidProject(b.state)) {
     return NextResponse.json({ error: "Invalid workflow state." }, { status: 400 });
@@ -263,6 +273,23 @@ export async function PUT(req: Request, ctx: Ctx) {
         },
         { status: 409 },
       );
+    }
+    if (countProjectNodes(b.state) === 0 && b.allowEmpty !== true) {
+      const { data: current } = await admin
+        .from("workflow_spaces")
+        .select("state")
+        .eq("id", spaceId)
+        .maybeSingle();
+      if (countProjectNodes(current?.state) > 0) {
+        return NextResponse.json(
+          {
+            error: "Refusing to replace a non-empty workflow with an empty one. Reload the workflow.",
+            code: "WORKFLOW_SPACE_EMPTY_OVERWRITE",
+            serverUpdatedAt: serverUpdatedAtIso,
+          },
+          { status: 409 },
+        );
+      }
     }
     const updatePayload: Record<string, unknown> = {
       name,

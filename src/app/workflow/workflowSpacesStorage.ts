@@ -2,6 +2,7 @@ import type { WorkflowProjectStateV1 } from "./workflowProjectStorage";
 import {
   defaultWorkflowProject,
   loadWorkflowProjectRaw,
+  loadWorkflowProjectRawOrNull,
   saveWorkflowProjectRaw,
   workflowSpaceStorageKey,
 } from "./workflowProjectStorage";
@@ -317,9 +318,15 @@ export function loadProjectForSpace(scope: string, spaceId: string): WorkflowPro
   return loadWorkflowProjectRaw(scope, spaceId);
 }
 
-export function saveProjectForSpace(scope: string, spaceId: string, state: WorkflowProjectStateV1) {
-  saveWorkflowProjectRaw(scope, spaceId, state);
-  touchSpaceUpdated(scope, spaceId);
+export function loadProjectForSpaceOrNull(scope: string, spaceId: string): WorkflowProjectStateV1 | null {
+  return loadWorkflowProjectRawOrNull(scope, spaceId);
+}
+
+/** Only bumps the index timestamp when the project actually landed in localStorage. */
+export function saveProjectForSpace(scope: string, spaceId: string, state: WorkflowProjectStateV1): boolean {
+  const ok = saveWorkflowProjectRaw(scope, spaceId, state);
+  if (ok) touchSpaceUpdated(scope, spaceId);
+  return ok;
 }
 
 /** Creates a new space and copies the template project into it. */

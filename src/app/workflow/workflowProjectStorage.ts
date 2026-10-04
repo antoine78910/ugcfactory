@@ -256,14 +256,39 @@ export function loadWorkflowProjectRaw(scope: string, spaceId: string): Workflow
   }
 }
 
-/** @internal */
-export function saveWorkflowProjectRaw(scope: string, spaceId: string, state: WorkflowProjectStateV1) {
-  if (typeof window === "undefined") return;
+/** @internal Returns null when nothing valid is stored (missing key or unparsable payload). */
+export function loadWorkflowProjectRawOrNull(scope: string, spaceId: string): WorkflowProjectStateV1 | null {
+  if (typeof window === "undefined") return null;
   try {
-    localStorage.setItem(workflowSpaceStorageKey(scope, spaceId), JSON.stringify(sanitizeProjectForLocalStorage(state)));
+    return parseProject(localStorage.getItem(workflowSpaceStorageKey(scope, spaceId)));
   } catch {
-    /* quota */
+    return null;
   }
+}
+
+/**
+ * @internal Returns false when the write failed (usually quota). The stale key is removed so a
+ * later load can't mistake an outdated copy for the latest version.
+ */
+export function saveWorkflowProjectRaw(scope: string, spaceId: string, state: WorkflowProjectStateV1): boolean {
+  if (typeof window === "undefined") return false;
+  const key = workflowSpaceStorageKey(scope, spaceId);
+  try {
+    localStorage.setItem(key, JSON.stringify(sanitizeProjectForLocalStorage(state)));
+    return true;
+  } catch {
+    try {
+      localStorage.removeItem(key);
+    } catch {
+      /* ignore */
+    }
+    return false;
+  }
+}
+
+export function countWorkflowProjectNodes(project: WorkflowProjectStateV1 | null | undefined): number {
+  if (!project || !Array.isArray(project.pages)) return 0;
+  return project.pages.reduce((s, p) => s + (Array.isArray(p.nodes) ? p.nodes.length : 0), 0);
 }
 
 export function shouldShowWorkflowOnboarding(project: WorkflowProjectStateV1): boolean {

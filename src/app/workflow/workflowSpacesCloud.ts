@@ -108,6 +108,8 @@ export async function saveCloudWorkflowSpace(input: {
   previewDataUrl?: string | null;
   publishedCommunityTemplateId?: string | null;
   expectedUpdatedAt?: string | null;
+  /** Required to replace a non-empty cloud copy with an empty project (user cleared the canvas). */
+  allowEmpty?: boolean;
 }): Promise<{ ok: boolean; role?: string; updatedAt?: string; status?: number; error?: string; serverUpdatedAt?: string }> {
   try {
     const res = await fetch(
@@ -122,6 +124,7 @@ export async function saveCloudWorkflowSpace(input: {
           previewDataUrl: input.previewDataUrl ?? null,
           publishedCommunityTemplateId: input.publishedCommunityTemplateId ?? null,
           expectedUpdatedAt: input.expectedUpdatedAt ?? null,
+          allowEmpty: input.allowEmpty === true,
         }),
       },
     );
