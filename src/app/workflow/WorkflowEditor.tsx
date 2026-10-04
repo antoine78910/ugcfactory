@@ -23,8 +23,19 @@ import {
   type XYPosition,
 } from "@xyflow/react";
 import {
+  AlignCenterHorizontal,
+  AlignCenterVertical,
+  AlignEndHorizontal,
+  AlignEndVertical,
+  AlignHorizontalSpaceAround,
+  AlignStartHorizontal,
+  AlignStartVertical,
+  AlignVerticalSpaceAround,
   Braces,
   ChevronDown,
+  Columns3,
+  Grid3x3,
+  Rows3,
   Clapperboard,
   Copy,
   CopyPlus,
@@ -145,6 +156,11 @@ import {
   WORKFLOW_CONNECTION_RADIUS,
 } from "./workflowAutoConnect";
 import { canCloneWorkflowSelection, cloneWorkflowSelection } from "./workflowClone";
+import {
+  computeWorkflowAlignPositions,
+  type WorkflowAlignAction,
+  type WorkflowAlignBox,
+} from "./workflowAlign";
 import {
   normalizeMarqueePaneRect,
   pickMarqueeModuleIds,
@@ -1219,6 +1235,55 @@ function WorkflowReactFlowChrome({
     setSelectionBarExpanded,
     setNodes,
   ]);
+
+  const [alignMenuOpen, setAlignMenuOpen] = useState(false);
+  useEffect(() => {
+    if (!canShowSelectionChrome || !selectionBarExpanded) queueMicrotask(() => setAlignMenuOpen(false));
+  }, [canShowSelectionChrome, selectionBarExpanded]);
+
+  /** Selected nodes whose parent group is not also selected (children move with their group). */
+  const alignTargets = useMemo(() => {
+    const selectedIds = new Set(selectedNodes.map((n) => n.id));
+    return selectedNodes.filter((n) => !(n.parentId && selectedIds.has(n.parentId)));
+  }, [selectedNodes]);
+  const canAlign = !readOnly && alignTargets.length >= 2;
+
+  const applyAlign = useCallback(
+    (action: WorkflowAlignAction) => {
+      if (!canAlign) {
+        toast.error("Select at least two modules to align.");
+        return;
+      }
+      const boxes: (WorkflowAlignBox & { absX: number; absY: number })[] = [];
+      for (const n of alignTargets) {
+        const internal = getInternalNode(n.id);
+        if (!internal) continue;
+        const abs = internal.internals.positionAbsolute ?? internal.position;
+        const width = internal.measured?.width ?? internal.width ?? 0;
+        const height = internal.measured?.height ?? internal.height ?? 0;
+        boxes.push({ id: n.id, x: abs.x, y: abs.y, width, height, absX: abs.x, absY: abs.y });
+      }
+      const targets = computeWorkflowAlignPositions(boxes, action);
+      if (targets.size === 0) return;
+      const deltas = new Map<string, { dx: number; dy: number }>();
+      for (const b of boxes) {
+        const t = targets.get(b.id);
+        if (!t) continue;
+        const dx = Math.round(t.x - b.absX);
+        const dy = Math.round(t.y - b.absY);
+        if (dx !== 0 || dy !== 0) deltas.set(b.id, { dx, dy });
+      }
+      if (deltas.size === 0) return;
+      const next = (getNodes() as WorkflowCanvasNode[]).map((n) => {
+        const d = deltas.get(n.id);
+        if (!d) return n;
+        return { ...n, position: { x: n.position.x + d.dx, y: n.position.y + d.dy } } as WorkflowCanvasNode;
+      });
+      setNodes(next);
+      commitProjectSnapshotNow(next, getEdges());
+    },
+    [alignTargets, canAlign, commitProjectSnapshotNow, getEdges, getInternalNode, getNodes, setNodes],
+  );
 
   const addNode = useCallback(
     (kind: WorkflowDragNodeKind) => {
@@ -2518,16 +2583,92 @@ function WorkflowReactFlowChrome({
                 </button>
               </div>
               <div className="mx-0.5 h-5 w-px shrink-0 bg-white/[0.12]" aria-hidden />
-              <button
-                type="button"
-                title="Align selection"
-                onClick={() =>
-                  toast.message("Coming soon", { description: "Alignment tools will be available here." })
-                }
-                className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg text-white/90 transition hover:bg-white/[0.08]"
-              >
-                <LayoutGrid className="h-3.5 w-3.5" strokeWidth={2} aria-hidden />
-              </button>
+              <div className="relative shrink-0">
+                <button
+                  type="button"
+                  title="Align and arrange"
+                  disabled={!canAlign}
+                  aria-expanded={alignMenuOpen}
+                  onClick={() => {
+                    setAlignMenuOpen((o) => !o);
+                    setFrameOpen(false);
+                    setAddOpen(false);
+                  }}
+                  className={cn(
+                    "flex h-8 w-8 items-center justify-center rounded-lg text-white/90 transition hover:bg-white/[0.08] disabled:cursor-not-allowed disabled:opacity-35",
+                    alignMenuOpen && "bg-white/[0.12]",
+                  )}
+                >
+                  <LayoutGrid className="h-3.5 w-3.5" strokeWidth={2} aria-hidden />
+                </button>
+                {alignMenuOpen && canAlign ? (
+                  <div
+                    className="absolute bottom-full left-1/2 mb-2 w-[212px] -translate-x-1/2 rounded-xl border border-white/14 bg-[#121212]/95 p-2 shadow-[0_8px_32px_rgba(0,0,0,0.45)] backdrop-blur-md"
+                    role="menu"
+                    aria-label="Align and arrange"
+                  >
+                    {(
+                      [
+                        {
+                          label: "Align",
+                          items: [
+                            { action: "left", title: "Align left", Icon: AlignStartVertical },
+                            { action: "centerX", title: "Align horizontal centers", Icon: AlignCenterVertical },
+                            { action: "right", title: "Align right", Icon: AlignEndVertical },
+                            { action: "top", title: "Align top", Icon: AlignStartHorizontal },
+                            { action: "centerY", title: "Align vertical centers", Icon: AlignCenterHorizontal },
+                            { action: "bottom", title: "Align bottom", Icon: AlignEndHorizontal },
+                          ],
+                        },
+                        {
+                          label: "Even spacing",
+                          items: [
+                            {
+                              action: "distributeX",
+                              title: "Distribute horizontally (equal gaps)",
+                              Icon: AlignHorizontalSpaceAround,
+                            },
+                            {
+                              action: "distributeY",
+                              title: "Distribute vertically (equal gaps)",
+                              Icon: AlignVerticalSpaceAround,
+                            },
+                          ],
+                        },
+                        {
+                          label: "Arrange",
+                          items: [
+                            { action: "row", title: "Arrange in a row", Icon: Columns3 },
+                            { action: "column", title: "Arrange in a column", Icon: Rows3 },
+                            { action: "grid", title: "Tidy into a grid", Icon: Grid3x3 },
+                          ],
+                        },
+                      ] as { label: string; items: { action: WorkflowAlignAction; title: string; Icon: LucideIcon }[] }[]
+                    ).map((section) => (
+                      <div key={section.label} className="mb-1.5 last:mb-0">
+                        <p className="px-1 pb-1 text-[10px] font-semibold uppercase tracking-wide text-white/40">
+                          {section.label}
+                        </p>
+                        <div className="grid grid-cols-6 gap-0.5">
+                          {section.items.map(({ action, title, Icon }) => (
+                            <button
+                              key={action}
+                              type="button"
+                              role="menuitem"
+                              title={title}
+                              aria-label={title}
+                              onClick={() => applyAlign(action)}
+                              className="flex h-8 w-8 items-center justify-center rounded-lg text-white/85 transition hover:bg-white/[0.1] hover:text-white"
+                            >
+                              <Icon className="h-4 w-4" strokeWidth={2} aria-hidden />
+                            </button>
+                          ))}
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                ) : null}
+              </div>
               <button
                 type="button"
                 title="Shapes"
