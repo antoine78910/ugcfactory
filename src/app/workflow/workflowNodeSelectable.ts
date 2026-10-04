@@ -6,9 +6,8 @@ export function isWorkflowSelectableNodeType(type: string | undefined | null): b
   return typeof type === "string" && !WORKFLOW_MARQUEE_EXCLUDED_TYPES.has(type);
 }
 
-/** Top-level canvas modules that can be grouped (same families as duplicate). */
+/** Canvas modules that can be grouped (same families as duplicate). Modules already in a group get re-parented. */
 export function isWorkflowGroupableModuleNode(node: WorkflowCanvasNode): boolean {
-  if (node.parentId) return false;
   return (
     node.type === "adAsset" ||
     node.type === "imageRef" ||

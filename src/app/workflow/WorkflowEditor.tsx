@@ -1004,10 +1004,13 @@ function WorkflowReactFlowChrome({
 
   const [groupColorDraft, setGroupColorDraft] = useState<string>(GROUP_COLOR_PRESETS[0].value);
 
-  const eligibleForGroup = useMemo(
-    () => selectedNodes.filter((n): n is WorkflowCanvasNode => isWorkflowGroupableModuleNode(n)),
-    [selectedNodes],
-  );
+  const eligibleForGroup = useMemo(() => {
+    const selectedIds = new Set(selectedNodes.map((n) => n.id));
+    return selectedNodes.filter(
+      (n): n is WorkflowCanvasNode =>
+        isWorkflowGroupableModuleNode(n) && !(n.parentId && selectedIds.has(n.parentId)),
+    );
+  }, [selectedNodes]);
   const canGroup = eligibleForGroup.length >= 2;
   const canClone = useMemo(() => canCloneWorkflowSelection(selectedNodes), [selectedNodes]);
   /** Bounds + floating toolbar for any multi-module selection (not only adAsset). */
@@ -2444,7 +2447,7 @@ function WorkflowReactFlowChrome({
        * floating "New group" CTA above. Pointer-events:none so it never
        * intercepts clicks on the underlying nodes.
        */}
-      {!readOnly && canShowSelectionChrome && !frameOpen && groupSelectionRect ? (
+      {!readOnly && canShowSelectionChrome && !(frameOpen && canGroup) && groupSelectionRect ? (
         <div
           className="pointer-events-none fixed z-[195]"
           style={{
@@ -2461,7 +2464,7 @@ function WorkflowReactFlowChrome({
         </div>
       ) : null}
 
-      {!readOnly && canShowSelectionChrome && !frameOpen && groupSelectionAnchor ? (
+      {!readOnly && canShowSelectionChrome && !(frameOpen && canGroup) && groupSelectionAnchor ? (
         <div
           className="pointer-events-auto fixed z-[199]"
           style={{
@@ -2479,6 +2482,10 @@ function WorkflowReactFlowChrome({
                   type="button"
                   title="Group name and color"
                   onClick={() => {
+                    if (!canGroup) {
+                      toast.error("Select at least two modules to group.");
+                      return;
+                    }
                     setFrameOpen(true);
                     setAddOpen(false);
                   }}
@@ -2498,6 +2505,10 @@ function WorkflowReactFlowChrome({
                   type="button"
                   title="Open group options"
                   onClick={() => {
+                    if (!canGroup) {
+                      toast.error("Select at least two modules to group.");
+                      return;
+                    }
                     setFrameOpen(true);
                     setAddOpen(false);
                   }}
