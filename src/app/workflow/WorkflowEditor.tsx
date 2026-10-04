@@ -44,6 +44,7 @@ import {
   GitMerge,
   GripVertical,
   Hand,
+  History,
   Image as ImageIconLucide,
   ImageUpscale,
   LayoutGrid,
@@ -158,6 +159,7 @@ import {
   WORKFLOW_CONNECTION_RADIUS,
 } from "./workflowAutoConnect";
 import { canCloneWorkflowSelection, cloneWorkflowSelection } from "./workflowClone";
+import { WorkflowVersionsDialog } from "./WorkflowVersionsDialog";
 import {
   computeWorkflowAlignPositions,
   type WorkflowAlignAction,
@@ -5589,6 +5591,9 @@ export function WorkflowEditor({
   const [workflowHydrated, setWorkflowHydrated] = useState(false);
   const [spaceName, setSpaceName] = useState("Untitled workflow");
   const [shareOpen, setShareOpen] = useState(false);
+  const [versionsOpen, setVersionsOpen] = useState(false);
+  /** Bump to remount the canvas when the project is replaced from outside (restore, cloud re-sync). */
+  const [canvasEpoch, setCanvasEpoch] = useState(0);
   const [publishBusy, setPublishBusy] = useState(false);
   const [publishedTemplateId, setPublishedTemplateId] = useState<string | null>(null);
   /**
@@ -6040,6 +6045,7 @@ export function WorkflowEditor({
           lastCloudUpdatedAtRef.current = cloud.updatedAt;
           skipNextCloudSaveRef.current = true;
           setWorkflowProject(cloud.state);
+          setCanvasEpoch((e) => e + 1);
           if (storageScope !== null && spaceSource === "local") {
             skipNextLocalSaveRef.current = true;
             saveProjectForSpace(storageScope, resolvedSpaceId, cloud.state);
@@ -6127,6 +6133,7 @@ export function WorkflowEditor({
         // Prevent the reactive save effects from re-saving what we just fetched.
         skipNextCloudSaveRef.current = true;
         setWorkflowProject(cloud.state);
+        setCanvasEpoch((e) => e + 1);
 
         if (spaceSource === "local") {
           skipNextLocalSaveRef.current = true;
@@ -6527,6 +6534,17 @@ export function WorkflowEditor({
                 {publishBusy ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Globe2 className="h-3.5 w-3.5" />}
                 {publishBusy ? "Publishing…" : publishedTemplateId ? "Push modification" : "Publish template"}
               </button>
+              {authUserId ? (
+                <button
+                  type="button"
+                  title="Version history"
+                  onClick={() => setVersionsOpen(true)}
+                  className="inline-flex h-9 items-center gap-2 rounded-full border border-white/16 bg-white/5 px-3.5 text-[13px] font-semibold text-white/85 transition hover:bg-white/10"
+                >
+                  <History className="h-3.5 w-3.5" />
+                  Versions
+                </button>
+              ) : null}
               <button
                 type="button"
                 title="Share workspace (Ctrl+Shift+S)"
@@ -6540,6 +6558,23 @@ export function WorkflowEditor({
           )}
         </div>
       </header>
+
+      <WorkflowVersionsDialog
+        open={versionsOpen}
+        onOpenChange={setVersionsOpen}
+        spaceId={resolvedSpaceId}
+        canRestore={spaceRole !== "viewer"}
+        onRestored={(state, updatedAt) => {
+          lastCloudUpdatedAtRef.current = updatedAt;
+          skipNextCloudSaveRef.current = true;
+          setWorkflowProject(state);
+          setCanvasEpoch((e) => e + 1);
+          if (storageScope !== null && spaceSource === "local") {
+            skipNextLocalSaveRef.current = true;
+            saveProjectForSpace(storageScope, resolvedSpaceId, state);
+          }
+        }}
+      />
 
       <ShareWorkflowDialog
         open={shareOpen}
@@ -6750,7 +6785,7 @@ export function WorkflowEditor({
           <div className="relative flex h-full min-h-0 min-w-0 flex-1 flex-col overflow-hidden">
             <div className="min-h-0 flex-1 overflow-hidden">
               {workflowHydrated && !showOnboarding ? (
-                <ReactFlowProvider>
+                <ReactFlowProvider key={canvasEpoch}>
                   <WorkflowCanvasWithMediaSidebar
                     project={workflowProject}
                     activePageId={workflowProject.activePageId}

@@ -151,6 +151,49 @@ export async function saveCloudWorkflowSpace(input: {
   }
 }
 
+export type CloudWorkflowVersion = {
+  id: string;
+  nodeCount: number;
+  reason: string;
+  createdAt: string;
+  savedAt: string | null;
+};
+
+export async function listCloudWorkflowVersions(spaceId: string): Promise<CloudWorkflowVersion[] | null> {
+  try {
+    const res = await fetch(`/api/workflow/spaces/${encodeURIComponent(spaceId)}/versions?t=${Date.now()}`, {
+      method: "GET",
+      cache: "no-store",
+    });
+    if (!res.ok) return null;
+    const j = (await res.json()) as { versions?: CloudWorkflowVersion[] };
+    return Array.isArray(j.versions) ? j.versions : [];
+  } catch {
+    return null;
+  }
+}
+
+export async function restoreCloudWorkflowVersion(
+  spaceId: string,
+  versionId: string,
+): Promise<{ ok: true; state: WorkflowProjectStateV1; updatedAt: string } | { ok: false; error: string }> {
+  try {
+    const res = await fetch(
+      `/api/workflow/spaces/${encodeURIComponent(spaceId)}/versions/${encodeURIComponent(versionId)}/restore`,
+      { method: "POST", cache: "no-store" },
+    );
+    const j = (await res.json().catch(() => null)) as {
+      state?: WorkflowProjectStateV1;
+      updatedAt?: string;
+      error?: string;
+    } | null;
+    if (!res.ok || !j?.state || !j.updatedAt) return { ok: false, error: j?.error ?? "Restore failed." };
+    return { ok: true, state: j.state, updatedAt: j.updatedAt };
+  } catch {
+    return { ok: false, error: "Restore failed." };
+  }
+}
+
 export async function deleteCloudWorkflowSpace(spaceId: string): Promise<boolean> {
   try {
     const res = await fetch(
