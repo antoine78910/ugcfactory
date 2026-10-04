@@ -5771,8 +5771,14 @@ export function WorkflowEditor({
         return;
       }
       void (async () => {
-        const cloud = await fetchCloudWorkflowSpace(resolvedSpaceId);
+        let cloud = await fetchCloudWorkflowSpace(resolvedSpaceId);
         if (cancelled) return;
+        if (!cloud) {
+          await new Promise((r) => window.setTimeout(r, 1200));
+          if (cancelled) return;
+          cloud = await fetchCloudWorkflowSpace(resolvedSpaceId);
+          if (cancelled) return;
+        }
         const cloudUpdatedAtMs = cloud?.updatedAt ? Date.parse(cloud.updatedAt) : NaN;
         // A missing/empty local copy must never win over a cloud copy that has content:
         // the local index timestamp can be newer than the stored project (failed quota writes).
@@ -6027,6 +6033,20 @@ export function WorkflowEditor({
           if (res.updatedAt) lastCloudUpdatedAtRef.current = res.updatedAt;
           return;
         }
+        if (res.code === "WORKFLOW_SPACE_EMPTY_OVERWRITE") {
+          // We hydrated an empty canvas while the cloud copy has content: adopt the cloud copy.
+          const cloud = await fetchCloudWorkflowSpace(resolvedSpaceId);
+          if (!cloud || countWorkflowProjectNodes(cloud.state) === 0) return;
+          lastCloudUpdatedAtRef.current = cloud.updatedAt;
+          skipNextCloudSaveRef.current = true;
+          setWorkflowProject(cloud.state);
+          if (storageScope !== null && spaceSource === "local") {
+            skipNextLocalSaveRef.current = true;
+            saveProjectForSpace(storageScope, resolvedSpaceId, cloud.state);
+          }
+          toast.message("Workflow restored", { description: "Loaded the latest saved version from the cloud." });
+          return;
+        }
         if (res.status === 409) {
           // The server returns serverUpdatedAt in the 409 body; use it directly to
           // avoid an extra round-trip. Fall back to a fresh fetch only when missing.
@@ -6075,6 +6095,7 @@ export function WorkflowEditor({
     spaceSource,
     spaceRole,
     workflowHasPendingRun,
+    storageScope,
   ]);
 
   /**

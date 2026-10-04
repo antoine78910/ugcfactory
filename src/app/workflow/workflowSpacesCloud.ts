@@ -110,7 +110,15 @@ export async function saveCloudWorkflowSpace(input: {
   expectedUpdatedAt?: string | null;
   /** Required to replace a non-empty cloud copy with an empty project (user cleared the canvas). */
   allowEmpty?: boolean;
-}): Promise<{ ok: boolean; role?: string; updatedAt?: string; status?: number; error?: string; serverUpdatedAt?: string }> {
+}): Promise<{
+  ok: boolean;
+  role?: string;
+  updatedAt?: string;
+  status?: number;
+  error?: string;
+  code?: string;
+  serverUpdatedAt?: string;
+}> {
   try {
     const res = await fetch(
       `/api/workflow/spaces/${encodeURIComponent(input.spaceId)}`,
@@ -129,8 +137,12 @@ export async function saveCloudWorkflowSpace(input: {
       },
     );
     if (!res.ok) {
-      const j = (await res.json().catch(() => null)) as { error?: string; serverUpdatedAt?: string } | null;
-      return { ok: false, status: res.status, error: j?.error, serverUpdatedAt: j?.serverUpdatedAt };
+      const j = (await res.json().catch(() => null)) as {
+        error?: string;
+        code?: string;
+        serverUpdatedAt?: string;
+      } | null;
+      return { ok: false, status: res.status, error: j?.error, code: j?.code, serverUpdatedAt: j?.serverUpdatedAt };
     }
     const j = (await res.json().catch(() => ({}))) as { role?: string; updatedAt?: string };
     return { ok: true, role: j.role, updatedAt: j.updatedAt };
