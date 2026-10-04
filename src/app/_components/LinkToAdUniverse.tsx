@@ -1561,8 +1561,8 @@ export default function LinkToAdUniverse({
       .then(({ data }) => _setUserEmail(data.user ? sessionUserEmail(data.user) : null))
       .catch(() => {});
   }, [supabaseClient]);
-  /** 30s = two chained 15s clips, disabled in UI until launch (“Soon”). */
-  const _30sUnlocked = false;
+  /** 30s = two chained 15s clips. */
+  const _30sUnlocked = true;
   const DEMO_EMAILS = new Set(["anto.delbos@mail.com", "anto.delbos@gmail.com", "app@youry.com"]);
   const isDemoUser = Boolean(_userEmail && DEMO_EMAILS.has(_userEmail.toLowerCase()));
   const [manualHideCredits, setManualHideCredits] = useState(false);
