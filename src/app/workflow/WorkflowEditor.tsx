@@ -31,6 +31,7 @@ import {
   AlignStartHorizontal,
   AlignStartVertical,
   AlignVerticalSpaceAround,
+  Bot,
   Braces,
   ChevronDown,
   Columns3,
