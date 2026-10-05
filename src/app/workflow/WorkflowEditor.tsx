@@ -160,6 +160,7 @@ import {
 } from "./workflowAutoConnect";
 import { canCloneWorkflowSelection, cloneWorkflowSelection } from "./workflowClone";
 import { WorkflowVersionsDialog } from "./WorkflowVersionsDialog";
+import { WorkflowAgentDialog } from "./WorkflowAgentDialog";
 import {
   computeWorkflowAlignPositions,
   type WorkflowAlignAction,
@@ -5663,6 +5664,7 @@ export function WorkflowEditor({
   const [spaceName, setSpaceName] = useState("Untitled workflow");
   const [shareOpen, setShareOpen] = useState(false);
   const [versionsOpen, setVersionsOpen] = useState(false);
+  const [agentOpen, setAgentOpen] = useState(false);
   /** Bump to remount the canvas when the project is replaced from outside (restore, cloud re-sync). */
   const [canvasEpoch, setCanvasEpoch] = useState(0);
   const [publishBusy, setPublishBusy] = useState(false);
@@ -6608,6 +6610,17 @@ export function WorkflowEditor({
               {authUserId ? (
                 <button
                   type="button"
+                  title="Workflow AI agent"
+                  onClick={() => setAgentOpen(true)}
+                  className="inline-flex h-9 items-center gap-2 rounded-full border border-white/16 bg-white/5 px-3.5 text-[13px] font-semibold text-white/85 transition hover:bg-white/10"
+                >
+                  <Bot className="h-3.5 w-3.5" />
+                  Agent
+                </button>
+              ) : null}
+              {authUserId ? (
+                <button
+                  type="button"
                   title="Version history"
                   onClick={() => setVersionsOpen(true)}
                   className="inline-flex h-9 items-center gap-2 rounded-full border border-white/16 bg-white/5 px-3.5 text-[13px] font-semibold text-white/85 transition hover:bg-white/10"
@@ -6629,6 +6642,29 @@ export function WorkflowEditor({
           )}
         </div>
       </header>
+
+      <WorkflowAgentDialog
+        open={agentOpen}
+        onOpenChange={setAgentOpen}
+        project={workflowProject}
+        readOnly={workspaceReadOnly}
+        onApply={(next, runs) => {
+          skipNextCloudSaveRef.current = false;
+          setWorkflowProject(next);
+          setCanvasEpoch((e) => e + 1);
+          if (storageScope !== null && spaceSource === "local") {
+            saveProjectForSpace(storageScope, resolvedSpaceId, next);
+          }
+          window.setTimeout(() => {
+            for (const nodeId of runs.runNodeIds) {
+              window.dispatchEvent(new CustomEvent("workflow:run-node", { detail: { nodeId } }));
+            }
+            for (const nodeId of runs.runFromHereIds) {
+              window.dispatchEvent(new CustomEvent("workflow:run-from-here", { detail: { nodeId } }));
+            }
+          }, 400);
+        }}
+      />
 
       <WorkflowVersionsDialog
         open={versionsOpen}
