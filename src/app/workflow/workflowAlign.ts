@@ -13,7 +13,87 @@ export type WorkflowAlignAction =
   | "column"
   | "grid";
 
+export type WorkflowAlignOptions = {
+  /** Used by `grid` when set; otherwise a near-square grid is chosen. */
+  cols?: number;
+  rows?: number;
+  gap?: number;
+};
+
 export const WORKFLOW_ALIGN_DEFAULT_GAP = 48;
+
+function clampGridDim(n: number | undefined, fallback: number): number {
+  if (typeof n !== "number" || !Number.isFinite(n)) return fallback;
+  return Math.max(1, Math.min(50, Math.floor(n)));
+}
+
+/**
+ * Pack boxes into a cols×rows grid (reading order), starting at the selection top-left.
+ * Extra cells beyond `boxes.length` are left empty; if boxes exceed cols*rows, extra rows are added.
+ */
+export function layoutWorkflowAlignGrid(
+  boxes: WorkflowAlignBox[],
+  cols: number,
+  rows: number,
+  gap: number = WORKFLOW_ALIGN_DEFAULT_GAP,
+): Map<string, { x: number; y: number }> {
+  const out = new Map<string, { x: number; y: number }>();
+  if (boxes.length === 0) return out;
+
+  const c = clampGridDim(cols, Math.ceil(Math.sqrt(boxes.length)));
+  // Prefer the requested row count, but never pad empty trailing rows when there aren't enough items.
+  const neededRows = Math.ceil(boxes.length / c);
+  let r = clampGridDim(rows, neededRows);
+  if (c * r < boxes.length) r = neededRows;
+  else r = Math.min(r, neededRows);
+
+  const minX = Math.min(...boxes.map((b) => b.x));
+  const minY = Math.min(...boxes.map((b) => b.y));
+
+  const byY = [...boxes].sort((a, b) => a.y - b.y || a.x - b.x);
+  const ordered: WorkflowAlignBox[] = [];
+  for (let row = 0; row < r; row++) {
+    ordered.push(...byY.slice(row * c, (row + 1) * c).sort((a, b) => a.x - b.x || a.y - b.y));
+  }
+  // Any leftover boxes (if sort buckets missed some) keep reading order.
+  if (ordered.length < boxes.length) {
+    const seen = new Set(ordered.map((b) => b.id));
+    for (const b of byY) {
+      if (!seen.has(b.id)) ordered.push(b);
+    }
+  }
+
+  const colW = new Array<number>(c).fill(0);
+  const rowH = new Array<number>(r).fill(0);
+  ordered.forEach((b, i) => {
+    const col = i % c;
+    const row = Math.floor(i / c);
+    if (row >= r) return;
+    colW[col] = Math.max(colW[col], b.width);
+    rowH[row] = Math.max(rowH[row], b.height);
+  });
+
+  const colX: number[] = [];
+  let cx = minX;
+  for (let col = 0; col < c; col++) {
+    colX.push(cx);
+    cx += colW[col] + gap;
+  }
+  const rowY: number[] = [];
+  let cy = minY;
+  for (let row = 0; row < r; row++) {
+    rowY.push(cy);
+    cy += rowH[row] + gap;
+  }
+
+  ordered.forEach((b, i) => {
+    const col = i % c;
+    const row = Math.floor(i / c);
+    if (row >= r) return;
+    out.set(b.id, { x: colX[col], y: rowY[row] });
+  });
+  return out;
+}
 
 /**
  * Returns new absolute top-left positions for the given boxes.
@@ -23,8 +103,11 @@ export const WORKFLOW_ALIGN_DEFAULT_GAP = 48;
 export function computeWorkflowAlignPositions(
   boxes: WorkflowAlignBox[],
   action: WorkflowAlignAction,
-  gap: number = WORKFLOW_ALIGN_DEFAULT_GAP,
+  options: WorkflowAlignOptions | number = WORKFLOW_ALIGN_DEFAULT_GAP,
 ): Map<string, { x: number; y: number }> {
+  const opts: WorkflowAlignOptions =
+    typeof options === "number" ? { gap: options } : options ?? {};
+  const gap = opts.gap ?? WORKFLOW_ALIGN_DEFAULT_GAP;
   const out = new Map<string, { x: number; y: number }>();
   if (boxes.length < 2) return out;
 
@@ -95,40 +178,10 @@ export function computeWorkflowAlignPositions(
       break;
     }
     case "grid": {
-      const cols = Math.ceil(Math.sqrt(boxes.length));
-      const rows = Math.ceil(boxes.length / cols);
-      // Reading order: bucket into rows by vertical position, then left-to-right.
-      const byY = [...boxes].sort((a, b) => a.y - b.y || a.x - b.x);
-      const ordered: WorkflowAlignBox[] = [];
-      for (let r = 0; r < rows; r++) {
-        ordered.push(...byY.slice(r * cols, (r + 1) * cols).sort((a, b) => a.x - b.x || a.y - b.y));
-      }
-      const colW = new Array<number>(cols).fill(0);
-      const rowH = new Array<number>(rows).fill(0);
-      ordered.forEach((b, i) => {
-        const c = i % cols;
-        const r = Math.floor(i / cols);
-        colW[c] = Math.max(colW[c], b.width);
-        rowH[r] = Math.max(rowH[r], b.height);
-      });
-      const colX: number[] = [];
-      let cx = minX;
-      for (let c = 0; c < cols; c++) {
-        colX.push(cx);
-        cx += colW[c] + gap;
-      }
-      const rowY: number[] = [];
-      let cy = minY;
-      for (let r = 0; r < rows; r++) {
-        rowY.push(cy);
-        cy += rowH[r] + gap;
-      }
-      ordered.forEach((b, i) => {
-        const c = i % cols;
-        const r = Math.floor(i / cols);
-        out.set(b.id, { x: colX[c], y: rowY[r] });
-      });
-      break;
+      const defaultCols = Math.ceil(Math.sqrt(boxes.length));
+      const cols = clampGridDim(opts.cols, defaultCols);
+      const rows = clampGridDim(opts.rows, Math.ceil(boxes.length / cols));
+      return layoutWorkflowAlignGrid(boxes, cols, rows, gap);
     }
   }
   return out;

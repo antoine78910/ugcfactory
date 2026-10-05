@@ -164,6 +164,7 @@ import {
   computeWorkflowAlignPositions,
   type WorkflowAlignAction,
   type WorkflowAlignBox,
+  type WorkflowAlignOptions,
 } from "./workflowAlign";
 import {
   normalizeMarqueePaneRect,
@@ -1241,6 +1242,8 @@ function WorkflowReactFlowChrome({
   ]);
 
   const [alignMenuOpen, setAlignMenuOpen] = useState(false);
+  const [alignCustomRows, setAlignCustomRows] = useState("2");
+  const [alignCustomCols, setAlignCustomCols] = useState("3");
   useEffect(() => {
     if (!canShowSelectionChrome || !selectionBarExpanded) queueMicrotask(() => setAlignMenuOpen(false));
   }, [canShowSelectionChrome, selectionBarExpanded]);
@@ -1253,7 +1256,7 @@ function WorkflowReactFlowChrome({
   const canAlign = !readOnly && alignTargets.length >= 2;
 
   const applyAlign = useCallback(
-    (action: WorkflowAlignAction) => {
+    (action: WorkflowAlignAction, options?: WorkflowAlignOptions) => {
       if (!canAlign) {
         toast.error("Select at least two modules to align.");
         return;
@@ -1267,7 +1270,7 @@ function WorkflowReactFlowChrome({
         const height = internal.measured?.height ?? internal.height ?? 0;
         boxes.push({ id: n.id, x: abs.x, y: abs.y, width, height, absX: abs.x, absY: abs.y });
       }
-      const targets = computeWorkflowAlignPositions(boxes, action);
+      const targets = computeWorkflowAlignPositions(boxes, action, options);
       if (targets.size === 0) return;
       const deltas = new Map<string, { dx: number; dy: number }>();
       for (const b of boxes) {
@@ -2607,9 +2610,10 @@ function WorkflowReactFlowChrome({
                 </button>
                 {alignMenuOpen && canAlign ? (
                   <div
-                    className="absolute bottom-full left-1/2 mb-2 w-[212px] -translate-x-1/2 rounded-xl border border-white/14 bg-[#121212]/95 p-2 shadow-[0_8px_32px_rgba(0,0,0,0.45)] backdrop-blur-md"
+                    className="absolute bottom-full left-1/2 mb-2 w-[232px] -translate-x-1/2 rounded-xl border border-white/14 bg-[#121212]/95 p-2 shadow-[0_8px_32px_rgba(0,0,0,0.45)] backdrop-blur-md"
                     role="menu"
                     aria-label="Align and arrange"
+                    onPointerDown={(e) => e.stopPropagation()}
                   >
                     {(
                       [
@@ -2670,6 +2674,73 @@ function WorkflowReactFlowChrome({
                         </div>
                       </div>
                     ))}
+                    <div className="mt-1 border-t border-white/[0.08] pt-1.5">
+                      <p className="px-1 pb-1 text-[10px] font-semibold uppercase tracking-wide text-white/40">
+                        Custom grid
+                      </p>
+                      <div className="flex items-center gap-1.5 px-0.5">
+                        <label className="flex min-w-0 flex-1 flex-col gap-0.5">
+                          <span className="text-[9px] font-medium uppercase tracking-wide text-white/35">Rows</span>
+                          <input
+                            type="number"
+                            min={1}
+                            max={50}
+                            inputMode="numeric"
+                            value={alignCustomRows}
+                            onChange={(e) => setAlignCustomRows(e.target.value)}
+                            onKeyDown={(e) => {
+                              if (e.key === "Enter") {
+                                e.preventDefault();
+                                const rows = Math.max(1, Math.min(50, Math.floor(Number(alignCustomRows)) || 1));
+                                const cols = Math.max(1, Math.min(50, Math.floor(Number(alignCustomCols)) || 1));
+                                applyAlign("grid", { rows, cols });
+                              }
+                            }}
+                            className="h-7 w-full rounded-md border border-white/12 bg-black/35 px-1.5 text-center text-[12px] font-semibold text-white/90 outline-none focus:border-violet-400/50"
+                            aria-label="Custom grid rows"
+                          />
+                        </label>
+                        <span className="mt-3.5 shrink-0 text-[12px] font-semibold text-white/35" aria-hidden>
+                          ×
+                        </span>
+                        <label className="flex min-w-0 flex-1 flex-col gap-0.5">
+                          <span className="text-[9px] font-medium uppercase tracking-wide text-white/35">Cols</span>
+                          <input
+                            type="number"
+                            min={1}
+                            max={50}
+                            inputMode="numeric"
+                            value={alignCustomCols}
+                            onChange={(e) => setAlignCustomCols(e.target.value)}
+                            onKeyDown={(e) => {
+                              if (e.key === "Enter") {
+                                e.preventDefault();
+                                const rows = Math.max(1, Math.min(50, Math.floor(Number(alignCustomRows)) || 1));
+                                const cols = Math.max(1, Math.min(50, Math.floor(Number(alignCustomCols)) || 1));
+                                applyAlign("grid", { rows, cols });
+                              }
+                            }}
+                            className="h-7 w-full rounded-md border border-white/12 bg-black/35 px-1.5 text-center text-[12px] font-semibold text-white/90 outline-none focus:border-violet-400/50"
+                            aria-label="Custom grid columns"
+                          />
+                        </label>
+                        <button
+                          type="button"
+                          title="Apply custom grid"
+                          aria-label="Apply custom grid"
+                          onClick={() => {
+                            const rows = Math.max(1, Math.min(50, Math.floor(Number(alignCustomRows)) || 1));
+                            const cols = Math.max(1, Math.min(50, Math.floor(Number(alignCustomCols)) || 1));
+                            setAlignCustomRows(String(rows));
+                            setAlignCustomCols(String(cols));
+                            applyAlign("grid", { rows, cols });
+                          }}
+                          className="mt-3.5 flex h-7 shrink-0 items-center justify-center rounded-md border border-violet-400/40 bg-violet-500/20 px-2 text-[11px] font-semibold text-violet-100 transition hover:bg-violet-500/30"
+                        >
+                          Apply
+                        </button>
+                      </div>
+                    </div>
                   </div>
                 ) : null}
               </div>
