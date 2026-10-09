@@ -15,7 +15,7 @@ import { cn } from "@/lib/utils";
 
 export function InfluencerSiteTemplatesMenu({
   title = "Static ads",
-  hint = "Duplicate the static ad workflow.",
+  hint = "Open a page inside the Static Ads workflow.",
   onSelect,
 }: {
   title?: string;
@@ -83,7 +83,11 @@ export function InfluencerSiteTemplatesMenu({
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({ templateId: template.id }),
         });
-        const body = (await res.json().catch(() => null)) as { spaceId?: string; error?: string } | null;
+        const body = (await res.json().catch(() => null)) as {
+          spaceId?: string;
+          pageId?: string;
+          error?: string;
+        } | null;
         if (!res.ok || !body?.spaceId) {
           toast.error(body?.error || "Could not open this template.");
           openingLock.current = false;
@@ -91,7 +95,8 @@ export function InfluencerSiteTemplatesMenu({
           return;
         }
         setOpen(false);
-        const href = `/workflow/space/${encodeURIComponent(body.spaceId)}`;
+        const pageQuery = body.pageId ? `?page=${encodeURIComponent(body.pageId)}` : "";
+        const href = `/workflow/space/${encodeURIComponent(body.spaceId)}${pageQuery}`;
         router.push(href);
         window.setTimeout(() => {
           if (!window.location.pathname.includes(`/workflow/space/${body.spaceId}`)) {

@@ -3,6 +3,7 @@ export const dynamic = "force-dynamic";
 export const revalidate = 0;
 
 import { NextResponse } from "next/server";
+import { STATIC_AD_WORKFLOW_NAME } from "@/lib/staticAdWorkflow";
 import { requireSupabaseUser } from "@/lib/supabase/requireUser";
 import { createSupabaseServiceClient } from "@/lib/supabase/admin";
 
@@ -135,7 +136,9 @@ export async function GET() {
     }
   }
 
-  const spaces = (spaceRows ?? []).map((row) => {
+  const spaces = (spaceRows ?? [])
+    .filter((row) => row.created_by === auth.user.id || row.name !== STATIC_AD_WORKFLOW_NAME)
+    .map((row) => {
     const collab = roleBySpaceId.get(row.id as string);
     const owner = ownerById.get(row.created_by as string);
     const isOwn = row.created_by === auth.user.id;

@@ -5650,15 +5650,22 @@ function normalizeWorkflowSpaceId(raw: string): string {
 export function WorkflowEditor({
   spaceId,
   shareToken,
+  initialPageId,
 }: {
   spaceId: string;
   /** When set, loads a public snapshot from the share token (via `?share=` on the space URL). */
   shareToken?: string;
+  /** Open this page inside the space without creating another workflow. */
+  initialPageId?: string;
 }) {
   const router = useRouter();
   const sb = useSupabaseBrowserClient();
   const resolvedSpaceId = useMemo(() => normalizeWorkflowSpaceId(spaceId), [spaceId]);
   const shareTokenTrimmed = useMemo(() => (typeof shareToken === "string" ? shareToken.trim() : ""), [shareToken]);
+  const initialPageIdTrimmed = useMemo(
+    () => (typeof initialPageId === "string" ? initialPageId.trim() : ""),
+    [initialPageId],
+  );
 
   const [storageScope, setStorageScope] = useState<string | null>(null);
   /** `undefined` = session not resolved yet (avoid redirecting to /workflow on slow mobile). */
@@ -5879,6 +5886,13 @@ export function WorkflowEditor({
           Boolean(cloud) &&
           countWorkflowProjectNodes(cloud?.state) === 0 &&
           countWorkflowProjectNodes(storedLocalProject) > 0;
+        const requestedPageOnCloud = Boolean(
+          initialPageIdTrimmed &&
+            cloud?.state.pages.some((page) => page.id === initialPageIdTrimmed),
+        );
+        const requestedPageMissingLocally = Boolean(
+          initialPageIdTrimmed && !localProject.pages.some((page) => page.id === initialPageIdTrimmed),
+        );
         const preferCloud =
           Boolean(cloud) &&
           !cloudEmptyVsLocal &&
@@ -5912,11 +5926,16 @@ export function WorkflowEditor({
           skipNextLocalSaveRef.current = true;
         } else {
           if (cloud?.updatedAt) lastCloudUpdatedAtRef.current = cloud.updatedAt;
+          const cloudPage =
+            requestedPageMissingLocally && requestedPageOnCloud
+              ? cloud?.state.pages.find((page) => page.id === initialPageIdTrimmed)
+              : undefined;
+          const project = cloudPage ? { ...localProject, pages: [...localProject.pages, cloudPage] } : localProject;
           setSpaceSource("local");
           setSpaceRole(cloud?.role ?? null);
           setSpaceName(localMeta.name);
           setPublishedTemplateId(localMeta.publishedCommunityTemplateId ?? null);
-          setWorkflowProject(localProject);
+          setWorkflowProject(project);
           // Project is already persisted in localStorage — skip the reactive local-save
           // that would otherwise call touchSpaceUpdated and bump updatedAt to Date.now().
           skipNextLocalSaveRef.current = true;
@@ -5965,12 +5984,38 @@ export function WorkflowEditor({
     return () => {
       cancelled = true;
     };
-  }, [resolvedSpaceId, router, storageScope, runHistoryStorageKey, authUserId, shareTokenTrimmed]);
+  }, [resolvedSpaceId, router, storageScope, runHistoryStorageKey, authUserId, shareTokenTrimmed, initialPageIdTrimmed]);
 
   useEffect(() => {
     if (!workflowHydrated) return;
     setWorkflowProject((prev) => normalizeWorkflowProjectState(prev));
   }, [workflowHydrated]);
+
+  /** Land on a Static Ads product page without inserting a workflow into the user's space. */
+  const openedInitialPageRef = useRef("");
+  useEffect(() => {
+    if (!workflowHydrated || !initialPageIdTrimmed) return;
+    const key = `${resolvedSpaceId}:${initialPageIdTrimmed}`;
+    if (openedInitialPageRef.current === key) return;
+    const hasPage = workflowProject.pages.some((page) => page.id === initialPageIdTrimmed);
+    if (!hasPage) return;
+    if (workflowProject.activePageId !== initialPageIdTrimmed) {
+      setWorkflowProject((prev) =>
+        prev.pages.some((page) => page.id === initialPageIdTrimmed) && prev.activePageId !== initialPageIdTrimmed
+          ? { ...prev, activePageId: initialPageIdTrimmed }
+          : prev,
+      );
+      return;
+    }
+    openedInitialPageRef.current = key;
+    setCanvasEpoch((epoch) => epoch + 1);
+  }, [
+    workflowHydrated,
+    initialPageIdTrimmed,
+    resolvedSpaceId,
+    workflowProject.activePageId,
+    workflowProject.pages,
+  ]);
 
   /** True once this space had nodes in the current session, so an empty canvas means the user cleared it. */
   const sessionHadNodesRef = useRef(false);

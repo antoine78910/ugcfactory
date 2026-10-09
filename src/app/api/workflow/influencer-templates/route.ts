@@ -1,16 +1,18 @@
 import { NextResponse } from "next/server";
 
-import type { WorkflowProjectStateV1 } from "@/app/workflow/workflowProjectStorage";
+import {
+  duplicateWorkflowPage,
+  type WorkflowFlowPage,
+  type WorkflowProjectStateV1,
+} from "@/app/workflow/workflowProjectStorage";
 import { CREATOR_PRODUCT_TEMPLATES } from "@/lib/creatorProductTemplates";
 import { isInfluencerAccount } from "@/lib/influencerAccounts";
+import { STATIC_AD_WORKFLOW_NAME, staticAdPageId } from "@/lib/staticAdWorkflow";
 import { createSupabaseServiceClient } from "@/lib/supabase/admin";
 import { requireSupabaseUser } from "@/lib/supabase/requireUser";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
-
-/** Master canvas duplicated on every Access template click. */
-const STATIC_AD_WORKFLOW_NAME = "Static Ads";
 
 function isProjectState(value: unknown): value is WorkflowProjectStateV1 {
   if (!value || typeof value !== "object") return false;
@@ -20,6 +22,12 @@ function isProjectState(value: unknown): value is WorkflowProjectStateV1 {
 
 function nodeCount(state: WorkflowProjectStateV1): number {
   return state.pages.reduce((sum, page) => sum + (Array.isArray(page.nodes) ? page.nodes.length : 0), 0);
+}
+
+function richestPage(state: WorkflowProjectStateV1): WorkflowFlowPage | null {
+  const pages = state.pages.filter((page) => Array.isArray(page.nodes));
+  if (!pages.length) return null;
+  return [...pages].sort((a, b) => b.nodes.length - a.nodes.length)[0] ?? null;
 }
 
 export async function POST(req: Request) {
@@ -50,7 +58,7 @@ export async function POST(req: Request) {
 
   const { data: sources, error: sourceErr } = await admin
     .from("workflow_spaces")
-    .select("state, preview_data_url, updated_at")
+    .select("id, state, updated_at")
     .eq("name", STATIC_AD_WORKFLOW_NAME)
     .order("updated_at", { ascending: false })
     .limit(8);
@@ -60,45 +68,59 @@ export async function POST(req: Request) {
 
   const source = (sources ?? [])
     .map((row) => ({
+      id: typeof row.id === "string" ? row.id : "",
       state: row.state,
-      preview: typeof row.preview_data_url === "string" ? row.preview_data_url : null,
       updatedAt: typeof row.updated_at === "string" ? row.updated_at : "",
     }))
-    .filter((row): row is { state: WorkflowProjectStateV1; preview: string | null; updatedAt: string } =>
-      isProjectState(row.state),
+    .filter((row): row is { id: string; state: WorkflowProjectStateV1; updatedAt: string } =>
+      Boolean(row.id) && isProjectState(row.state),
     )
     .sort((a, b) => nodeCount(b.state) - nodeCount(a.state) || b.updatedAt.localeCompare(a.updatedAt))[0];
   if (!source || nodeCount(source.state) < 2) {
     return NextResponse.json({ error: "Static ad workflow was not found." }, { status: 404 });
   }
 
+  const pageId = staticAdPageId(template.id);
   const state = JSON.parse(JSON.stringify(source.state)) as WorkflowProjectStateV1;
-  state.onboardingDismissed = true;
+  const existing = state.pages.find((page) => page.id === pageId);
+  let created = false;
+  if (!existing) {
+    const canvas = richestPage(state);
+    if (!canvas || canvas.nodes.length < 2) {
+      return NextResponse.json({ error: "Static ad workflow was not found." }, { status: 404 });
+    }
+    const duplicated = duplicateWorkflowPage(canvas);
+    const page: WorkflowFlowPage = { ...duplicated, id: pageId, name: template.name };
+    const index = state.pages.findIndex((item) => item.id === canvas.id);
+    const at = index >= 0 ? index + 1 : state.pages.length;
+    state.pages = [...state.pages.slice(0, at), page, ...state.pages.slice(at)];
+    created = true;
 
-  const spaceId = crypto.randomUUID();
-  const nowIso = new Date().toISOString();
-  const { error: insertErr } = await admin.from("workflow_spaces").insert({
-    id: spaceId,
-    name: `${template.name} static ad`,
-    state,
-    preview_data_url: source.preview,
-    created_by: auth.user.id,
-    created_at: nowIso,
-    updated_at: nowIso,
-  });
-  if (insertErr) {
-    return NextResponse.json({ error: insertErr.message }, { status: 500 });
+    const { error: updateErr } = await admin
+      .from("workflow_spaces")
+      .update({ state, updated_at: new Date().toISOString() })
+      .eq("id", source.id);
+    if (updateErr) {
+      return NextResponse.json({ error: updateErr.message }, { status: 500 });
+    }
   }
 
-  const { error: ownerErr } = await admin.from("workflow_space_collaborators").insert({
-    space_id: spaceId,
-    user_id: auth.user.id,
-    role: "owner",
-  });
-  if (ownerErr) {
-    await admin.from("workflow_spaces").delete().eq("id", spaceId);
-    return NextResponse.json({ error: ownerErr.message }, { status: 500 });
+  const { data: membership } = await admin
+    .from("workflow_space_collaborators")
+    .select("role")
+    .eq("space_id", source.id)
+    .eq("user_id", auth.user.id)
+    .maybeSingle();
+  if (!membership) {
+    const { error: collabErr } = await admin.from("workflow_space_collaborators").insert({
+      space_id: source.id,
+      user_id: auth.user.id,
+      role: "editor",
+    });
+    if (collabErr) {
+      return NextResponse.json({ error: collabErr.message }, { status: 500 });
+    }
   }
 
-  return NextResponse.json({ spaceId, created: true });
+  return NextResponse.json({ spaceId: source.id, pageId, created });
 }
