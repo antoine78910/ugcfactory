@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 
-import { buildAdAssetNode, buildImageRefNode } from "@/app/workflow/workflowNodeFactory";
+import { buildAdAssetNode } from "@/app/workflow/workflowNodeFactory";
 import type { WorkflowProjectStateV1 } from "@/app/workflow/workflowProjectStorage";
 import { CREATOR_PRODUCT_TEMPLATES, type CreatorProductTemplate } from "@/lib/creatorProductTemplates";
 import { isInfluencerAccount } from "@/lib/influencerAccounts";
@@ -10,27 +10,10 @@ import { requireSupabaseUser } from "@/lib/supabase/requireUser";
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
-/** A fresh static-ad workflow for this click. Each open gets its own space. */
+/** A blank static-ad node. The influencer edits it after the clone. */
 function starterProject(template: CreatorProductTemplate, spaceId: string): WorkflowProjectStateV1 {
   const pageId = `influencer-tpl-page-${spaceId}`;
-  const product = buildImageRefNode(
-    { x: 48, y: 180 },
-    {
-      label: template.name,
-      imageUrl: template.imageUrl,
-      source: "upload",
-      mediaKind: "image",
-    },
-  );
-  product.id = `influencer-tpl-product-${spaceId}`;
-  const ad = buildAdAssetNode(
-    "image",
-    { x: 460, y: 150 },
-    {
-      label: `${template.name} static ad`,
-      prompt: `Static ad for ${template.name}. Use the product photo. Product page: ${template.productUrl}`,
-    },
-  );
+  const ad = buildAdAssetNode("image", { x: 280, y: 180 }, { label: `${template.name} static ad` });
   ad.id = `influencer-tpl-ad-${spaceId}`;
   return {
     v: 1,
@@ -40,17 +23,8 @@ function starterProject(template: CreatorProductTemplate, spaceId: string): Work
       {
         id: pageId,
         name: template.name,
-        nodes: [product, ad],
-        edges: [
-          {
-            id: `influencer-tpl-edge-${spaceId}`,
-            source: product.id,
-            sourceHandle: "out",
-            target: ad.id,
-            targetHandle: "in",
-            style: { stroke: "rgba(167, 139, 250, 0.5)", strokeWidth: 2 },
-          },
-        ],
+        nodes: [ad],
+        edges: [],
       },
     ],
   };
