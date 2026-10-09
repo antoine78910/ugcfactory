@@ -17,6 +17,17 @@ const VIDEO_EXT = /\.(mp4|webm|mov)$/i;
  * Extra filenames the product is known by.
  * The display name is always included (so "cat brush.mp4" is listed under Pet comb).
  */
+/** Filename fragments already dropped in the folder, including TikTok download names. */
+const FILENAME_HINTS: Array<{ templateId: string; fragment: string }> = [
+  { templateId: "pixelplay", fragment: "piixelplay" },
+  { templateId: "pixelplay", fragment: "pixelplay" },
+  { templateId: "pet-comb", fragment: "pet supplies" },
+  { templateId: "spoon-scale", fragment: "kitchenconqueror" },
+  { templateId: "bat-lights", fragment: "gbkunsdma7" },
+  { templateId: "christmas-projector", fragment: "sarvina" },
+  { templateId: "phomemo-t02", fragment: "phomemo" },
+];
+
 const EXTRA_ALIASES: Record<string, string[]> = {
   pixelplay: ["pixel play"],
   "pet-comb": ["cat brush", "cat comb", "pet brush", "flea comb"],
@@ -78,7 +89,11 @@ export async function findCreatorTemplateVideo(
   let bestName = "";
   let bestScore = 0;
   for (const name of names) {
-    const score = scoreFilename(name, aliases);
+    const label = normalizeVideoLabel(name);
+    const hinted = FILENAME_HINTS.some(
+      (hint) => hint.templateId === templateId && label.includes(normalizeVideoLabel(hint.fragment)),
+    );
+    const score = hinted ? 100 : scoreFilename(name, aliases);
     if (score > bestScore || (score === bestScore && score > 0 && name.length < bestName.length)) {
       bestScore = score;
       bestName = name;
