@@ -164,7 +164,6 @@ import {
 import { canCloneWorkflowSelection, cloneWorkflowSelection } from "./workflowClone";
 import { WorkflowVersionsDialog } from "./WorkflowVersionsDialog";
 import { WorkflowAgentDialog } from "./WorkflowAgentDialog";
-import { InfluencerSiteTemplatesMenu } from "./InfluencerSiteTemplatesMenu";
 import {
   computeWorkflowAlignPositions,
   type WorkflowAlignAction,
@@ -788,6 +787,7 @@ function WorkflowPagesPanel({
   }
 
   function deletePage(id: string) {
+    if (readOnly) return;
     if (project.pages.length <= 1) return;
     const snap = nodesEdgesRef.current;
     setProject((prev) => {
@@ -6670,7 +6670,6 @@ export function WorkflowEditor({
                   Agent
                 </button>
               ) : null}
-              <InfluencerSiteTemplatesMenu />
               {authUserId ? (
                 <button
                   type="button"
