@@ -162,6 +162,7 @@ import {
 import { canCloneWorkflowSelection, cloneWorkflowSelection } from "./workflowClone";
 import { WorkflowVersionsDialog } from "./WorkflowVersionsDialog";
 import { WorkflowAgentDialog } from "./WorkflowAgentDialog";
+import { InfluencerSiteTemplatesMenu } from "./InfluencerSiteTemplatesMenu";
 import {
   computeWorkflowAlignPositions,
   type WorkflowAlignAction,
@@ -6619,6 +6620,7 @@ export function WorkflowEditor({
                   Agent
                 </button>
               ) : null}
+              <InfluencerSiteTemplatesMenu />
               {authUserId ? (
                 <button
                   type="button"
