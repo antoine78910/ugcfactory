@@ -1,7 +1,9 @@
 "use client";
 
-import { Check, LayoutTemplate } from "lucide-react";
+import { Check, LayoutTemplate, Loader2 } from "lucide-react";
+import { useRouter } from "next/navigation";
 import { useEffect, useRef, useState } from "react";
+import { toast } from "sonner";
 
 import {
   CREATOR_PRODUCT_TEMPLATES,
@@ -13,7 +15,7 @@ import { cn } from "@/lib/utils";
 
 export function InfluencerSiteTemplatesMenu({
   title = "Static ads",
-  hint = "Pick a product clone.",
+  hint = "Open a shared product workflow.",
   onSelect,
 }: {
   title?: string;
@@ -21,10 +23,13 @@ export function InfluencerSiteTemplatesMenu({
   onSelect?: (template: CreatorProductTemplate) => void;
 }) {
   const sb = useSupabaseBrowserClient();
+  const router = useRouter();
   const [visible, setVisible] = useState(false);
   const [open, setOpen] = useState(false);
   const [selectedId, setSelectedId] = useState(CREATOR_PRODUCT_TEMPLATES[0].id);
+  const [openingId, setOpeningId] = useState<string | null>(null);
   const rootRef = useRef<HTMLDivElement | null>(null);
+  const openingLock = useRef(false);
 
   useEffect(() => {
     if (!sb) return;
@@ -61,6 +66,42 @@ export function InfluencerSiteTemplatesMenu({
 
   const selected = CREATOR_PRODUCT_TEMPLATES.find((t) => t.id === selectedId) ?? CREATOR_PRODUCT_TEMPLATES[0];
 
+  const openSharedWorkflow = (template: CreatorProductTemplate) => {
+    if (onSelect) {
+      setSelectedId(template.id);
+      onSelect(template);
+      return;
+    }
+    if (openingLock.current) return;
+    openingLock.current = true;
+    setSelectedId(template.id);
+    setOpeningId(template.id);
+    void (async () => {
+      try {
+        const res = await fetch("/api/workflow/influencer-templates", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ templateId: template.id }),
+        });
+        const body = (await res.json().catch(() => null)) as { spaceId?: string; error?: string } | null;
+        if (!res.ok || !body?.spaceId) {
+          toast.error(body?.error || "Could not open this template.");
+          openingLock.current = false;
+          setOpeningId(null);
+          return;
+        }
+        setOpen(false);
+        router.push(`/workflow/space/${encodeURIComponent(body.spaceId)}`);
+        openingLock.current = false;
+        setOpeningId(null);
+      } catch {
+        toast.error("Could not open this template.");
+        openingLock.current = false;
+        setOpeningId(null);
+      }
+    })();
+  };
+
   return (
     <div ref={rootRef} className="relative">
       <button
@@ -90,10 +131,8 @@ export function InfluencerSiteTemplatesMenu({
                 <button
                   key={template.id}
                   type="button"
-                  onClick={() => {
-                    setSelectedId(template.id);
-                    onSelect?.(template);
-                  }}
+                  onClick={() => openSharedWorkflow(template)}
+                  disabled={openingId !== null}
                   className={cn(
                     "flex w-[84px] shrink-0 flex-col gap-1.5 rounded-xl border p-1.5 text-left transition",
                     active
@@ -109,7 +148,11 @@ export function InfluencerSiteTemplatesMenu({
                       referrerPolicy="no-referrer"
                       className="h-full w-full object-contain"
                     />
-                    {active ? (
+                    {openingId === template.id ? (
+                      <span className="absolute right-1 top-1 inline-flex h-4 w-4 items-center justify-center rounded-full bg-black/70 text-white">
+                        <Loader2 className="h-2.5 w-2.5 animate-spin" />
+                      </span>
+                    ) : active ? (
                       <span className="absolute right-1 top-1 inline-flex h-4 w-4 items-center justify-center rounded-full bg-black/70 text-white">
                         <Check className="h-2.5 w-2.5" />
                       </span>
