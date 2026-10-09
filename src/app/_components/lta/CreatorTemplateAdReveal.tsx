@@ -2,7 +2,7 @@
 
 import { AnimatePresence, motion } from "framer-motion";
 import { ArrowLeft, Check, Clapperboard, FileText, Package, Sparkles, Zap } from "lucide-react";
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 
 import { creatorTemplateVideoUrl, type CreatorProductTemplate } from "@/lib/creatorProductTemplates";
 
@@ -23,7 +23,19 @@ export function CreatorTemplateAdReveal({
   onBack: () => void;
 }) {
   const [elapsed, setElapsed] = useState(0);
+  const videoRef = useRef<HTMLVideoElement>(null);
   const videoUrl = creatorTemplateVideoUrl(template.id);
+
+  function playMuted() {
+    const el = videoRef.current;
+    if (!el) return;
+    el.muted = true;
+    void el.play().catch(() => {});
+  }
+
+  function pauseVideo() {
+    videoRef.current?.pause();
+  }
 
   useEffect(() => {
     const started = performance.now();
@@ -49,15 +61,19 @@ export function CreatorTemplateAdReveal({
           0% { background-position: 0% 50%; }
           100% { background-position: 220% 50%; }
         }
-        @keyframes ee-ad-zap {
-          0%, 100% { opacity: 0.35; transform: scale(0.85); }
-          50% { opacity: 1; transform: scale(1.2); }
+        video.ee-ad-preview::-webkit-media-controls,
+        video.ee-ad-preview::-webkit-media-controls-enclosure,
+        video.ee-ad-preview::-webkit-media-controls-panel,
+        video.ee-ad-preview::-webkit-media-controls-start-playback-button {
+          display: none !important;
+          opacity: 0 !important;
+          pointer-events: none !important;
         }
       `}</style>
       <button
         type="button"
         onClick={onBack}
-        className="absolute left-4 top-4 z-10 inline-flex items-center gap-1.5 rounded-xl border border-white/15 bg-white/[0.04] px-3 py-1.5 text-xs font-semibold text-white/80 transition hover:border-violet-400/35 hover:bg-violet-500/10 hover:text-white"
+        className="absolute right-4 top-4 z-10 inline-flex items-center gap-1.5 rounded-xl border border-white/15 bg-white/[0.04] px-3 py-1.5 text-xs font-semibold text-white/80 transition hover:border-violet-400/35 hover:bg-violet-500/10 hover:text-white"
       >
         <ArrowLeft className="h-3.5 w-3.5" aria-hidden />
         Return to Link to Ad
@@ -72,24 +88,31 @@ export function CreatorTemplateAdReveal({
             transition={{ duration: 0.55, ease: [0.22, 1, 0.36, 1] }}
             className="flex w-full max-w-md flex-col items-center justify-center"
           >
-            <p className="text-[11px] font-semibold uppercase tracking-[0.22em] text-violet-300/80">Completion 100%</p>
-            <h2 className="mt-1 text-center text-2xl font-bold tracking-tight text-white">
-              Your ad is ready
-            </h2>
-            <p className="mt-0.5 text-sm text-white/50">{template.name}</p>
             {videoUrl ? (
-              <div className="mt-3 flex items-center justify-center">
+              <div className="flex flex-col items-center">
                 <video
+                  ref={videoRef}
                   key={videoUrl}
                   src={videoUrl}
-                  controls
-                  autoPlay
                   muted
+                  loop
                   playsInline
                   preload="auto"
-                  className="h-auto w-auto max-w-[min(100%,220px)] rounded-2xl border border-violet-300/25 bg-black object-contain shadow-[0_0_40px_rgba(139,92,246,0.22)]"
-                  style={{ maxHeight: "min(46dvh, 390px)", aspectRatio: "9 / 16" }}
+                  controls={false}
+                  disablePictureInPicture
+                  disableRemotePlayback
+                  onMouseEnter={playMuted}
+                  onMouseLeave={pauseVideo}
+                  className="ee-ad-preview h-auto w-auto max-w-[min(100%,280px)] rounded-2xl border border-violet-300/25 bg-black object-contain shadow-[0_0_40px_rgba(139,92,246,0.22)]"
+                  style={{ maxHeight: "min(58dvh, 500px)", aspectRatio: "9 / 16" }}
                 />
+                <a
+                  href={videoUrl}
+                  download
+                  className="mt-3 inline-flex items-center justify-center rounded-xl border border-violet-300/35 bg-white px-4 py-2 text-sm font-semibold text-zinc-900 shadow-sm transition hover:bg-white/90"
+                >
+                  Download
+                </a>
               </div>
             ) : (
               <p className="mt-6 text-center text-sm text-white/55">This product video is not in the library yet.</p>
