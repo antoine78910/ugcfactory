@@ -1,7 +1,7 @@
 "use client";
 
 import { AnimatePresence, motion } from "framer-motion";
-import { ArrowLeft, Check, Clapperboard, FileText, Package, Sparkles } from "lucide-react";
+import { ArrowLeft, Check, Clapperboard, FileText, Package, Sparkles, Zap } from "lucide-react";
 import { useEffect, useState } from "react";
 
 import { creatorTemplateVideoUrl, type CreatorProductTemplate } from "@/lib/creatorProductTemplates";
@@ -26,32 +26,38 @@ export function CreatorTemplateAdReveal({
   const videoUrl = creatorTemplateVideoUrl(template.id);
 
   useEffect(() => {
-    let cancelled = false;
-    setElapsed(0);
     const started = performance.now();
-    let frame = 0;
-    const tick = (now: number) => {
-      if (cancelled) return;
-      setElapsed(Math.min(TOTAL_MS, now - started));
-      if (now - started < TOTAL_MS) frame = requestAnimationFrame(tick);
-    };
-    frame = requestAnimationFrame(tick);
-    return () => {
-      cancelled = true;
-      cancelAnimationFrame(frame);
-    };
+    const timer = window.setInterval(() => {
+      setElapsed(Math.min(TOTAL_MS, performance.now() - started));
+    }, 50);
+    return () => window.clearInterval(timer);
   }, [template.id]);
 
   const ready = elapsed >= TOTAL_MS;
   const progress = Math.min(1, elapsed / TOTAL_MS);
+  const percent = Math.min(100, Math.round(progress * 100));
   const activeIndex = Math.min(STAGES.length - 1, Math.floor(progress * STAGES.length));
 
   return (
-    <div className="flex min-h-[70vh] flex-col items-center justify-center px-2 py-6">
+    <div className="flex h-full min-h-0 flex-col overflow-hidden px-4 py-3">
+      <style>{`
+        @keyframes ee-ad-load {
+          from { transform: scaleX(0.04); }
+          to { transform: scaleX(1); }
+        }
+        @keyframes ee-ad-lightning {
+          0% { background-position: 0% 50%; }
+          100% { background-position: 220% 50%; }
+        }
+        @keyframes ee-ad-zap {
+          0%, 100% { opacity: 0.35; transform: scale(0.85); }
+          50% { opacity: 1; transform: scale(1.2); }
+        }
+      `}</style>
       <button
         type="button"
         onClick={onBack}
-        className="mb-8 inline-flex items-center gap-1.5 self-start rounded-xl border border-white/15 bg-white/[0.04] px-3 py-1.5 text-xs font-semibold text-white/80 transition hover:border-violet-400/35 hover:bg-violet-500/10 hover:text-white"
+        className="mb-2 inline-flex shrink-0 items-center gap-1.5 self-start rounded-xl border border-white/15 bg-white/[0.04] px-3 py-1.5 text-xs font-semibold text-white/80 transition hover:border-violet-400/35 hover:bg-violet-500/10 hover:text-white"
       >
         <ArrowLeft className="h-3.5 w-3.5" aria-hidden />
         Return to Link to Ad
@@ -64,15 +70,15 @@ export function CreatorTemplateAdReveal({
             initial={{ opacity: 0, y: 16, scale: 0.98 }}
             animate={{ opacity: 1, y: 0, scale: 1 }}
             transition={{ duration: 0.55, ease: [0.22, 1, 0.36, 1] }}
-            className="flex w-full max-w-xl flex-col items-center"
+            className="flex min-h-0 w-full flex-1 flex-col items-center justify-center"
           >
-            <p className="text-[11px] font-semibold uppercase tracking-[0.22em] text-violet-300/80">Ready</p>
-            <h2 className="mt-2 text-center text-2xl font-bold tracking-tight text-white sm:text-3xl">
+            <p className="text-[11px] font-semibold uppercase tracking-[0.22em] text-violet-300/80">Completion 100%</p>
+            <h2 className="mt-1 text-center text-2xl font-bold tracking-tight text-white">
               Your ad is ready
             </h2>
-            <p className="mt-1.5 text-sm text-white/50">{template.name}</p>
+            <p className="mt-0.5 text-sm text-white/50">{template.name}</p>
             {videoUrl ? (
-              <div className="mt-6 w-full max-w-sm overflow-hidden rounded-2xl border border-violet-300/25 bg-black shadow-[0_0_40px_rgba(139,92,246,0.22)]">
+              <div className="mt-3 flex min-h-0 flex-1 items-center justify-center">
                 <video
                   key={videoUrl}
                   src={videoUrl}
@@ -81,7 +87,8 @@ export function CreatorTemplateAdReveal({
                   muted
                   playsInline
                   preload="auto"
-                  className="aspect-[9/16] max-h-[70vh] w-full bg-black object-contain"
+                  className="h-auto max-h-full w-auto max-w-[calc(100vw-2rem)] rounded-2xl border border-violet-300/25 bg-black object-contain shadow-[0_0_40px_rgba(139,92,246,0.22)]"
+                  style={{ maxHeight: "calc(100dvh - 8.5rem)", aspectRatio: "9 / 16" }}
                 />
               </div>
             ) : (
@@ -99,32 +106,37 @@ export function CreatorTemplateAdReveal({
             role="status"
             aria-live="polite"
           >
-            <div className="flex items-center gap-3">
-              <span className="h-12 w-12 overflow-hidden rounded-xl border border-white/10 bg-white">
-                {/* eslint-disable-next-line @next/next/no-img-element */}
-                <img src={template.imageUrl} alt="" referrerPolicy="no-referrer" className="h-full w-full object-contain" />
-              </span>
-              <div className="min-w-0">
-                <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-violet-300/80">Link to Ad</p>
-                <p className="truncate text-base font-semibold text-white">{template.name}</p>
+            <div className="flex items-center justify-between gap-3">
+              <div className="flex min-w-0 items-center gap-3">
+                <span className="h-12 w-12 overflow-hidden rounded-xl border border-white/10 bg-white">
+                  {/* eslint-disable-next-line @next/next/no-img-element */}
+                  <img src={template.imageUrl} alt="" referrerPolicy="no-referrer" className="h-full w-full object-contain" />
+                </span>
+                <div className="min-w-0">
+                  <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-violet-300/80">Creating the ad</p>
+                  <p className="truncate text-base font-semibold text-white">{template.name}</p>
+                </div>
               </div>
+              <p className="shrink-0 text-3xl font-black tabular-nums tracking-tight text-white">{percent}%</p>
             </div>
 
-            <div className="mt-6 h-1 overflow-hidden rounded-full bg-white/10">
+            <div className="mt-5 h-2.5 overflow-hidden rounded-full bg-white/10">
               <div
-                className="h-full rounded-full bg-gradient-to-r from-[#7c30c7] via-[#b06ef0] to-[#f3e8ff] shadow-[0_0_16px_rgba(176,110,240,0.8)]"
-                style={{ width: `${Math.max(6, progress * 100)}%`, transition: "width 180ms linear" }}
+                className="h-full w-full origin-left rounded-full bg-gradient-to-r from-[#7c30c7] via-[#d7b4ff] to-[#f3e8ff] shadow-[0_0_18px_rgba(176,110,240,0.9)]"
+                style={{ animation: "ee-ad-load 10s linear forwards" }}
               />
             </div>
+            <p className="mt-2 text-xs font-semibold uppercase tracking-[0.16em] text-violet-200/70">
+              Completion {percent}%
+            </p>
 
-            {videoUrl ? (
-              <video src={videoUrl} preload="auto" muted playsInline className="hidden" />
-            ) : null}
-            <ol className="mt-6 space-y-2">
+            {videoUrl ? <video src={videoUrl} preload="auto" muted playsInline className="hidden" /> : null}
+
+            <ol className="mt-5 space-y-2">
               {STAGES.map((stage, index) => {
                 const Icon = stage.icon;
-                const done = index < activeIndex || (index === activeIndex && progress >= 1);
-                const active = index === activeIndex && progress < 1;
+                const done = index < activeIndex;
+                const active = index === activeIndex;
                 return (
                   <li
                     key={stage.label}
@@ -147,8 +159,26 @@ export function CreatorTemplateAdReveal({
                     >
                       {done ? <Check className="h-3.5 w-3.5" /> : <Icon className="h-3.5 w-3.5" />}
                     </span>
-                    <span className="min-w-0">
-                      <span className="block text-sm font-semibold text-white">{stage.label}</span>
+                    <span className="min-w-0 flex-1">
+                      <span className="flex items-center gap-1.5">
+                        <span
+                          className={
+                            active
+                              ? "bg-[linear-gradient(90deg,#ffffff_0%,#ffffff_35%,#f5e7ff_50%,#b06ef0_65%,#ffffff_100%)] bg-[length:220%_100%] bg-clip-text text-sm font-semibold text-transparent"
+                              : "block text-sm font-semibold text-white"
+                          }
+                          style={active ? { animation: "ee-ad-lightning 1.1s linear infinite" } : undefined}
+                        >
+                          {stage.label}
+                        </span>
+                        {active ? (
+                          <Zap
+                            className="h-3.5 w-3.5 text-violet-200"
+                            style={{ animation: "ee-ad-zap 0.9s ease-in-out infinite" }}
+                            aria-hidden
+                          />
+                        ) : null}
+                      </span>
                       <span className="block text-xs text-white/50">{stage.detail}</span>
                     </span>
                   </li>

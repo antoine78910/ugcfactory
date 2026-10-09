@@ -26,7 +26,9 @@ const nextConfig: NextConfig = {
       { source: `/${slug}`, destination: `/app/${slug}` },
       { source: `/${slug}/:path*`, destination: `/app/${slug}/:path*` },
     ]);
-    return { beforeFiles: rules };
+    // afterFiles: a real file under public/ (the template mp4s) is served first.
+    // beforeFiles rewrote those URLs into the studio page, so the player received HTML.
+    return { afterFiles: rules };
   },
   async redirects() {
     return [
