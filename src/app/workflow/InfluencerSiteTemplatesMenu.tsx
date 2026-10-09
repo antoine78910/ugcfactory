@@ -15,7 +15,7 @@ import { cn } from "@/lib/utils";
 
 export function InfluencerSiteTemplatesMenu({
   title = "Static ads",
-  hint = "Open a shared product workflow.",
+  hint = "Start a new static ad workflow from a product.",
   onSelect,
 }: {
   title?: string;
@@ -91,7 +91,13 @@ export function InfluencerSiteTemplatesMenu({
           return;
         }
         setOpen(false);
-        router.push(`/workflow/space/${encodeURIComponent(body.spaceId)}`);
+        const href = `/workflow/space/${encodeURIComponent(body.spaceId)}`;
+        router.push(href);
+        window.setTimeout(() => {
+          if (!window.location.pathname.includes(`/workflow/space/${body.spaceId}`)) {
+            window.location.assign(href);
+          }
+        }, 700);
         openingLock.current = false;
         setOpeningId(null);
       } catch {

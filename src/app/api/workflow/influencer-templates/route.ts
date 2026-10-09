@@ -10,13 +10,9 @@ import { requireSupabaseUser } from "@/lib/supabase/requireUser";
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
-function spaceIdForTemplate(templateId: string) {
-  return `influencer-template-${templateId}`;
-}
-
-/** One shared static-ad workflow per product. Created once, then reused. */
-function starterProject(template: CreatorProductTemplate): WorkflowProjectStateV1 {
-  const pageId = `influencer-tpl-page-${template.id}`;
+/** A fresh static-ad workflow for this click. Each open gets its own space. */
+function starterProject(template: CreatorProductTemplate, spaceId: string): WorkflowProjectStateV1 {
+  const pageId = `influencer-tpl-page-${spaceId}`;
   const product = buildImageRefNode(
     { x: 48, y: 180 },
     {
@@ -26,14 +22,14 @@ function starterProject(template: CreatorProductTemplate): WorkflowProjectStateV
       mediaKind: "image",
     },
   );
-  product.id = `influencer-tpl-product-${template.id}`;
+  product.id = `influencer-tpl-product-${spaceId}`;
   const ad = buildAdAssetNode("image", {
     x: 460,
     y: 150,
     label: `${template.name} static ad`,
     prompt: `Static ad for ${template.name}. Use the product photo. Product page: ${template.productUrl}`,
   });
-  ad.id = `influencer-tpl-ad-${template.id}`;
+  ad.id = `influencer-tpl-ad-${spaceId}`;
   return {
     v: 1,
     onboardingDismissed: true,
@@ -45,7 +41,7 @@ function starterProject(template: CreatorProductTemplate): WorkflowProjectStateV
         nodes: [product, ad],
         edges: [
           {
-            id: `influencer-tpl-edge-${template.id}`,
+            id: `influencer-tpl-edge-${spaceId}`,
             source: product.id,
             sourceHandle: "out",
             target: ad.id,
@@ -58,14 +54,9 @@ function starterProject(template: CreatorProductTemplate): WorkflowProjectStateV
   };
 }
 
-function isUniqueViolation(error: { code?: string; message?: string } | null) {
-  if (!error) return false;
-  return error.code === "23505" || (error.message ?? "").toLowerCase().includes("duplicate");
-}
-
 /**
- * Open the shared influencer workflow for one product template.
- * The first request creates the duplicate. Later clicks reuse that same space.
+ * Create a new influencer workflow from one static-ad product template.
+ * Every click inserts a new space owned by the caller. Previous copies stay untouched.
  */
 export async function POST(req: Request) {
   const auth = await requireSupabaseUser();
@@ -93,47 +84,30 @@ export async function POST(req: Request) {
     return NextResponse.json({ error: "DB not configured" }, { status: 503 });
   }
 
-  const spaceId = spaceIdForTemplate(template.id);
-  const { data: existing } = await admin.from("workflow_spaces").select("id").eq("id", spaceId).maybeSingle();
-
-  if (!existing) {
-    const nowIso = new Date().toISOString();
-    const { error: insertErr } = await admin.from("workflow_spaces").insert({
-      id: spaceId,
-      name: template.name,
-      state: starterProject(template),
-      preview_data_url: template.imageUrl,
-      created_by: auth.user.id,
-      created_at: nowIso,
-      updated_at: nowIso,
-    });
-    if (insertErr && !isUniqueViolation(insertErr)) {
-      return NextResponse.json({ error: insertErr.message }, { status: 500 });
-    }
-    if (!insertErr) {
-      const { error: ownerErr } = await admin.from("workflow_space_collaborators").insert({
-        space_id: spaceId,
-        user_id: auth.user.id,
-        role: "owner",
-      });
-      if (ownerErr && !isUniqueViolation(ownerErr)) {
-        return NextResponse.json({ error: ownerErr.message }, { status: 500 });
-      }
-      return NextResponse.json({ spaceId, created: true });
-    }
+  const spaceId = crypto.randomUUID();
+  const nowIso = new Date().toISOString();
+  const { error: insertErr } = await admin.from("workflow_spaces").insert({
+    id: spaceId,
+    name: `${template.name} static ad`,
+    state: starterProject(template, spaceId),
+    preview_data_url: template.imageUrl,
+    created_by: auth.user.id,
+    created_at: nowIso,
+    updated_at: nowIso,
+  });
+  if (insertErr) {
+    return NextResponse.json({ error: insertErr.message }, { status: 500 });
   }
 
-  const { error: memberErr } = await admin.from("workflow_space_collaborators").upsert(
-    {
-      space_id: spaceId,
-      user_id: auth.user.id,
-      role: "editor",
-    },
-    { onConflict: "space_id,user_id", ignoreDuplicates: true },
-  );
-  if (memberErr) {
-    return NextResponse.json({ error: memberErr.message }, { status: 500 });
+  const { error: ownerErr } = await admin.from("workflow_space_collaborators").insert({
+    space_id: spaceId,
+    user_id: auth.user.id,
+    role: "owner",
+  });
+  if (ownerErr) {
+    await admin.from("workflow_spaces").delete().eq("id", spaceId);
+    return NextResponse.json({ error: ownerErr.message }, { status: 500 });
   }
 
-  return NextResponse.json({ spaceId, created: false });
+  return NextResponse.json({ spaceId, created: true });
 }
