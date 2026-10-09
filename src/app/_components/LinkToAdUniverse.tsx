@@ -32,7 +32,9 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { CreditCostBadge } from "@/app/_components/CreditCostBadge";
+import { CreatorTemplateAdReveal } from "@/app/_components/lta/CreatorTemplateAdReveal";
 import { InfluencerSiteTemplatesMenu } from "@/app/workflow/InfluencerSiteTemplatesMenu";
+import type { CreatorProductTemplate } from "@/lib/creatorProductTemplates";
 import { UploadBusyOverlay } from "@/app/_components/UploadBusyOverlay";
 import { guardedFetch } from "@/lib/guardedFetch";
 import { dispatchPersonalApiKeyRequired } from "@/lib/personalApiKeyEvents";
@@ -1643,6 +1645,7 @@ export default function LinkToAdUniverse({
   );
 
   const [storeUrl, setStoreUrl] = useState("");
+  const [creatorPreset, setCreatorPreset] = useState<CreatorProductTemplate | null>(null);
 
   const registerLinkToAdStudioImage = useCallback(async (taskId: string, label: string) => {
     try {
@@ -6694,7 +6697,12 @@ export default function LinkToAdUniverse({
 
   return (
     <>
-    <Card className="w-full min-h-[calc(100svh-10rem)] border-white/10 bg-[#0b0912]/85 shadow-[0_0_30px_rgba(139,92,246,0.10)] flex flex-col">
+    <Card className="relative w-full min-h-[calc(100svh-10rem)] border-white/10 bg-[#0b0912]/85 shadow-[0_0_30px_rgba(139,92,246,0.10)] flex flex-col">
+      {creatorPreset ? (
+        <div className="absolute inset-0 z-40 overflow-y-auto rounded-xl bg-[#0b0912] px-4 py-4 sm:px-6">
+          <CreatorTemplateAdReveal template={creatorPreset} onBack={() => setCreatorPreset(null)} />
+        </div>
+      ) : null}
       <CardHeader className="space-y-3">
         <div className="flex flex-wrap items-center justify-between gap-3">
           <div className="flex min-w-0 flex-wrap items-center gap-2 sm:gap-3">
@@ -6846,7 +6854,7 @@ export default function LinkToAdUniverse({
               <InfluencerSiteTemplatesMenu
                 title="Link to Ad"
                 hint="Pick a product clone."
-                onSelect={(template) => setStoreUrl(template.productUrl)}
+                onSelect={(template) => setCreatorPreset(template)}
               />
             </div>
             {/* Compact settings row: duration + speed + mode, open by default */}
