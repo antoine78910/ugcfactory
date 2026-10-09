@@ -83,37 +83,44 @@ export async function POST(req: Request) {
   const pageId = staticAdPageId(template.id);
   const state = JSON.parse(JSON.stringify(source.state)) as WorkflowProjectStateV1;
   const existing = state.pages.find((page) => page.id === pageId);
-  let created = false;
-  if (!existing) {
-    const canvas = richestPage(state);
-    if (!canvas || canvas.nodes.length < 2) {
-      return NextResponse.json({ error: "Static ad workflow was not found." }, { status: 404 });
-    }
-    const duplicated = duplicateWorkflowPage(canvas);
-    const page: WorkflowFlowPage = { ...duplicated, id: pageId, name: template.name };
-    const index = state.pages.findIndex((item) => item.id === canvas.id);
-    const at = index >= 0 ? index + 1 : state.pages.length;
-    state.pages = [...state.pages.slice(0, at), page, ...state.pages.slice(at)];
-    created = true;
+  const masterCanvas = richestPage({
+    ...state,
+    pages: state.pages.filter((page) => page.id !== pageId),
+  });
 
-    const { error: updateErr } = await admin
-      .from("workflow_spaces")
-      .update({ state, updated_at: new Date().toISOString() })
-      .eq("id", source.id);
-    if (updateErr) {
-      return NextResponse.json({ error: updateErr.message }, { status: 500 });
-    }
-  }
+  const { data: savedCopies } = await admin
+    .from("workflow_spaces")
+    .select("id, state, updated_at")
+    .eq("name", `${template.name} static ad`)
+    .eq("created_by", auth.user.id)
+    .order("updated_at", { ascending: false })
+    .limit(5);
+  const savedCopy = (savedCopies ?? [])
+    .map((row) => ({
+      id: typeof row.id === "string" ? row.id : "",
+      state: row.state,
+      updatedAt: typeof row.updated_at === "string" ? row.updated_at : "",
+    }))
+    .filter((row): row is { id: string; state: WorkflowProjectStateV1; updatedAt: string } =>
+      Boolean(row.id) && isProjectState(row.state) && nodeCount(row.state) >= 2,
+    )
+    .sort((a, b) => nodeCount(b.state) - nodeCount(a.state) || b.updatedAt.localeCompare(a.updatedAt))[0];
 
+  const existingUntouched =
+    Boolean(existing && masterCanvas && existing.nodes.length === masterCanvas.nodes.length);
+  const savedCopyRicher =
+    Boolean(savedCopy && (!existing || existingUntouched) && (!existing || nodeCount(savedCopy.state) > existing.nodes.length));
+
+  const openSpaceId = savedCopyRicher && savedCopy ? savedCopy.id : source.id;
   const { data: membership } = await admin
     .from("workflow_space_collaborators")
     .select("role")
-    .eq("space_id", source.id)
+    .eq("space_id", openSpaceId)
     .eq("user_id", auth.user.id)
     .maybeSingle();
   if (!membership) {
     const { error: collabErr } = await admin.from("workflow_space_collaborators").insert({
-      space_id: source.id,
+      space_id: openSpaceId,
       user_id: auth.user.id,
       role: "editor",
     });
@@ -122,5 +129,30 @@ export async function POST(req: Request) {
     }
   }
 
-  return NextResponse.json({ spaceId: source.id, pageId, created });
+  if (savedCopyRicher && savedCopy) {
+    return NextResponse.json({ spaceId: savedCopy.id, created: false });
+  }
+  if (existing) {
+    return NextResponse.json({ spaceId: source.id, pageId, created: false });
+  }
+
+  const canvas = richestPage(state);
+  if (!canvas || canvas.nodes.length < 2) {
+    return NextResponse.json({ error: "Static ad workflow was not found." }, { status: 404 });
+  }
+  const duplicated = duplicateWorkflowPage(canvas);
+  const page: WorkflowFlowPage = { ...duplicated, id: pageId, name: template.name };
+  const index = state.pages.findIndex((item) => item.id === canvas.id);
+  const at = index >= 0 ? index + 1 : state.pages.length;
+  state.pages = [...state.pages.slice(0, at), page, ...state.pages.slice(at)];
+
+  const { error: updateErr } = await admin
+    .from("workflow_spaces")
+    .update({ state, updated_at: new Date().toISOString() })
+    .eq("id", source.id);
+  if (updateErr) {
+    return NextResponse.json({ error: updateErr.message }, { status: 500 });
+  }
+
+  return NextResponse.json({ spaceId: source.id, pageId, created: true });
 }

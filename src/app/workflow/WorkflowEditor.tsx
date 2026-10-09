@@ -5666,6 +5666,15 @@ export function WorkflowEditor({
     () => (typeof initialPageId === "string" ? initialPageId.trim() : ""),
     [initialPageId],
   );
+  const focusInitialPage = useCallback(
+    (project: WorkflowProjectStateV1): WorkflowProjectStateV1 => {
+      if (!initialPageIdTrimmed) return project;
+      if (!project.pages.some((page) => page.id === initialPageIdTrimmed)) return project;
+      if (project.activePageId === initialPageIdTrimmed) return project;
+      return { ...project, activePageId: initialPageIdTrimmed };
+    },
+    [initialPageIdTrimmed],
+  );
 
   const [storageScope, setStorageScope] = useState<string | null>(null);
   /** `undefined` = session not resolved yet (avoid redirecting to /workflow on slow mobile). */
@@ -5805,7 +5814,7 @@ export function WorkflowEditor({
             setSpaceRole(cloud.role);
             setSpaceName(cloud.name || "Untitled workflow");
             setPublishedTemplateId(cloud.publishedCommunityTemplateId ?? null);
-            setWorkflowProject(cloud.state);
+            setWorkflowProject(focusInitialPage(cloud.state));
             setLoadedFromShareLink(false);
             skipNextCloudSaveRef.current = true;
             if (cloud.isOwn) {
@@ -5835,7 +5844,7 @@ export function WorkflowEditor({
         setSpaceRole("viewer");
         setSpaceName(snap.name || "Untitled workflow");
         setPublishedTemplateId(snap.publishedCommunityTemplateId ?? null);
-        setWorkflowProject(snap.state);
+        setWorkflowProject(focusInitialPage(snap.state));
         setLoadedFromShareLink(true);
         skipNextCloudSaveRef.current = true;
         skipNextLocalSaveRef.current = true;
@@ -5860,7 +5869,7 @@ export function WorkflowEditor({
         setSpaceRole(null);
         setSpaceName(localMeta.name);
         setPublishedTemplateId(localMeta.publishedCommunityTemplateId ?? null);
-        setWorkflowProject(localProject);
+        setWorkflowProject(focusInitialPage(localProject));
         loadRunHistory();
         setWorkflowHydrated(true);
         return;
@@ -5912,7 +5921,7 @@ export function WorkflowEditor({
             (localMeta.publishedCommunityTemplateId ?? "").trim() ||
             null;
           setPublishedTemplateId(mergedTemplateId);
-          setWorkflowProject(cloud.state);
+          setWorkflowProject(focusInitialPage(cloud.state));
           saveProjectForSpace(storageScope, resolvedSpaceId, cloud.state);
           updateSpaceMeta(storageScope, resolvedSpaceId, {
             name: cloud.name || localMeta.name,
@@ -5926,16 +5935,27 @@ export function WorkflowEditor({
           skipNextLocalSaveRef.current = true;
         } else {
           if (cloud?.updatedAt) lastCloudUpdatedAtRef.current = cloud.updatedAt;
-          const cloudPage =
-            requestedPageMissingLocally && requestedPageOnCloud
-              ? cloud?.state.pages.find((page) => page.id === initialPageIdTrimmed)
-              : undefined;
-          const project = cloudPage ? { ...localProject, pages: [...localProject.pages, cloudPage] } : localProject;
+          const cloudPage = requestedPageOnCloud
+            ? cloud?.state.pages.find((page) => page.id === initialPageIdTrimmed)
+            : undefined;
+          const localPage = localProject.pages.find((page) => page.id === initialPageIdTrimmed);
+          const useCloudPage = Boolean(
+            cloudPage && (!localPage || cloudPage.nodes.length > localPage.nodes.length || requestedPageMissingLocally),
+          );
+          const project =
+            useCloudPage && cloudPage
+              ? {
+                  ...localProject,
+                  pages: localPage
+                    ? localProject.pages.map((page) => (page.id === initialPageIdTrimmed ? cloudPage : page))
+                    : [...localProject.pages, cloudPage],
+                }
+              : localProject;
           setSpaceSource("local");
           setSpaceRole(cloud?.role ?? null);
           setSpaceName(localMeta.name);
           setPublishedTemplateId(localMeta.publishedCommunityTemplateId ?? null);
-          setWorkflowProject(project);
+          setWorkflowProject(focusInitialPage(project));
           // Project is already persisted in localStorage — skip the reactive local-save
           // that would otherwise call touchSpaceUpdated and bump updatedAt to Date.now().
           skipNextLocalSaveRef.current = true;
@@ -5955,7 +5975,7 @@ export function WorkflowEditor({
       setSpaceRole(null);
       setSpaceName(local.name);
       setPublishedTemplateId(local.publishedCommunityTemplateId ?? null);
-      setWorkflowProject(loadProjectForSpace(storageScope, resolvedSpaceId));
+      setWorkflowProject(focusInitialPage(loadProjectForSpace(storageScope, resolvedSpaceId)));
       skipNextLocalSaveRef.current = true;
       loadRunHistory();
       setWorkflowHydrated(true);
@@ -5974,7 +5994,7 @@ export function WorkflowEditor({
       setSpaceRole(cloud.role);
       setSpaceName(cloud.name || "Untitled workflow");
       setPublishedTemplateId(cloud.publishedCommunityTemplateId ?? null);
-      setWorkflowProject(cloud.state);
+      setWorkflowProject(focusInitialPage(cloud.state));
       // Loaded fresh from cloud — no need to push it straight back.
       skipNextCloudSaveRef.current = true;
       loadRunHistory();
@@ -5984,38 +6004,12 @@ export function WorkflowEditor({
     return () => {
       cancelled = true;
     };
-  }, [resolvedSpaceId, router, storageScope, runHistoryStorageKey, authUserId, shareTokenTrimmed, initialPageIdTrimmed]);
+  }, [resolvedSpaceId, router, storageScope, runHistoryStorageKey, authUserId, shareTokenTrimmed, initialPageIdTrimmed, focusInitialPage]);
 
   useEffect(() => {
     if (!workflowHydrated) return;
-    setWorkflowProject((prev) => normalizeWorkflowProjectState(prev));
-  }, [workflowHydrated]);
-
-  /** Land on a Static Ads product page without inserting a workflow into the user's space. */
-  const openedInitialPageRef = useRef("");
-  useEffect(() => {
-    if (!workflowHydrated || !initialPageIdTrimmed) return;
-    const key = `${resolvedSpaceId}:${initialPageIdTrimmed}`;
-    if (openedInitialPageRef.current === key) return;
-    const hasPage = workflowProject.pages.some((page) => page.id === initialPageIdTrimmed);
-    if (!hasPage) return;
-    if (workflowProject.activePageId !== initialPageIdTrimmed) {
-      setWorkflowProject((prev) =>
-        prev.pages.some((page) => page.id === initialPageIdTrimmed) && prev.activePageId !== initialPageIdTrimmed
-          ? { ...prev, activePageId: initialPageIdTrimmed }
-          : prev,
-      );
-      return;
-    }
-    openedInitialPageRef.current = key;
-    setCanvasEpoch((epoch) => epoch + 1);
-  }, [
-    workflowHydrated,
-    initialPageIdTrimmed,
-    resolvedSpaceId,
-    workflowProject.activePageId,
-    workflowProject.pages,
-  ]);
+    setWorkflowProject((prev) => normalizeWorkflowProjectState(focusInitialPage(prev)));
+  }, [workflowHydrated, focusInitialPage]);
 
   /** True once this space had nodes in the current session, so an empty canvas means the user cleared it. */
   const sessionHadNodesRef = useRef(false);
