@@ -33,7 +33,6 @@ import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { CreditCostBadge } from "@/app/_components/CreditCostBadge";
 import { CreatorTemplateAdReveal } from "@/app/_components/lta/CreatorTemplateAdReveal";
-import { CreatorTemplateUrlGeneration } from "@/app/_components/lta/CreatorTemplateUrlGeneration";
 import { InfluencerSiteTemplatesMenu } from "@/app/workflow/InfluencerSiteTemplatesMenu";
 import { findCreatorTemplateByProductUrl, type CreatorProductTemplate } from "@/lib/creatorProductTemplates";
 import { isInfluencerAccount } from "@/lib/influencerAccounts";
@@ -6740,7 +6739,7 @@ export default function LinkToAdUniverse({
     <Card className="relative w-full min-h-[calc(100svh-10rem)] border-white/10 bg-[#0b0912]/85 shadow-[0_0_30px_rgba(139,92,246,0.10)] flex flex-col">
       {urlTemplateReveal ? (
         <div className="absolute inset-0 z-[80] overflow-y-auto rounded-xl bg-[#07060d] px-4 py-4 sm:px-6">
-          <CreatorTemplateUrlGeneration template={urlTemplateReveal} onBack={() => setUrlTemplateReveal(null)} />
+          <CreatorTemplateAdReveal template={urlTemplateReveal} onBack={() => setUrlTemplateReveal(null)} />
         </div>
       ) : creatorPreset ? (
         <div className="absolute inset-0 z-[80] overflow-y-auto rounded-xl bg-[#0b0912] px-4 py-4 sm:px-6">

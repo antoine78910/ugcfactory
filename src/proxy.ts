@@ -19,6 +19,9 @@ function isStudioHost(hostHeader: string): boolean {
 /** Routes that have their own `src/app/<name>` pages, do not rewrite to `/app/*`. */
 export function isExcludedFromStudioRewrite(pathname: string): boolean {
   if (pathname.startsWith("/auth")) return true;
+  // Public files (mp4, images, …) must stay on /public. Rewriting them into /app returns HTML, so <video> never plays.
+  const leaf = pathname.split("/").pop() ?? "";
+  if (leaf.includes(".")) return true;
   const first = pathname.split("/").filter(Boolean)[0] ?? "";
   return new Set([
     /** Never rewrite `/api/*` or `/monitoring` into `/app/*` (must stay aligned with `config.matcher`). */

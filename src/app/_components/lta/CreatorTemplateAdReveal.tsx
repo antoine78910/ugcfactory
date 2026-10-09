@@ -6,7 +6,7 @@ import { useEffect, useState } from "react";
 
 import { creatorTemplateVideoUrl, type CreatorProductTemplate } from "@/lib/creatorProductTemplates";
 
-const TOTAL_MS = 8000;
+const TOTAL_MS = 10000;
 
 const STAGES = [
   { label: "Product", detail: "Reading the product page", icon: Package },
@@ -117,6 +117,9 @@ export function CreatorTemplateAdReveal({
               />
             </div>
 
+            {videoUrl ? (
+              <video src={videoUrl} preload="auto" muted playsInline className="hidden" />
+            ) : null}
             <ol className="mt-6 space-y-2">
               {STAGES.map((stage, index) => {
                 const Icon = stage.icon;
