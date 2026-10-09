@@ -428,6 +428,27 @@
   background-clip: padding-box;
 }
 
+/* Workflow page list: always show a thumb so later pages stay reachable. */
+.workflow-pages-scroll {
+  scrollbar-gutter: stable;
+  scrollbar-width: thin;
+  scrollbar-color: rgba(196, 181, 253, 0.75) rgba(255, 255, 255, 0.08);
+}
+
+.workflow-pages-scroll::-webkit-scrollbar {
+  width: 8px;
+}
+
+.workflow-pages-scroll::-webkit-scrollbar-track {
+  background: rgba(255, 255, 255, 0.06);
+  border-radius: 999px;
+}
+
+.workflow-pages-scroll::-webkit-scrollbar-thumb {
+  background: rgba(196, 181, 253, 0.7);
+  border-radius: 999px;
+}
+
 /* Sticky note placement tool: custom cursor on empty canvas (asset: public/workflow/sticky-note-cursor.png). */
 .workflow-flow.workflow-select-mode .react-flow__pane {
   cursor: default !important;

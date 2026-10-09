@@ -7,7 +7,8 @@ import { requireSupabaseUser } from "@/lib/supabase/requireUser";
 import { createSupabaseServiceClient } from "@/lib/supabase/admin";
 import type { WorkflowProjectStateV1 } from "@/app/workflow/workflowProjectStorage";
 
-const MAX_PROJECT_BYTES = 1_800_000;
+/** Under the platform request limit so a duplicated page still syncs. */
+const MAX_PROJECT_BYTES = 3_500_000;
 
 type Ctx = { params: Promise<{ spaceId: string }> };
 

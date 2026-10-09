@@ -768,6 +768,14 @@ function WorkflowPagesPanel({
 }) {
   const [renamingId, setRenamingId] = useState<string | null>(null);
   const [renameDraft, setRenameDraft] = useState("");
+  const listRef = useRef<HTMLUListElement | null>(null);
+
+  useEffect(() => {
+    const root = listRef.current;
+    if (!root) return;
+    const active = root.querySelector<HTMLElement>("[data-page-active='true']");
+    active?.scrollIntoView({ block: "nearest" });
+  }, [project.activePageId, project.pages.length]);
 
   function beginRename(id: string, name: string) {
     setRenamingId(id);
@@ -837,13 +845,14 @@ function WorkflowPagesPanel({
           )}
         </div>
         <ul
-          className="studio-minimal-scrollbar max-h-[min(28vh,170px)] space-y-1 overflow-y-scroll p-1"
+          ref={listRef}
+          className="workflow-pages-scroll max-h-[min(52vh,380px)] space-y-1 overflow-y-auto p-1"
           onWheel={(e) => e.stopPropagation()}
         >
           {project.pages.map((p) => {
             const active = p.id === project.activePageId;
             return (
-              <li key={p.id} className="group relative">
+              <li key={p.id} className="group relative" data-page-active={active ? "true" : undefined}>
                 {renamingId === p.id ? (
                   <input
                     {...workflowDisableSpellcheck}
@@ -875,11 +884,14 @@ function WorkflowPagesPanel({
                       </span>
                     </button>
                     {!readOnly ? (
-                      <div className="absolute right-0.5 top-1/2 flex -translate-y-1/2 items-center gap-0.5 bg-[#0b0912]/95 opacity-0 transition group-hover:opacity-100">
+                      <div className="pointer-events-none absolute right-0.5 top-1/2 z-10 flex -translate-y-1/2 items-center gap-0.5 bg-[#0b0912]/95 opacity-0 transition group-hover:pointer-events-auto group-hover:opacity-100">
                         <button
                           type="button"
                           title="Duplicate page"
-                          onClick={() => duplicatePage(p.id)}
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            duplicatePage(p.id);
+                          }}
                           className="flex h-6 w-6 items-center justify-center rounded-md text-white/25 transition hover:bg-white/[0.08] hover:text-white/80"
                         >
                           <CopyPlus className="h-3 w-3" />
