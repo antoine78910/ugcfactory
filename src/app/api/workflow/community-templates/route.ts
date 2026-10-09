@@ -6,7 +6,8 @@ import { requireSupabaseUser } from "@/lib/supabase/requireUser";
 import { createSupabaseServiceClient } from "@/lib/supabase/admin";
 import type { WorkflowProjectStateV1 } from "@/app/workflow/workflowProjectStorage";
 
-const MAX_PROJECT_BYTES = 1_800_000;
+/** Under the platform request limit so an 8-page template with images can still publish. */
+const MAX_PROJECT_BYTES = 4_000_000;
 export const dynamic = "force-dynamic";
 export const revalidate = 0;
 

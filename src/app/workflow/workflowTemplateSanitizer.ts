@@ -30,17 +30,28 @@ function isLikelyDataUrl(value: unknown): value is string {
   return typeof value === "string" && value.startsWith("data:") && value.length > 200;
 }
 
-function sanitizeNodeData(data: unknown): unknown {
-  if (!data || typeof data !== "object") return data;
-  const out: Record<string, unknown> = { ...(data as Record<string, unknown>) };
-  for (const key of EPHEMERAL_DATA_FIELDS) {
-    if (key in out) delete out[key];
+function isBlobUrl(value: unknown): value is string {
+  return typeof value === "string" && value.startsWith("blob:");
+}
+
+/** Drop embedded images from nested node data so a multi-page template stays publishable. */
+function stripHeavyValues(value: unknown, dropEphemeralKeys: boolean): unknown {
+  if (isLikelyDataUrl(value) || isBlobUrl(value)) return undefined;
+  if (Array.isArray(value)) {
+    return value.map((item) => stripHeavyValues(item, false)).filter((item) => item !== undefined);
   }
-  // Defensive: drop any other field whose value is a heavy data: URL.
-  for (const [k, v] of Object.entries(out)) {
-    if (isLikelyDataUrl(v)) delete out[k];
+  if (!value || typeof value !== "object") return value;
+  const out: Record<string, unknown> = {};
+  for (const [key, child] of Object.entries(value as Record<string, unknown>)) {
+    if (dropEphemeralKeys && (EPHEMERAL_DATA_FIELDS as readonly string[]).includes(key)) continue;
+    const next = stripHeavyValues(child, false);
+    if (next !== undefined) out[key] = next;
   }
   return out;
+}
+
+function sanitizeNodeData(data: unknown): unknown {
+  return stripHeavyValues(data, true);
 }
 
 function sanitizeNode(node: WorkflowCanvasNode): WorkflowCanvasNode {

@@ -6407,9 +6407,8 @@ export function WorkflowEditor({
       // Capture the best preview image URL from the live project BEFORE stripping
       // ephemeral fields, so the template card in the listing can show a thumbnail.
       const thumbnailUrl = extractWorkflowThumbnailUrl(liveProject);
-      // Strip ephemeral run state and per-account media URLs so the template stays
-      // small and reusable; without this the payload can exceed the 1.8MB API cap
-      // and the template ends up looking empty after a failed publish.
+      // Strip ephemeral run state and embedded images so an 8-page template
+      // still fits the publish request. HTTPS image URLs are kept.
       const projectForPublish = sanitizeProjectForCommunityTemplate(liveProject);
       const res = await fetch("/api/workflow/community-templates", {
         method: "POST",
