@@ -126,7 +126,6 @@ import { sessionUserEmail } from "@/lib/sessionUserEmail";
 import { useLtaTemplateRecording } from "@/app/_components/lta/useLtaTemplateRecording";
 import {
   LinkToAdTemplateBrandPicker,
-  LinkToAdTemplateRecordingButton,
   LinkToAdTemplateRecordingExitConfirm,
   LinkToAdTemplateRecordingStartConfirm,
 } from "@/app/_components/lta/LinkToAdTemplateRecordingUi";
@@ -9904,7 +9903,6 @@ export default function LinkToAdUniverse({
         </button>
       </div>
     ) : null}
-    <LinkToAdTemplateRecordingButton recording={templateRecording} />
     <LinkToAdTemplateRecordingStartConfirm recording={templateRecording} />
     <LinkToAdTemplateRecordingExitConfirm recording={templateRecording} />
     <LinkToAdTemplateBrandPicker recording={templateRecording} />
