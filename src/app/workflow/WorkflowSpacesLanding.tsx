@@ -6,6 +6,8 @@ import { useRouter } from "next/navigation";
 import { useCallback, useEffect, useMemo, useState, type MouseEvent } from "react";
 import { toast } from "sonner";
 
+import { canEditWorkflowTemplates } from "@/lib/influencerAccounts";
+import { sessionUserEmail } from "@/lib/sessionUserEmail";
 import { cn } from "@/lib/utils";
 
 import { useSupabaseBrowserClient } from "@/lib/supabase/BrowserSupabaseProvider";
@@ -93,6 +95,8 @@ export function WorkflowSpacesLanding() {
   const sb = useSupabaseBrowserClient();
   const [storageScope, setStorageScope] = useState<string | null>(null);
   const [authUserId, setAuthUserId] = useState<string | null>(null);
+  const [authEmail, setAuthEmail] = useState<string | null>(null);
+  const canEditTemplates = canEditWorkflowTemplates(authEmail);
   const [spaces, setSpaces] = useState<WorkflowSpaceMeta[]>([]);
   const [cloudSpaces, setCloudSpaces] = useState<CloudWorkflowSpace[]>([]);
   const [cloudLoading, setCloudLoading] = useState(false);
@@ -144,23 +148,27 @@ export function WorkflowSpacesLanding() {
     if (!sb) {
       setStorageScope(getWorkflowStorageScope(null));
       setAuthUserId(null);
+      setAuthEmail(null);
       return;
     }
     void sb.auth.getSession().then(({ data }) => {
       const id = data.session?.user?.id ?? null;
       setStorageScope(getWorkflowStorageScope(id));
       setAuthUserId(id);
+      setAuthEmail(data.session?.user ? sessionUserEmail(data.session.user) : null);
       if (data.session?.user) void refreshCommunityTemplates();
       else setCommunityTemplates([]);
     }).catch(() => {
       setStorageScope(getWorkflowStorageScope(null));
       setAuthUserId(null);
+      setAuthEmail(null);
       setCommunityTemplates([]);
     });
     const { data: sub } = sb.auth.onAuthStateChange((_event, session) => {
       const id = session?.user?.id ?? null;
       setStorageScope(getWorkflowStorageScope(id));
       setAuthUserId(id);
+      setAuthEmail(session?.user ? sessionUserEmail(session.user) : null);
       if (session?.user) void refreshCommunityTemplates();
       else {
         setCommunityTemplates([]);
@@ -706,7 +714,7 @@ export function WorkflowSpacesLanding() {
                                 ? "This device"
                                 : "Built-in"}
                           </span>
-                          {t.canDelete ? (
+                          {t.canDelete && canEditTemplates ? (
                             <button
                               type="button"
                               onClick={(e) => {

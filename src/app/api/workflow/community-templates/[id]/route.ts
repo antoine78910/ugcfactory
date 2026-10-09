@@ -1,5 +1,7 @@
 import { NextResponse } from "next/server";
 
+import { canEditWorkflowTemplates } from "@/lib/influencerAccounts";
+import { sessionUserEmail } from "@/lib/sessionUserEmail";
 import { createSupabaseServiceClient } from "@/lib/supabase/admin";
 import { requireSupabaseUser } from "@/lib/supabase/requireUser";
 
@@ -99,6 +101,9 @@ export async function GET(_req: Request, ctx: Ctx) {
 export async function DELETE(_req: Request, ctx: Ctx) {
   const auth = await requireSupabaseUser();
   if (auth.response) return auth.response;
+  if (!canEditWorkflowTemplates(sessionUserEmail(auth.user))) {
+    return NextResponse.json({ error: "Only the template admin can modify templates." }, { status: 403 });
+  }
 
   const { id } = await ctx.params;
   const uuid = typeof id === "string" ? id.trim() : "";

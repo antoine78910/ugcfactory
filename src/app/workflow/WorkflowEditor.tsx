@@ -92,6 +92,8 @@ import { AvatarPickerDialog } from "@/app/_components/AvatarPickerDialog";
 import { loadAvatarUrls } from "@/lib/avatarLibrary";
 import { clipboardImageFiles } from "@/lib/clipboardImage";
 import { compressImageFileForUpload } from "@/lib/compressImageFileForUpload";
+import { canEditWorkflowTemplates } from "@/lib/influencerAccounts";
+import { sessionUserEmail } from "@/lib/sessionUserEmail";
 import { useSupabaseBrowserClient } from "@/lib/supabase/BrowserSupabaseProvider";
 import { uploadFileToCdn } from "@/lib/uploadBlobUrlToCdn";
 import { STUDIO_IMAGE_FILE_ACCEPT } from "@/lib/studioUploadValidation";
@@ -5661,6 +5663,8 @@ export function WorkflowEditor({
   const [storageScope, setStorageScope] = useState<string | null>(null);
   /** `undefined` = session not resolved yet (avoid redirecting to /workflow on slow mobile). */
   const [authUserId, setAuthUserId] = useState<string | null | undefined>(undefined);
+  const [authEmail, setAuthEmail] = useState<string | null>(null);
+  const canEditTemplates = canEditWorkflowTemplates(authEmail);
   const [workflowProject, setWorkflowProject] = useState<WorkflowProjectStateV1>(() => defaultWorkflowProject());
   const [workflowHydrated, setWorkflowHydrated] = useState(false);
   const [spaceName, setSpaceName] = useState("Untitled workflow");
@@ -5716,20 +5720,24 @@ export function WorkflowEditor({
     if (!sb) {
       setStorageScope(getWorkflowStorageScope(null));
       setAuthUserId(null);
+      setAuthEmail(null);
       return;
     }
     void sb.auth.getSession().then(({ data }) => {
       const id = data.session?.user?.id ?? null;
       setStorageScope(getWorkflowStorageScope(id));
       setAuthUserId(id);
+      setAuthEmail(data.session?.user ? sessionUserEmail(data.session.user) : null);
     }).catch(() => {
       setStorageScope(getWorkflowStorageScope(null));
       setAuthUserId(null);
+      setAuthEmail(null);
     });
     const { data: sub } = sb.auth.onAuthStateChange((_event, session) => {
       const id = session?.user?.id ?? null;
       setStorageScope(getWorkflowStorageScope(id));
       setAuthUserId(id);
+      setAuthEmail(session?.user ? sessionUserEmail(session.user) : null);
     });
     return () => sub.subscription.unsubscribe();
   }, [sb]);
@@ -6305,17 +6313,17 @@ export function WorkflowEditor({
   }, []);
 
   const onPublishTemplate = useCallback(() => {
-    if (publishBusy) return;
+    if (publishBusy || !canEditTemplates) return;
     const suggestedName = spaceName.trim() || "My workflow template";
     const suggestedBlurb = "Shared workflow template.";
     setPublishTemplateName(suggestedName);
     setPublishTemplateBlurb(suggestedBlurb);
     setPublishHidePromptsForGuests(true);
     setPublishTemplateOpen(true);
-  }, [publishBusy, spaceName]);
+  }, [publishBusy, canEditTemplates, spaceName]);
 
   const submitPublishTemplate = useCallback(async () => {
-    if (publishBusy) return;
+    if (publishBusy || !canEditTemplates) return;
     const suggestedBlurb = "Shared workflow template.";
     const name = publishTemplateName.trim();
     const blurb = publishTemplateBlurb.trim();
@@ -6406,10 +6414,11 @@ export function WorkflowEditor({
     workflowProject,
     storageScope,
     resolvedSpaceId,
+    canEditTemplates,
   ]);
 
   const removePublishedTemplate = useCallback(async () => {
-    if (!publishedTemplateId || removeTemplateBusy) return;
+    if (!publishedTemplateId || removeTemplateBusy || !canEditTemplates) return;
     setRemoveTemplateBusy(true);
     try {
       const res = await fetch(`/api/workflow/community-templates/${encodeURIComponent(publishedTemplateId)}`, {
@@ -6431,7 +6440,7 @@ export function WorkflowEditor({
     } finally {
       setRemoveTemplateBusy(false);
     }
-  }, [publishedTemplateId, removeTemplateBusy, storageScope, resolvedSpaceId]);
+  }, [publishedTemplateId, removeTemplateBusy, canEditTemplates, storageScope, resolvedSpaceId]);
 
   const signupRedirectTarget = useMemo(
     () =>
@@ -6583,7 +6592,7 @@ export function WorkflowEditor({
         <div className="flex shrink-0 items-center gap-2">
           {hideViewerHeaderActions ? null : (
             <>
-              {publishedTemplateId ? (
+              {canEditTemplates && publishedTemplateId ? (
                 <button
                   type="button"
                   onClick={() => setRemoveTemplateConfirmOpen(true)}
@@ -6597,6 +6606,7 @@ export function WorkflowEditor({
                   {removeTemplateBusy ? "Removing…" : "Remove from templates"}
                 </button>
               ) : null}
+              {canEditTemplates ? (
               <button
                 type="button"
                 onClick={onPublishTemplate}
@@ -6609,6 +6619,7 @@ export function WorkflowEditor({
                 {publishBusy ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Globe2 className="h-3.5 w-3.5" />}
                 {publishBusy ? "Publishing…" : publishedTemplateId ? "Push modification" : "Publish template"}
               </button>
+              ) : null}
               {authUserId ? (
                 <button
                   type="button"

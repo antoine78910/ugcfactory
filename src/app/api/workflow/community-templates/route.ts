@@ -1,5 +1,7 @@
 import { NextResponse } from "next/server";
 
+import { canEditWorkflowTemplates } from "@/lib/influencerAccounts";
+import { sessionUserEmail } from "@/lib/sessionUserEmail";
 import { requireSupabaseUser } from "@/lib/supabase/requireUser";
 import { createSupabaseServiceClient } from "@/lib/supabase/admin";
 import type { WorkflowProjectStateV1 } from "@/app/workflow/workflowProjectStorage";
@@ -98,6 +100,9 @@ export async function GET() {
 export async function POST(req: Request) {
   const auth = await requireSupabaseUser();
   if (auth.response) return auth.response;
+  if (!canEditWorkflowTemplates(sessionUserEmail(auth.user))) {
+    return NextResponse.json({ error: "Only the template admin can modify templates." }, { status: 403 });
+  }
 
   const raw = await req.text();
   if (raw.length > MAX_PROJECT_BYTES + 50_000) {
@@ -230,6 +235,9 @@ export async function POST(req: Request) {
 export async function DELETE() {
   const auth = await requireSupabaseUser();
   if (auth.response) return auth.response;
+  if (!canEditWorkflowTemplates(sessionUserEmail(auth.user))) {
+    return NextResponse.json({ error: "Only the template admin can modify templates." }, { status: 403 });
+  }
 
   const { error } = await auth.supabase
     .from("workflow_community_templates")

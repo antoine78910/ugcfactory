@@ -32,6 +32,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { CreditCostBadge } from "@/app/_components/CreditCostBadge";
+import { InfluencerSiteTemplatesMenu } from "@/app/workflow/InfluencerSiteTemplatesMenu";
 import { UploadBusyOverlay } from "@/app/_components/UploadBusyOverlay";
 import { guardedFetch } from "@/lib/guardedFetch";
 import { dispatchPersonalApiKeyRequired } from "@/lib/personalApiKeyEvents";
@@ -6840,6 +6841,13 @@ export default function LinkToAdUniverse({
                     </Button>
                   </div>
                 </div>
+            </div>
+            <div className="flex w-full max-w-xl justify-center">
+              <InfluencerSiteTemplatesMenu
+                title="Link to Ad"
+                hint="Pick a product clone."
+                onSelect={(template) => setStoreUrl(template.productUrl)}
+              />
             </div>
             {/* Compact settings row: duration + speed + mode, open by default */}
             <details open className="w-full max-w-xl rounded-xl border border-white/8 bg-white/[0.02] text-white/60 [&[open]>summary]:mb-3">
