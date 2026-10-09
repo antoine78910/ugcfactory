@@ -4,7 +4,7 @@ import { AnimatePresence, motion } from "framer-motion";
 import { ArrowLeft, Check, Clapperboard, FileText, Package, Sparkles } from "lucide-react";
 import { useEffect, useState } from "react";
 
-import type { CreatorProductTemplate } from "@/lib/creatorProductTemplates";
+import { creatorTemplateVideoUrl, type CreatorProductTemplate } from "@/lib/creatorProductTemplates";
 
 const TOTAL_MS = 8000;
 
@@ -23,14 +23,11 @@ export function CreatorTemplateAdReveal({
   onBack: () => void;
 }) {
   const [elapsed, setElapsed] = useState(0);
-  const [videoUrl, setVideoUrl] = useState<string | null>(null);
-  const [lookupDone, setLookupDone] = useState(false);
+  const videoUrl = creatorTemplateVideoUrl(template.id);
 
   useEffect(() => {
     let cancelled = false;
     setElapsed(0);
-    setVideoUrl(null);
-    setLookupDone(false);
     const started = performance.now();
     let frame = 0;
     const tick = (now: number) => {
@@ -39,26 +36,13 @@ export function CreatorTemplateAdReveal({
       if (now - started < TOTAL_MS) frame = requestAnimationFrame(tick);
     };
     frame = requestAnimationFrame(tick);
-    void fetch(`/api/link-to-ad/creator-template-video?templateId=${encodeURIComponent(template.id)}`)
-      .then((res) => res.json())
-      .then((body: { video?: { url?: string } | null }) => {
-        if (cancelled) return;
-        const url = body.video?.url?.trim();
-        setVideoUrl(url || null);
-      })
-      .catch(() => {
-        if (!cancelled) setVideoUrl(null);
-      })
-      .finally(() => {
-        if (!cancelled) setLookupDone(true);
-      });
     return () => {
       cancelled = true;
       cancelAnimationFrame(frame);
     };
   }, [template.id]);
 
-  const ready = elapsed >= TOTAL_MS && lookupDone;
+  const ready = elapsed >= TOTAL_MS;
   const progress = Math.min(1, elapsed / TOTAL_MS);
   const activeIndex = Math.min(STAGES.length - 1, Math.floor(progress * STAGES.length));
 
@@ -94,8 +78,10 @@ export function CreatorTemplateAdReveal({
                   src={videoUrl}
                   controls
                   autoPlay
+                  muted
                   playsInline
-                  className="max-h-[70vh] w-full bg-black object-contain"
+                  preload="auto"
+                  className="aspect-[9/16] max-h-[70vh] w-full bg-black object-contain"
                 />
               </div>
             ) : (

@@ -1,15 +1,17 @@
 import { NextResponse } from "next/server";
 
-import { CREATOR_PRODUCT_TEMPLATES } from "@/lib/creatorProductTemplates";
-import { findCreatorTemplateVideo } from "@/lib/creatorTemplateVideos";
+import { CREATOR_PRODUCT_TEMPLATES, creatorTemplateVideoUrl } from "@/lib/creatorProductTemplates";
 
 export const runtime = "nodejs";
 
 export async function GET(request: Request) {
   const templateId = new URL(request.url).searchParams.get("templateId")?.trim() ?? "";
-  if (!CREATOR_PRODUCT_TEMPLATES.some((item) => item.id === templateId)) {
+  const template = CREATOR_PRODUCT_TEMPLATES.find((item) => item.id === templateId);
+  if (!template) {
     return NextResponse.json({ error: "Unknown template." }, { status: 400 });
   }
-  const video = await findCreatorTemplateVideo(templateId);
-  return NextResponse.json({ video });
+  const url = creatorTemplateVideoUrl(template.id);
+  return NextResponse.json({
+    video: url ? { filename: template.videoFile, url } : null,
+  });
 }

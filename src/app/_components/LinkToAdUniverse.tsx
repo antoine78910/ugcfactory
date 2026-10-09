@@ -33,8 +33,10 @@ import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { CreditCostBadge } from "@/app/_components/CreditCostBadge";
 import { CreatorTemplateAdReveal } from "@/app/_components/lta/CreatorTemplateAdReveal";
+import { CreatorTemplateUrlGeneration } from "@/app/_components/lta/CreatorTemplateUrlGeneration";
 import { InfluencerSiteTemplatesMenu } from "@/app/workflow/InfluencerSiteTemplatesMenu";
-import type { CreatorProductTemplate } from "@/lib/creatorProductTemplates";
+import { findCreatorTemplateByProductUrl, type CreatorProductTemplate } from "@/lib/creatorProductTemplates";
+import { isInfluencerAccount } from "@/lib/influencerAccounts";
 import { UploadBusyOverlay } from "@/app/_components/UploadBusyOverlay";
 import { guardedFetch } from "@/lib/guardedFetch";
 import { dispatchPersonalApiKeyRequired } from "@/lib/personalApiKeyEvents";
@@ -1557,13 +1559,27 @@ export default function LinkToAdUniverse({
   const supabaseClient = useSupabaseBrowserClient();
 
   const [_userEmail, _setUserEmail] = useState<string | null>(null);
-  useEffect(() => {
-    if (!supabaseClient) return;
-    supabaseClient.auth
-      .getUser()
-      .then(({ data }) => _setUserEmail(data.user ? sessionUserEmail(data.user) : null))
-      .catch(() => {});
+  const [isInfluencer, setIsInfluencer] = useState(false);
+  const influencerRef = useRef(false);
+  const influencerKnownRef = useRef(false);
+  const resolveInfluencer = useCallback(async () => {
+    if (influencerKnownRef.current) return influencerRef.current;
+    if (!supabaseClient) return false;
+    try {
+      const { data } = await supabaseClient.auth.getUser();
+      const next = isInfluencerAccount(data.user);
+      influencerRef.current = next;
+      influencerKnownRef.current = true;
+      _setUserEmail(data.user ? sessionUserEmail(data.user) : null);
+      setIsInfluencer(next);
+      return next;
+    } catch {
+      return influencerRef.current;
+    }
   }, [supabaseClient]);
+  useEffect(() => {
+    void resolveInfluencer();
+  }, [resolveInfluencer]);
   /** 30s = two chained 15s clips. */
   const _30sUnlocked = true;
   const DEMO_EMAILS = new Set(["anto.delbos@mail.com", "anto.delbos@gmail.com", "app@youry.com"]);
@@ -1631,6 +1647,7 @@ export default function LinkToAdUniverse({
   /** Deduct from wallet once on URL Generate; keep ref/frozen in sync with that charge. */
   const spendLtaCreditsIfEnough = useCallback(
     (cost: number, opts?: { presentation?: "studio_billing" }): boolean => {
+      if (influencerRef.current) return false;
       if (ltaTemplateLocksRef.current) return true;
       if (!hasLtaCreditsFor(cost, opts)) return false;
       if (isPlatformCreditBypassActive()) return true;
@@ -1646,6 +1663,7 @@ export default function LinkToAdUniverse({
 
   const [storeUrl, setStoreUrl] = useState("");
   const [creatorPreset, setCreatorPreset] = useState<CreatorProductTemplate | null>(null);
+  const [urlTemplateReveal, setUrlTemplateReveal] = useState<CreatorProductTemplate | null>(null);
 
   const registerLinkToAdStudioImage = useCallback(async (taskId: string, label: string) => {
     try {
@@ -3452,6 +3470,7 @@ export default function LinkToAdUniverse({
 
   /** Hide credit pills (incl. Generate) whenever template mode is on; skip charges during replay. */
   const hideLtaCreditsUi =
+    isInfluencer ||
     manualHideCredits ||
     templateRecording.templateToggleOn ||
     templateRecording.isBrandSelected ||
@@ -4057,6 +4076,7 @@ export default function LinkToAdUniverse({
 
   /** Resume after a save stopped at brand brief (scripts step failed or interrupted). Runs on the server so navigation does not cancel it. */
   async function onContinueScripts() {
+    if (influencerRef.current || (await resolveInfluencer())) return;
     if (templateRecording.templateToggleOn) return;
     const url = storeUrl.trim();
     if (!url || !lastExtractedJson || !summaryText.trim()) {
@@ -4109,6 +4129,7 @@ export default function LinkToAdUniverse({
   const [regenerateAnglesChoiceOpen, setRegenerateAnglesChoiceOpen] = useState(false);
 
   async function onRegenerateMarketingAngles(opts?: { keepExistingImages?: boolean; regenImagesAlso?: boolean }) {
+    if (influencerRef.current || (await resolveInfluencer())) return;
     const url = storeUrl.trim();
     if (!url || !lastExtractedJson || !summaryText.trim()) {
       toast.error("Incomplete data to regenerate angles.");
@@ -4264,6 +4285,12 @@ export default function LinkToAdUniverse({
   }
 
   async function onRun(opts?: { bypassSavedProject?: boolean }) {
+    if (await resolveInfluencer()) {
+      const matched = findCreatorTemplateByProductUrl(storeUrl.trim());
+      if (matched) setUrlTemplateReveal(matched);
+      else toast.error("Use one of the template product links.");
+      return;
+    }
     // If a template brand is selected (waiting for Generate), start the replay instead of real generation.
     if (templateRecording.isBrandSelected) {
       void templateRecording.beginTemplateReplay(storeUrl);
@@ -4529,6 +4556,7 @@ export default function LinkToAdUniverse({
     angleIdx?: number | null,
     opts?: { keepThreeImagesSubmitting?: boolean },
   ): Promise<string | null> {
+    if (influencerRef.current || (await resolveInfluencer())) return null;
     if (templateRecording.interceptPaidAction("generate_prompts")) return null;
     const url = storeUrl.trim();
     const idx = angleIdx !== undefined && angleIdx !== null ? angleIdx : selectedAngleIndex;
@@ -4640,6 +4668,7 @@ export default function LinkToAdUniverse({
   }
 
   async function onGenerateNanoBananaImage() {
+    if (influencerRef.current || (await resolveInfluencer())) return;
     if (templateRecording.interceptPaidAction("generate_images")) return;
     const url = storeUrl.trim();
     const idx = selectedAngleIndex === 0 || selectedAngleIndex === 1 || selectedAngleIndex === 2 ? selectedAngleIndex : 0;
@@ -5165,6 +5194,7 @@ export default function LinkToAdUniverse({
   }
 
   async function onGenerateNanoBananaImagesFromAllPrompts(opts?: { forceRegenerateCharge?: boolean }) {
+    if (influencerRef.current || (await resolveInfluencer())) return;
     if (templateRecording.interceptPaidAction("generate_images")) return;
     const url = storeUrl.trim();
     const idx = selectedAngleIndex;
@@ -5708,6 +5738,7 @@ export default function LinkToAdUniverse({
   }, [nanoPollTaskId]);
 
   async function onGenerateUgcVideoPrompt(): Promise<string | null> {
+    if (influencerRef.current || (await resolveInfluencer())) return null;
     if (templateRecording.interceptPaidAction("generate_video_prompt")) return null;
     const url = storeUrl.trim();
     const script = selectedScriptOptionByIndex(scriptsText, selectedAngleIndex);
@@ -5846,6 +5877,7 @@ export default function LinkToAdUniverse({
     chainPart2Prompt?: string,
     opts?: { forceRegenerateCharge?: boolean },
   ) {
+    if (influencerRef.current || (await resolveInfluencer())) return;
     if (templateRecording.interceptPaidAction("generate_kling")) return;
     const url = storeUrl.trim();
     const img = nanoBananaImageUrl;
@@ -6643,11 +6675,19 @@ export default function LinkToAdUniverse({
       return;
     }
     if (isWorking) return;
-    if (showContinueScripts && !templateRecording.templateToggleOn) {
-      void onContinueScripts();
-      return;
-    }
-    void onRun();
+    void (async () => {
+      if (await resolveInfluencer()) {
+        const matched = findCreatorTemplateByProductUrl(u);
+        if (matched) setUrlTemplateReveal(matched);
+        else toast.error("Use one of the template product links.");
+        return;
+      }
+      if (showContinueScripts && !templateRecording.templateToggleOn) {
+        void onContinueScripts();
+        return;
+      }
+      void onRun();
+    })();
   }
 
   const storeHostnameResolved = useMemo(() => storeHostname(storeUrl), [storeUrl]);
@@ -6698,8 +6738,12 @@ export default function LinkToAdUniverse({
   return (
     <>
     <Card className="relative w-full min-h-[calc(100svh-10rem)] border-white/10 bg-[#0b0912]/85 shadow-[0_0_30px_rgba(139,92,246,0.10)] flex flex-col">
-      {creatorPreset ? (
-        <div className="absolute inset-0 z-40 overflow-y-auto rounded-xl bg-[#0b0912] px-4 py-4 sm:px-6">
+      {urlTemplateReveal ? (
+        <div className="absolute inset-0 z-[80] overflow-y-auto rounded-xl bg-[#07060d] px-4 py-4 sm:px-6">
+          <CreatorTemplateUrlGeneration template={urlTemplateReveal} onBack={() => setUrlTemplateReveal(null)} />
+        </div>
+      ) : creatorPreset ? (
+        <div className="absolute inset-0 z-[80] overflow-y-auto rounded-xl bg-[#0b0912] px-4 py-4 sm:px-6">
           <CreatorTemplateAdReveal template={creatorPreset} onBack={() => setCreatorPreset(null)} />
         </div>
       ) : null}
@@ -6842,7 +6886,7 @@ export default function LinkToAdUniverse({
                         <Sparkles className="h-4 w-4 shrink-0" aria-hidden />
                         <LinkToAdStudioStyleCreditPill
                           amount={ltaInitialGenerateCharge}
-                          hideCredits={hideLtaCreditsUi}
+                          hideCredits={hideLtaCreditsUi || isInfluencer}
                           compact
                         />
                       </span>
@@ -9871,6 +9915,12 @@ export default function LinkToAdUniverse({
         }
         if (!/^https?:\/\//i.test(payload.url.trim())) {
           toast.error("URL must start with https:// (or http://).");
+          return;
+        }
+        if (await resolveInfluencer()) {
+          const matched = findCreatorTemplateByProductUrl(payload.url);
+          if (matched) setUrlTemplateReveal(matched);
+          else toast.error("Use one of the template product links.");
           return;
         }
         await onRun();
