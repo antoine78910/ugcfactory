@@ -822,7 +822,7 @@ function WorkflowPagesPanel({
   }
 
   return (
-    <div className="pointer-events-auto absolute left-2 top-2 z-20 w-[min(100%,170px)] sm:left-3 sm:top-3">
+    <div className="pointer-events-auto absolute left-2 top-2 z-20 w-[min(calc(100%-1rem),320px)] sm:left-3 sm:top-3">
       <div className="overflow-hidden rounded-lg border border-white/[0.1] bg-[#0b0912]/90 shadow-[0_8px_24px_rgba(0,0,0,0.4)] backdrop-blur-md">
         <div className="flex items-center justify-between gap-2 border-b border-white/[0.08] px-2 py-1.5">
           <span className="text-[11px] font-semibold text-white/90">Pages</span>
@@ -836,7 +836,7 @@ function WorkflowPagesPanel({
             </button>
           )}
         </div>
-        <ul className="max-h-[min(28vh,170px)] space-y-1 overflow-y-auto p-1">
+        <ul className="max-h-[min(42vh,320px)] space-y-1 overflow-y-auto p-1">
           {project.pages.map((p) => {
             const active = p.id === project.activePageId;
             return (
@@ -861,13 +861,15 @@ function WorkflowPagesPanel({
                       onClick={() => onSelectPage(p.id)}
                       onDoubleClick={readOnly ? undefined : () => beginRename(p.id, p.name)}
                       className={cn(
-                        "min-w-0 flex-1 rounded-md px-2 py-1 text-center text-[11px] font-medium transition",
+                        "min-w-0 flex-1 rounded-md px-2 py-1 text-left text-[12px] font-medium leading-snug transition",
                         active
                           ? "bg-white/[0.08] text-white shadow-[inset_0_0_0_1px_rgba(255,255,255,0.06)]"
                           : "text-white/50 hover:bg-white/[0.05] hover:text-white/85",
                       )}
                     >
-                      <span className="block truncate">{p.name}</span>
+                      <span className="block whitespace-normal break-words" title={p.name}>
+                        {p.name}
+                      </span>
                     </button>
                     {!readOnly ? (
                       <div className="flex shrink-0 items-center gap-0.5 opacity-0 transition group-hover:opacity-100">
