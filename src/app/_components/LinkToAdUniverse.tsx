@@ -3559,6 +3559,10 @@ export default function LinkToAdUniverse({
   async function uploadNeutralPhoto(files: FileList | File[] | null) {
     const list = Array.isArray(files) ? files : Array.from(files ?? []);
     if (!list.length) return;
+    if (influencerRef.current || (await resolveInfluencer())) {
+      toast.error("Check template");
+      return;
+    }
 
     const pendingRows = list.map((file) => ({
       id: crypto.randomUUID(),
@@ -3609,6 +3613,10 @@ export default function LinkToAdUniverse({
   async function uploadAdditionalPhoto(files: FileList | File[] | null) {
     const list = Array.isArray(files) ? files : Array.from(files ?? []);
     if (!list.length) return;
+    if (influencerRef.current || (await resolveInfluencer())) {
+      toast.error("Check template");
+      return;
+    }
     const pendingRows = list.map((file) => ({
       id: crypto.randomUUID(),
       blob: URL.createObjectURL(file),
@@ -3654,6 +3662,10 @@ export default function LinkToAdUniverse({
   async function uploadPersonaPhoto(files: FileList | File[] | null) {
     const list = Array.isArray(files) ? files : Array.from(files ?? []);
     if (!list.length) return;
+    if (influencerRef.current || (await resolveInfluencer())) {
+      toast.error("Check template");
+      return;
+    }
     const pendingRows = list.map((file) => ({
       id: crypto.randomUUID(),
       blob: URL.createObjectURL(file),
@@ -3695,6 +3707,10 @@ export default function LinkToAdUniverse({
       const files = clipboardImageFiles(event);
       if (!files.length) return;
       event.preventDefault();
+      if (influencerRef.current) {
+        toast.error("Check template");
+        return;
+      }
       void uploadAdditionalPhoto(files);
     };
     window.addEventListener("paste", onPaste);
@@ -4287,7 +4303,7 @@ export default function LinkToAdUniverse({
     if (await resolveInfluencer()) {
       const matched = findCreatorTemplateByProductUrl(storeUrl.trim());
       if (matched) setUrlTemplateReveal(matched);
-      else toast.error("Use one of the template product links.");
+      else toast.error("Check template");
       return;
     }
     // If a template brand is selected (waiting for Generate), start the replay instead of real generation.
@@ -6665,20 +6681,20 @@ export default function LinkToAdUniverse({
 
   function handleGenerateFromUrl() {
     const u = storeUrl.trim();
-    if (!u) {
-      toast.error(isLinkToAdAppMode ? "Enter an app URL." : "Enter a store URL.");
-      return;
-    }
-    if (!/^https?:\/\//i.test(u)) {
-      toast.error("URL must start with https:// (or http://).");
-      return;
-    }
     if (isWorking) return;
     void (async () => {
-      if (await resolveInfluencer()) {
-        const matched = findCreatorTemplateByProductUrl(u);
+      if (influencerRef.current || (await resolveInfluencer())) {
+        const matched = /^https?:\/\//i.test(u) ? findCreatorTemplateByProductUrl(u) : null;
         if (matched) setUrlTemplateReveal(matched);
-        else toast.error("Use one of the template product links.");
+        else toast.error("Check template");
+        return;
+      }
+      if (!u) {
+        toast.error(isLinkToAdAppMode ? "Enter an app URL." : "Enter a store URL.");
+        return;
+      }
+      if (!/^https?:\/\//i.test(u)) {
+        toast.error("URL must start with https:// (or http://).");
         return;
       }
       if (showContinueScripts && !templateRecording.templateToggleOn) {
@@ -6697,12 +6713,13 @@ export default function LinkToAdUniverse({
 
   const showBrandHeaderInsteadOfUrl = useMemo(
     () =>
+      !isInfluencer &&
       Boolean(
         summaryText.trim() ||
           scriptsText.trim() ||
           (typeof resolvedPreviewUrl === "string" && resolvedPreviewUrl.length > 0),
       ),
-    [summaryText, scriptsText, resolvedPreviewUrl],
+    [isInfluencer, summaryText, scriptsText, resolvedPreviewUrl],
   );
 
   const brandDisplayName = useMemo(() => {
@@ -7422,7 +7439,7 @@ export default function LinkToAdUniverse({
           </div>
         ) : null}
 
-        {(resolvedPreviewUrl || summaryText.trim() || (isWorking && storeUrl.trim())) && !scriptsText.trim() ? (
+        {!isInfluencer && (resolvedPreviewUrl || summaryText.trim() || (isWorking && storeUrl.trim())) && !scriptsText.trim() ? (
           <div className="mx-auto w-full max-w-xl">
             <div className="space-y-3">
               <div className="rounded-xl border border-white/10 bg-white/5 p-3 sm:p-4">
@@ -9901,8 +9918,23 @@ export default function LinkToAdUniverse({
       recentRuns={recentLinkToAdRunsForDisplay}
       previewThumbUrl={resolvedPreviewUrl}
       onPickRecentRun={handleSwitchRecentRun}
-      onCreateManually={() => photoInputRef.current?.click()}
+      onCreateManually={() => {
+        if (isInfluencer || influencerRef.current) {
+          toast.error("Check template");
+          return;
+        }
+        photoInputRef.current?.click();
+      }}
       onGenerate={async (payload) => {
+        if (influencerRef.current || (await resolveInfluencer())) {
+          setProductSetupDialogOpen(false);
+          const matched = /^https?:\/\//i.test(payload.url.trim())
+            ? findCreatorTemplateByProductUrl(payload.url)
+            : null;
+          if (matched) setUrlTemplateReveal(matched);
+          else toast.error("Check template");
+          return;
+        }
         setStoreUrl(payload.url);
         setLinkToAdAssetType(payload.assetType);
         setLtaAppScreenshotPreferred(payload.screenshotPreferred);
@@ -9914,12 +9946,6 @@ export default function LinkToAdUniverse({
         }
         if (!/^https?:\/\//i.test(payload.url.trim())) {
           toast.error("URL must start with https:// (or http://).");
-          return;
-        }
-        if (await resolveInfluencer()) {
-          const matched = findCreatorTemplateByProductUrl(payload.url);
-          if (matched) setUrlTemplateReveal(matched);
-          else toast.error("Use one of the template product links.");
           return;
         }
         await onRun();
