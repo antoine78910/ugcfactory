@@ -1,8 +1,7 @@
 import { NextResponse } from "next/server";
 
-import { buildAdAssetNode } from "@/app/workflow/workflowNodeFactory";
 import type { WorkflowProjectStateV1 } from "@/app/workflow/workflowProjectStorage";
-import { CREATOR_PRODUCT_TEMPLATES, type CreatorProductTemplate } from "@/lib/creatorProductTemplates";
+import { CREATOR_PRODUCT_TEMPLATES } from "@/lib/creatorProductTemplates";
 import { isInfluencerAccount } from "@/lib/influencerAccounts";
 import { createSupabaseServiceClient } from "@/lib/supabase/admin";
 import { requireSupabaseUser } from "@/lib/supabase/requireUser";
@@ -10,30 +9,19 @@ import { requireSupabaseUser } from "@/lib/supabase/requireUser";
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
-/** A blank static-ad node. The influencer edits it after the clone. */
-function starterProject(template: CreatorProductTemplate, spaceId: string): WorkflowProjectStateV1 {
-  const pageId = `influencer-tpl-page-${spaceId}`;
-  const ad = buildAdAssetNode("image", { x: 280, y: 180 }, { label: `${template.name} static ad` });
-  ad.id = `influencer-tpl-ad-${spaceId}`;
-  return {
-    v: 1,
-    onboardingDismissed: true,
-    activePageId: pageId,
-    pages: [
-      {
-        id: pageId,
-        name: template.name,
-        nodes: [ad],
-        edges: [],
-      },
-    ],
-  };
+/** Master canvas duplicated on every Access template click. */
+const STATIC_AD_WORKFLOW_NAME = "Static Ads";
+
+function isProjectState(value: unknown): value is WorkflowProjectStateV1 {
+  if (!value || typeof value !== "object") return false;
+  const state = value as WorkflowProjectStateV1;
+  return state.v === 1 && Array.isArray(state.pages) && state.pages.some((page) => Array.isArray(page.nodes));
 }
 
-/**
- * Create a new influencer workflow from one static-ad product template.
- * Every click inserts a new space owned by the caller. Previous copies stay untouched.
- */
+function nodeCount(state: WorkflowProjectStateV1): number {
+  return state.pages.reduce((sum, page) => sum + (Array.isArray(page.nodes) ? page.nodes.length : 0), 0);
+}
+
 export async function POST(req: Request) {
   const auth = await requireSupabaseUser();
   if (auth.response) return auth.response;
@@ -60,13 +48,40 @@ export async function POST(req: Request) {
     return NextResponse.json({ error: "DB not configured" }, { status: 503 });
   }
 
+  const { data: sources, error: sourceErr } = await admin
+    .from("workflow_spaces")
+    .select("state, preview_data_url, updated_at")
+    .eq("name", STATIC_AD_WORKFLOW_NAME)
+    .order("updated_at", { ascending: false })
+    .limit(8);
+  if (sourceErr) {
+    return NextResponse.json({ error: sourceErr.message }, { status: 500 });
+  }
+
+  const source = (sources ?? [])
+    .map((row) => ({
+      state: row.state,
+      preview: typeof row.preview_data_url === "string" ? row.preview_data_url : null,
+      updatedAt: typeof row.updated_at === "string" ? row.updated_at : "",
+    }))
+    .filter((row): row is { state: WorkflowProjectStateV1; preview: string | null; updatedAt: string } =>
+      isProjectState(row.state),
+    )
+    .sort((a, b) => nodeCount(b.state) - nodeCount(a.state) || b.updatedAt.localeCompare(a.updatedAt))[0];
+  if (!source || nodeCount(source.state) < 2) {
+    return NextResponse.json({ error: "Static ad workflow was not found." }, { status: 404 });
+  }
+
+  const state = JSON.parse(JSON.stringify(source.state)) as WorkflowProjectStateV1;
+  state.onboardingDismissed = true;
+
   const spaceId = crypto.randomUUID();
   const nowIso = new Date().toISOString();
   const { error: insertErr } = await admin.from("workflow_spaces").insert({
     id: spaceId,
     name: `${template.name} static ad`,
-    state: starterProject(template, spaceId),
-    preview_data_url: template.imageUrl,
+    state,
+    preview_data_url: source.preview,
     created_by: auth.user.id,
     created_at: nowIso,
     updated_at: nowIso,

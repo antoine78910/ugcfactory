@@ -15,7 +15,7 @@ import { cn } from "@/lib/utils";
 
 export function InfluencerSiteTemplatesMenu({
   title = "Static ads",
-  hint = "Start a new static ad workflow from a product.",
+  hint = "Duplicate the static ad workflow.",
   onSelect,
 }: {
   title?: string;
