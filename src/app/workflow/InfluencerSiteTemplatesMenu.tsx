@@ -137,7 +137,7 @@ export function InfluencerSiteTemplatesMenu({
                 <button
                   key={template.id}
                   type="button"
-                  onClick={() => openSharedWorkflow(template)}
+                  onClick={() => setSelectedId(template.id)}
                   disabled={openingId !== null}
                   className={cn(
                     "flex w-[84px] shrink-0 flex-col gap-1.5 rounded-xl border p-1.5 text-left transition",
@@ -170,15 +170,15 @@ export function InfluencerSiteTemplatesMenu({
             })}
           </div>
 
-          <div className="mt-3 overflow-hidden rounded-xl border border-white/10 bg-white">
-            {/* eslint-disable-next-line @next/next/no-img-element */}
-            <img
-              src={selected.imageUrl}
-              alt={selected.name}
-              referrerPolicy="no-referrer"
-              className="mx-auto h-44 w-full object-contain"
-            />
-          </div>
+          <button
+            type="button"
+            onClick={() => openSharedWorkflow(selected)}
+            disabled={openingId !== null}
+            className="mt-3 inline-flex h-10 w-full items-center justify-center gap-2 rounded-xl bg-white text-[13px] font-semibold text-zinc-900 transition hover:bg-white/90 disabled:cursor-not-allowed disabled:opacity-70"
+          >
+            {openingId === selected.id ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : null}
+            {openingId === selected.id ? "Opening…" : "Access template"}
+          </button>
           <p className="mt-2 text-[12px] font-medium text-white/70">{selected.name}</p>
         </div>
       ) : null}

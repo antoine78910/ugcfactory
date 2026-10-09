@@ -23,12 +23,14 @@ function starterProject(template: CreatorProductTemplate, spaceId: string): Work
     },
   );
   product.id = `influencer-tpl-product-${spaceId}`;
-  const ad = buildAdAssetNode("image", {
-    x: 460,
-    y: 150,
-    label: `${template.name} static ad`,
-    prompt: `Static ad for ${template.name}. Use the product photo. Product page: ${template.productUrl}`,
-  });
+  const ad = buildAdAssetNode(
+    "image",
+    { x: 460, y: 150 },
+    {
+      label: `${template.name} static ad`,
+      prompt: `Static ad for ${template.name}. Use the product photo. Product page: ${template.productUrl}`,
+    },
+  );
   ad.id = `influencer-tpl-ad-${spaceId}`;
   return {
     v: 1,
