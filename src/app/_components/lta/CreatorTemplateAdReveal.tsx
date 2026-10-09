@@ -39,7 +39,7 @@ export function CreatorTemplateAdReveal({
   const activeIndex = Math.min(STAGES.length - 1, Math.floor(progress * STAGES.length));
 
   return (
-    <div className="flex h-full min-h-0 flex-col overflow-hidden px-4 py-3">
+    <div className="relative flex h-full min-h-0 w-full items-center justify-center overflow-hidden px-4 py-3">
       <style>{`
         @keyframes ee-ad-load {
           from { transform: scaleX(0.04); }
@@ -57,7 +57,7 @@ export function CreatorTemplateAdReveal({
       <button
         type="button"
         onClick={onBack}
-        className="mb-2 inline-flex shrink-0 items-center gap-1.5 self-start rounded-xl border border-white/15 bg-white/[0.04] px-3 py-1.5 text-xs font-semibold text-white/80 transition hover:border-violet-400/35 hover:bg-violet-500/10 hover:text-white"
+        className="absolute left-4 top-4 z-10 inline-flex items-center gap-1.5 rounded-xl border border-white/15 bg-white/[0.04] px-3 py-1.5 text-xs font-semibold text-white/80 transition hover:border-violet-400/35 hover:bg-violet-500/10 hover:text-white"
       >
         <ArrowLeft className="h-3.5 w-3.5" aria-hidden />
         Return to Link to Ad
@@ -70,7 +70,7 @@ export function CreatorTemplateAdReveal({
             initial={{ opacity: 0, y: 16, scale: 0.98 }}
             animate={{ opacity: 1, y: 0, scale: 1 }}
             transition={{ duration: 0.55, ease: [0.22, 1, 0.36, 1] }}
-            className="flex min-h-0 w-full flex-1 flex-col items-center justify-center"
+            className="flex w-full max-w-md flex-col items-center justify-center"
           >
             <p className="text-[11px] font-semibold uppercase tracking-[0.22em] text-violet-300/80">Completion 100%</p>
             <h2 className="mt-1 text-center text-2xl font-bold tracking-tight text-white">
@@ -78,7 +78,7 @@ export function CreatorTemplateAdReveal({
             </h2>
             <p className="mt-0.5 text-sm text-white/50">{template.name}</p>
             {videoUrl ? (
-              <div className="mt-3 flex min-h-0 flex-1 items-center justify-center">
+              <div className="mt-3 flex items-center justify-center">
                 <video
                   key={videoUrl}
                   src={videoUrl}
@@ -87,8 +87,8 @@ export function CreatorTemplateAdReveal({
                   muted
                   playsInline
                   preload="auto"
-                  className="h-auto max-h-full w-auto max-w-[calc(100vw-2rem)] rounded-2xl border border-violet-300/25 bg-black object-contain shadow-[0_0_40px_rgba(139,92,246,0.22)]"
-                  style={{ maxHeight: "calc(100dvh - 8.5rem)", aspectRatio: "9 / 16" }}
+                  className="h-auto w-auto max-w-[min(100%,220px)] rounded-2xl border border-violet-300/25 bg-black object-contain shadow-[0_0_40px_rgba(139,92,246,0.22)]"
+                  style={{ maxHeight: "min(46dvh, 390px)", aspectRatio: "9 / 16" }}
                 />
               </div>
             ) : (
@@ -102,7 +102,7 @@ export function CreatorTemplateAdReveal({
             animate={{ opacity: 1, y: 0 }}
             exit={{ opacity: 0, y: -8 }}
             transition={{ duration: 0.35, ease: [0.22, 1, 0.36, 1] }}
-            className="w-full max-w-md"
+            className="mx-auto w-full max-w-md"
             role="status"
             aria-live="polite"
           >
