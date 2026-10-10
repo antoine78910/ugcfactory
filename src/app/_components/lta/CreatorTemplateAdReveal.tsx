@@ -2,9 +2,13 @@
 
 import { AnimatePresence, motion } from "framer-motion";
 import { ArrowLeft, Check, Clapperboard, FileText, Package, Sparkles, Zap } from "lucide-react";
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useState, type MouseEvent } from "react";
 
-import { creatorTemplateVideoUrl, type CreatorProductTemplate } from "@/lib/creatorProductTemplates";
+import {
+  creatorTemplateUgcVideoUrl,
+  creatorTemplateVideoUrl,
+  type CreatorProductTemplate,
+} from "@/lib/creatorProductTemplates";
 
 const TOTAL_MS = 10000;
 
@@ -23,19 +27,12 @@ export function CreatorTemplateAdReveal({
   onBack: () => void;
 }) {
   const [elapsed, setElapsed] = useState(0);
-  const videoRef = useRef<HTMLVideoElement>(null);
   const videoUrl = creatorTemplateVideoUrl(template.id);
-
-  function playMuted() {
-    const el = videoRef.current;
-    if (!el) return;
-    el.muted = true;
-    void el.play().catch(() => {});
-  }
-
-  function pauseVideo() {
-    videoRef.current?.pause();
-  }
+  const ugcVideoUrl = creatorTemplateUgcVideoUrl(template.id);
+  const clips = [
+    videoUrl ? { label: "Template", url: videoUrl, downloadName: `${template.id}-template.mp4` } : null,
+    ugcVideoUrl ? { label: "AI UGC", url: ugcVideoUrl, downloadName: `${template.id}-ai-ugc.mp4` } : null,
+  ].filter((clip): clip is { label: string; url: string; downloadName: string } => clip != null);
 
   useEffect(() => {
     const started = performance.now();
@@ -86,33 +83,13 @@ export function CreatorTemplateAdReveal({
             initial={{ opacity: 0, y: 16, scale: 0.98 }}
             animate={{ opacity: 1, y: 0, scale: 1 }}
             transition={{ duration: 0.55, ease: [0.22, 1, 0.36, 1] }}
-            className="flex w-full max-w-md flex-col items-center justify-center"
+            className="flex w-full max-w-3xl flex-col items-center justify-center"
           >
-            {videoUrl ? (
-              <div className="flex flex-col items-center">
-                <video
-                  ref={videoRef}
-                  key={videoUrl}
-                  src={videoUrl}
-                  muted
-                  loop
-                  playsInline
-                  preload="auto"
-                  controls={false}
-                  disablePictureInPicture
-                  disableRemotePlayback
-                  onMouseEnter={playMuted}
-                  onMouseLeave={pauseVideo}
-                  className="ee-ad-preview h-auto w-auto max-w-[min(100%,280px)] rounded-2xl border border-violet-300/25 bg-black object-contain shadow-[0_0_40px_rgba(139,92,246,0.22)]"
-                  style={{ maxHeight: "min(58dvh, 500px)", aspectRatio: "9 / 16" }}
-                />
-                <a
-                  href={videoUrl}
-                  download
-                  className="mt-3 inline-flex items-center justify-center rounded-xl border border-violet-300/35 bg-white px-4 py-2 text-sm font-semibold text-zinc-900 shadow-sm transition hover:bg-white/90"
-                >
-                  Download
-                </a>
+            {clips.length ? (
+              <div className="flex w-full flex-wrap items-end justify-center gap-6">
+                {clips.map((clip) => (
+                  <PreviewClip key={clip.label} label={clip.label} url={clip.url} downloadName={clip.downloadName} />
+                ))}
               </div>
             ) : (
               <p className="mt-6 text-center text-sm text-white/55">This product video is not in the library yet.</p>
@@ -153,7 +130,9 @@ export function CreatorTemplateAdReveal({
               Completion {percent}%
             </p>
 
-            {videoUrl ? <video src={videoUrl} preload="auto" muted playsInline className="hidden" /> : null}
+            {clips.map((clip) => (
+              <video key={clip.url} src={clip.url} preload="auto" muted playsInline className="hidden" />
+            ))}
 
             <ol className="mt-5 space-y-2">
               {STAGES.map((stage, index) => {
@@ -211,6 +190,49 @@ export function CreatorTemplateAdReveal({
           </motion.div>
         )}
       </AnimatePresence>
+    </div>
+  );
+}
+
+function PreviewClip({
+  label,
+  url,
+  downloadName,
+}: {
+  label: string;
+  url: string;
+  downloadName: string;
+}) {
+  function playMuted(event: MouseEvent<HTMLVideoElement>) {
+    const el = event.currentTarget;
+    el.muted = true;
+    void el.play().catch(() => {});
+  }
+
+  return (
+    <div className="flex w-[min(100%,240px)] flex-col items-center">
+      <p className="mb-2 text-[11px] font-semibold uppercase tracking-[0.16em] text-violet-200/80">{label}</p>
+      <video
+        src={url}
+        muted
+        loop
+        playsInline
+        preload="auto"
+        controls={false}
+        disablePictureInPicture
+        disableRemotePlayback
+        onMouseEnter={playMuted}
+        onMouseLeave={(event) => event.currentTarget.pause()}
+        className="ee-ad-preview h-auto w-full rounded-2xl border border-violet-300/25 bg-black object-contain shadow-[0_0_40px_rgba(139,92,246,0.22)]"
+        style={{ maxHeight: "min(58dvh, 500px)", aspectRatio: "9 / 16" }}
+      />
+      <a
+        href={url}
+        download={downloadName}
+        className="mt-3 inline-flex items-center justify-center rounded-xl border border-violet-300/35 bg-white px-4 py-2 text-sm font-semibold text-zinc-900 shadow-sm transition hover:bg-white/90"
+      >
+        Download
+      </a>
     </div>
   );
 }

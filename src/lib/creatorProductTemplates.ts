@@ -5,6 +5,8 @@ export type CreatorProductTemplate = {
   imageUrl: string;
   /** File in public/link-to-ad/product-videos. Served by the CDN, not read from disk. */
   videoFile: string;
+  /** Silent 5s Seedance 2.5 UGC clip in the same folder. */
+  ugcVideoFile: string;
   /** TikTok, AliExpress, and other links that should open this same product template. */
   relatedUrls: string[];
 };
@@ -17,6 +19,7 @@ export const CREATOR_PRODUCT_TEMPLATES: CreatorProductTemplate[] = [
     productUrl: "https://pixelplayco.com/products/pixelplay",
     imageUrl: "https://pixelplayco.com/cdn/shop/files/1.png?v=1782878073",
     videoFile: "pixelplay.mp4",
+    ugcVideoFile: "ugc-pixelplay.mp4",
     relatedUrls: [
       "https://www.tiktok.com/@piixelplay/video/7339333428837371178",
       "https://www.aliexpress.us/item/3256808382870245.html",
@@ -29,6 +32,7 @@ export const CREATOR_PRODUCT_TEMPLATES: CreatorProductTemplate[] = [
       "https://boministore.com/products/pet-cat-comb-dog-hair-removal-selfcleaning-flea-comb-for-cats-dog-grooming-combs-clean-brush-cat-hair-remover-brush-pet-supplies",
     imageUrl: "https://boministore.com/cdn/shop/products/product-image-1854261277.jpg?v=1672407510",
     videoFile: "cat-brush.mp4",
+    ugcVideoFile: "ugc-cat-brush.mp4",
     relatedUrls: [
       "https://www.tiktok.com/@pet..supplies/video/7112871757157092650",
       "https://www.aliexpress.us/item/3256805568803370.html",
@@ -41,6 +45,7 @@ export const CREATOR_PRODUCT_TEMPLATES: CreatorProductTemplate[] = [
     imageUrl:
       "https://ceppal.myshopify.com/cdn/shop/products/S40430fcf012243efa6a66b941b2e0df64_1200x1200.webp?v=1673380319",
     videoFile: "vegetable-slicer.mp4",
+    ugcVideoFile: "ugc-vegetable-slicer.mp4",
     relatedUrls: ["https://www.tiktok.com/@noorhiba.online/video/7408954241366150408"],
   },
   {
@@ -50,6 +55,7 @@ export const CREATOR_PRODUCT_TEMPLATES: CreatorProductTemplate[] = [
       "https://trendszio.com/products/titre-balance-de-cuisine-numerique-mini-cuillere-balance-electronique-lcd-0-1-500g-pour-lait-cafe-et-patisserie-copie-copie",
     imageUrl: "https://trendszio.com/cdn/shop/files/Capture_d_ecran_2026-04-05_a_00.31.12.png?v=1775342813",
     videoFile: "spoon-scale.mp4",
+    ugcVideoFile: "ugc-spoon-scale.mp4",
     relatedUrls: [
       "https://www.tiktok.com/@kitchenconqueror/video/7170801533565766958",
       "https://www.aliexpress.us/item/3256806005073521.html",
@@ -61,6 +67,7 @@ export const CREATOR_PRODUCT_TEMPLATES: CreatorProductTemplate[] = [
     productUrl: "https://highpeakco.com/products/led-bat-wall-lights",
     imageUrl: "https://highpeakco.com/cdn/shop/files/led-bat-wall-lights-highpeak-hero.webp?v=1760080510",
     videoFile: "bat-lights.mp4",
+    ugcVideoFile: "ugc-bat-lights.mp4",
     relatedUrls: [
       "https://www.tiktok.com/@christian.branson1/video/7669085601420922125",
       "https://www.aliexpress.us/item/3256812902804787.html",
@@ -72,6 +79,7 @@ export const CREATOR_PRODUCT_TEMPLATES: CreatorProductTemplate[] = [
     productUrl: "https://www.urbanomax.com/products/christmas-ceiling-projector-lamp",
     imageUrl: "https://www.urbanomax.com/cdn/shop/files/6f4150e8-7ee7-4fc8-8431-6b30d9b1d65b.png?v=1790597025",
     videoFile: "christmas-projector.mp4",
+    ugcVideoFile: "ugc-christmas-projector.mp4",
     relatedUrls: [
       "https://www.tiktok.com/@sarvina450/video/7686197199415397662",
       "https://www.aliexpress.us/item/3256813118273970.html",
@@ -83,6 +91,7 @@ export const CREATOR_PRODUCT_TEMPLATES: CreatorProductTemplate[] = [
     productUrl: "https://phomemo.com/en-jp/products/t02-portable-printer?variant=47566767489253",
     imageUrl: "https://phomemo.com/cdn/shop/files/phomemo-t02-inkless-mini-printer-5006638.png?v=1786172540",
     videoFile: "phomemo.mp4",
+    ugcVideoFile: "ugc-phomemo.mp4",
     relatedUrls: [
       "https://www.tiktok.com/@minithermoprinter/video/7252042923271818501",
       "https://www.aliexpress.us/item/3256805737198253.html",
@@ -91,10 +100,17 @@ export const CREATOR_PRODUCT_TEMPLATES: CreatorProductTemplate[] = [
 ];
 
 /** Public URL for the pre-made ad. Same-origin so the player can load it. */
-export function creatorTemplateVideoUrl(templateId: string): string | null {
-  const file = CREATOR_PRODUCT_TEMPLATES.find((item) => item.id === templateId)?.videoFile;
+function productVideoUrl(file: string | undefined): string | null {
   if (!file) return null;
   return `/link-to-ad/product-videos/${encodeURIComponent(file)}`;
+}
+
+export function creatorTemplateVideoUrl(templateId: string): string | null {
+  return productVideoUrl(CREATOR_PRODUCT_TEMPLATES.find((item) => item.id === templateId)?.videoFile);
+}
+
+export function creatorTemplateUgcVideoUrl(templateId: string): string | null {
+  return productVideoUrl(CREATOR_PRODUCT_TEMPLATES.find((item) => item.id === templateId)?.ugcVideoFile);
 }
 
 function normalizeProductUrl(value: string): string {

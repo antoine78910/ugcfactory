@@ -1,6 +1,10 @@
 import { NextResponse } from "next/server";
 
-import { CREATOR_PRODUCT_TEMPLATES, creatorTemplateVideoUrl } from "@/lib/creatorProductTemplates";
+import {
+  CREATOR_PRODUCT_TEMPLATES,
+  creatorTemplateUgcVideoUrl,
+  creatorTemplateVideoUrl,
+} from "@/lib/creatorProductTemplates";
 
 export const runtime = "nodejs";
 
@@ -11,7 +15,9 @@ export async function GET(request: Request) {
     return NextResponse.json({ error: "Unknown template." }, { status: 400 });
   }
   const url = creatorTemplateVideoUrl(template.id);
+  const ugcUrl = creatorTemplateUgcVideoUrl(template.id);
   return NextResponse.json({
     video: url ? { filename: template.videoFile, url } : null,
+    ugc: ugcUrl ? { filename: template.ugcVideoFile, url: ugcUrl } : null,
   });
 }
