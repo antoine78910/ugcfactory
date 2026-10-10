@@ -2,7 +2,7 @@
 
 import { AnimatePresence, motion } from "framer-motion";
 import { ArrowLeft, Check, Clapperboard, FileText, Package, Sparkles, Zap } from "lucide-react";
-import { useEffect, useState, type MouseEvent } from "react";
+import { useEffect, useState } from "react";
 
 import {
   creatorTemplatePresenterVideoUrl,
@@ -32,10 +32,10 @@ export function CreatorTemplateAdReveal({
   const ugcVideoUrl = creatorTemplateUgcVideoUrl(template.id);
   const presenterVideoUrl = creatorTemplatePresenterVideoUrl(template.id);
   const clips = [
-    videoUrl ? { label: "Template", url: videoUrl, downloadName: `${template.id}-template.mp4` } : null,
-    ugcVideoUrl ? { label: "AI UGC", url: ugcVideoUrl, downloadName: `${template.id}-ai-ugc.mp4` } : null,
+    videoUrl ? { label: "Ads 1", url: videoUrl, downloadName: `${template.id}-ads-1.mp4` } : null,
+    ugcVideoUrl ? { label: "Ads 2", url: ugcVideoUrl, downloadName: `${template.id}-ads-2.mp4` } : null,
     presenterVideoUrl
-      ? { label: "AI UGC 2", url: presenterVideoUrl, downloadName: `${template.id}-ai-ugc-2.mp4` }
+      ? { label: "Ads 3", url: presenterVideoUrl, downloadName: `${template.id}-ads-3.mp4` }
       : null,
   ].filter((clip): clip is { label: string; url: string; downloadName: string } => clip != null);
 
@@ -208,17 +208,12 @@ function PreviewClip({
   url: string;
   downloadName: string;
 }) {
-  function playMuted(event: MouseEvent<HTMLVideoElement>) {
-    const el = event.currentTarget;
-    el.muted = true;
-    void el.play().catch(() => {});
-  }
-
   return (
     <div className="flex w-[min(100%,240px)] flex-col items-center">
       <p className="mb-2 text-[11px] font-semibold uppercase tracking-[0.16em] text-violet-200/80">{label}</p>
       <video
         src={url}
+        autoPlay
         muted
         loop
         playsInline
@@ -226,8 +221,11 @@ function PreviewClip({
         controls={false}
         disablePictureInPicture
         disableRemotePlayback
-        onMouseEnter={playMuted}
-        onMouseLeave={(event) => event.currentTarget.pause()}
+        ref={(el) => {
+          if (!el) return;
+          el.muted = true;
+          void el.play().catch(() => {});
+        }}
         className="ee-ad-preview h-auto w-full rounded-2xl border border-violet-300/25 bg-black object-contain shadow-[0_0_40px_rgba(139,92,246,0.22)]"
         style={{ maxHeight: "min(58dvh, 500px)", aspectRatio: "9 / 16" }}
       />
