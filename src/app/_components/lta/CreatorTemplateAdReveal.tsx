@@ -5,6 +5,7 @@ import { ArrowLeft, Check, Clapperboard, FileText, Package, Sparkles, Zap } from
 import { useEffect, useState, type MouseEvent } from "react";
 
 import {
+  creatorTemplatePresenterVideoUrl,
   creatorTemplateUgcVideoUrl,
   creatorTemplateVideoUrl,
   type CreatorProductTemplate,
@@ -29,9 +30,13 @@ export function CreatorTemplateAdReveal({
   const [elapsed, setElapsed] = useState(0);
   const videoUrl = creatorTemplateVideoUrl(template.id);
   const ugcVideoUrl = creatorTemplateUgcVideoUrl(template.id);
+  const presenterVideoUrl = creatorTemplatePresenterVideoUrl(template.id);
   const clips = [
     videoUrl ? { label: "Template", url: videoUrl, downloadName: `${template.id}-template.mp4` } : null,
     ugcVideoUrl ? { label: "AI UGC", url: ugcVideoUrl, downloadName: `${template.id}-ai-ugc.mp4` } : null,
+    presenterVideoUrl
+      ? { label: "AI UGC 2", url: presenterVideoUrl, downloadName: `${template.id}-ai-ugc-2.mp4` }
+      : null,
   ].filter((clip): clip is { label: string; url: string; downloadName: string } => clip != null);
 
   useEffect(() => {
@@ -83,7 +88,7 @@ export function CreatorTemplateAdReveal({
             initial={{ opacity: 0, y: 16, scale: 0.98 }}
             animate={{ opacity: 1, y: 0, scale: 1 }}
             transition={{ duration: 0.55, ease: [0.22, 1, 0.36, 1] }}
-            className="flex w-full max-w-3xl flex-col items-center justify-center"
+            className="flex w-full max-w-5xl flex-col items-center justify-center"
           >
             {clips.length ? (
               <div className="flex w-full flex-wrap items-end justify-center gap-6">

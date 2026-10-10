@@ -7,6 +7,8 @@ export type CreatorProductTemplate = {
   videoFile: string;
   /** Silent 5s Seedance 2.5 UGC clip in the same folder. */
   ugcVideoFile: string;
+  /** Second silent 5s clip: creator face on camera, presenting the product. */
+  ugcPresenterVideoFile: string;
   /** TikTok, AliExpress, and other links that should open this same product template. */
   relatedUrls: string[];
 };
@@ -20,6 +22,7 @@ export const CREATOR_PRODUCT_TEMPLATES: CreatorProductTemplate[] = [
     imageUrl: "https://pixelplayco.com/cdn/shop/files/1.png?v=1782878073",
     videoFile: "pixelplay.mp4",
     ugcVideoFile: "ugc-pixelplay.mp4",
+    ugcPresenterVideoFile: "ugc2-pixelplay.mp4",
     relatedUrls: [
       "https://www.tiktok.com/@piixelplay/video/7339333428837371178",
       "https://www.aliexpress.us/item/3256808382870245.html",
@@ -33,6 +36,7 @@ export const CREATOR_PRODUCT_TEMPLATES: CreatorProductTemplate[] = [
     imageUrl: "https://boministore.com/cdn/shop/products/product-image-1854261277.jpg?v=1672407510",
     videoFile: "cat-brush.mp4",
     ugcVideoFile: "ugc-cat-brush.mp4",
+    ugcPresenterVideoFile: "ugc2-cat-brush.mp4",
     relatedUrls: [
       "https://www.tiktok.com/@pet..supplies/video/7112871757157092650",
       "https://www.aliexpress.us/item/3256805568803370.html",
@@ -46,6 +50,7 @@ export const CREATOR_PRODUCT_TEMPLATES: CreatorProductTemplate[] = [
       "https://ceppal.myshopify.com/cdn/shop/products/S40430fcf012243efa6a66b941b2e0df64_1200x1200.webp?v=1673380319",
     videoFile: "vegetable-slicer.mp4",
     ugcVideoFile: "ugc-vegetable-slicer.mp4",
+    ugcPresenterVideoFile: "ugc2-vegetable-slicer.mp4",
     relatedUrls: ["https://www.tiktok.com/@noorhiba.online/video/7408954241366150408"],
   },
   {
@@ -56,6 +61,7 @@ export const CREATOR_PRODUCT_TEMPLATES: CreatorProductTemplate[] = [
     imageUrl: "https://trendszio.com/cdn/shop/files/Capture_d_ecran_2026-04-05_a_00.31.12.png?v=1775342813",
     videoFile: "spoon-scale.mp4",
     ugcVideoFile: "ugc-spoon-scale.mp4",
+    ugcPresenterVideoFile: "ugc2-spoon-scale.mp4",
     relatedUrls: [
       "https://www.tiktok.com/@kitchenconqueror/video/7170801533565766958",
       "https://www.aliexpress.us/item/3256806005073521.html",
@@ -68,6 +74,7 @@ export const CREATOR_PRODUCT_TEMPLATES: CreatorProductTemplate[] = [
     imageUrl: "https://highpeakco.com/cdn/shop/files/led-bat-wall-lights-highpeak-hero.webp?v=1760080510",
     videoFile: "bat-lights.mp4",
     ugcVideoFile: "ugc-bat-lights.mp4",
+    ugcPresenterVideoFile: "ugc2-bat-lights.mp4",
     relatedUrls: [
       "https://www.tiktok.com/@christian.branson1/video/7669085601420922125",
       "https://www.aliexpress.us/item/3256812902804787.html",
@@ -80,6 +87,7 @@ export const CREATOR_PRODUCT_TEMPLATES: CreatorProductTemplate[] = [
     imageUrl: "https://www.urbanomax.com/cdn/shop/files/6f4150e8-7ee7-4fc8-8431-6b30d9b1d65b.png?v=1790597025",
     videoFile: "christmas-projector.mp4",
     ugcVideoFile: "ugc-christmas-projector.mp4",
+    ugcPresenterVideoFile: "ugc2-christmas-projector.mp4",
     relatedUrls: [
       "https://www.tiktok.com/@sarvina450/video/7686197199415397662",
       "https://www.aliexpress.us/item/3256813118273970.html",
@@ -92,6 +100,7 @@ export const CREATOR_PRODUCT_TEMPLATES: CreatorProductTemplate[] = [
     imageUrl: "https://phomemo.com/cdn/shop/files/phomemo-t02-inkless-mini-printer-5006638.png?v=1786172540",
     videoFile: "phomemo.mp4",
     ugcVideoFile: "ugc-phomemo.mp4",
+    ugcPresenterVideoFile: "ugc2-phomemo.mp4",
     relatedUrls: [
       "https://www.tiktok.com/@minithermoprinter/video/7252042923271818501",
       "https://www.aliexpress.us/item/3256805737198253.html",
@@ -111,6 +120,10 @@ export function creatorTemplateVideoUrl(templateId: string): string | null {
 
 export function creatorTemplateUgcVideoUrl(templateId: string): string | null {
   return productVideoUrl(CREATOR_PRODUCT_TEMPLATES.find((item) => item.id === templateId)?.ugcVideoFile);
+}
+
+export function creatorTemplatePresenterVideoUrl(templateId: string): string | null {
+  return productVideoUrl(CREATOR_PRODUCT_TEMPLATES.find((item) => item.id === templateId)?.ugcPresenterVideoFile);
 }
 
 function normalizeProductUrl(value: string): string {
