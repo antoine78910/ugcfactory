@@ -51,7 +51,10 @@ export const CREATOR_PRODUCT_TEMPLATES: CreatorProductTemplate[] = [
     videoFile: "vegetable-slicer.mp4",
     ugcVideoFile: "ugc-vegetable-slicer.mp4",
     ugcPresenterVideoFile: "ugc2-vegetable-slicer.mp4",
-    relatedUrls: ["https://www.tiktok.com/@noorhiba.online/video/7408954241366150408"],
+    relatedUrls: [
+      "https://www.tiktok.com/@noorhiba.online/video/7408954241366150408",
+      "https://www.aliexpress.us/item/3256811592431111.html",
+    ],
   },
   {
     id: "spoon-scale",
