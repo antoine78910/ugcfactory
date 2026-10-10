@@ -1,9 +1,10 @@
+import { createServerClient } from "@supabase/ssr";
 import { createClient } from "@supabase/supabase-js";
-import { NextResponse } from "next/server";
+import { NextResponse, type NextRequest } from "next/server";
 
 import { getEnv } from "@/lib/env";
 import { createSupabaseServiceClient } from "@/lib/supabase/admin";
-import { createSupabaseServerClient } from "@/lib/supabase/server";
+import { getSupabaseAnonKey, getSupabaseUrl } from "@/lib/supabase/env";
 
 export const dynamic = "force-dynamic";
 
@@ -29,7 +30,7 @@ function alreadyRegistered(message: string | undefined): boolean {
  * Trade an Ecom Efficiency creator access token for a Youry session
  * marked as a creator (influencer tools).
  */
-export async function POST(req: Request) {
+export async function POST(req: NextRequest) {
   const token = bearerToken(req);
   if (!token) {
     return NextResponse.json({ error: "missing_token" }, { status: 401 });
@@ -102,7 +103,22 @@ export async function POST(req: Request) {
     }
   }
 
-  const supabase = await createSupabaseServerClient();
+  // Cookies must be written on this response. next/headers cookies()
+  // does not reliably attach httpOnly session cookies to a JSON response.
+  const response = NextResponse.json({ ok: true });
+  const supabase = createServerClient(getSupabaseUrl(), getSupabaseAnonKey(), {
+    cookies: {
+      getAll() {
+        return req.cookies.getAll();
+      },
+      setAll(cookiesToSet) {
+        for (const { name, value, options } of cookiesToSet) {
+          req.cookies.set(name, value);
+          response.cookies.set(name, value, options);
+        }
+      },
+    },
+  });
   const { error: otpError } = await supabase.auth.verifyOtp({
     type: "magiclink",
     token_hash: tokenHash,
@@ -112,5 +128,5 @@ export async function POST(req: Request) {
     return NextResponse.json({ error: "could_not_sign_in" }, { status: 500 });
   }
 
-  return NextResponse.json({ ok: true });
+  return response;
 }

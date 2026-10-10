@@ -1,26 +1,31 @@
 "use client";
 
-import { useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
+
+const HANDOFF_KEY = "ee_creator_handoff_token";
+let handoffStarted = false;
 
 function takeHandoffToken(): string | null {
   const hash = window.location.hash.replace(/^#/, "");
-  const token = new URLSearchParams(hash).get("ee_token");
-  if (!token) return null;
-  window.history.replaceState(null, "", window.location.pathname + window.location.search);
-  return token;
+  const fromHash = new URLSearchParams(hash).get("ee_token");
+  if (fromHash) {
+    sessionStorage.setItem(HANDOFF_KEY, fromHash);
+    window.history.replaceState(null, "", window.location.pathname + window.location.search);
+    return fromHash;
+  }
+  return sessionStorage.getItem(HANDOFF_KEY);
 }
 
 export default function EeCreatorCallbackPage() {
-  const router = useRouter();
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
-    let cancelled = false;
+    if (handoffStarted) return;
+    handoffStarted = true;
     void (async () => {
       const token = takeHandoffToken();
       if (!token) {
-        router.replace("/signin");
+        window.location.replace("/signin");
         return;
       }
       try {
@@ -29,25 +34,23 @@ export default function EeCreatorCallbackPage() {
           headers: { Authorization: `Bearer ${token}` },
         });
         const body = (await res.json().catch(() => null)) as { error?: string } | null;
+        sessionStorage.removeItem(HANDOFF_KEY);
         if (!res.ok) {
-          if (!cancelled) {
-            setError(
-              body?.error === "not_creator"
-                ? "This Ecom Efficiency account is not a creator account."
-                : "Could not open Youry with your creator account.",
-            );
-          }
+          handoffStarted = false;
+          setError(
+            body?.error === "not_creator"
+              ? "This Ecom Efficiency account is not a creator account."
+              : "Could not open Youry with your creator account.",
+          );
           return;
         }
-        if (!cancelled) router.replace("/workflow");
+        window.location.replace("/workflow");
       } catch {
-        if (!cancelled) setError("Could not open Youry with your creator account.");
+        handoffStarted = false;
+        setError("Could not open Youry with your creator account.");
       }
     })();
-    return () => {
-      cancelled = true;
-    };
-  }, [router]);
+  }, []);
 
   return (
     <main className="flex min-h-svh items-center justify-center bg-[#06070d] px-6 text-white">
