@@ -1,5 +1,69 @@
 import type { StudioHistoryItem } from "@/app/_components/StudioGenerationsHistory";
 
+const TWIN_MATCH_BEFORE_MS = 30 * 1000;
+const TWIN_MATCH_AFTER_MS = 10 * 60 * 1000;
+
+function normLabel(s: string | undefined): string {
+  return (s ?? "").replace(/\s+/g, " ").trim().toLowerCase();
+}
+
+/**
+ * Optimistic "generating" rows that never got linked to their server row (register response lost,
+ * provider task id rewritten, poll landed before the link) would otherwise render as a second
+ * spinner next to the real row. Pair each such local row with at most one unclaimed server row
+ * that has the same prompt/label and model and was created shortly after it.
+ */
+function findLocalTwinsOfServerRows(serverItems: StudioHistoryItem[], prev: StudioHistoryItem[]): Set<string> {
+  const out = new Set<string>();
+  const serverById = new Set(serverItems.map((s) => s.id));
+  const serverTaskIds = new Set(serverItems.map((s) => (s.externalTaskId ?? "").trim()).filter(Boolean));
+  const claimed = new Set<string>();
+  for (const p of prev) {
+    const sg = p.studioGenerationId?.trim();
+    if (sg && serverById.has(sg)) claimed.add(sg);
+    if (serverById.has(p.id)) claimed.add(p.id);
+    const et = p.externalTaskId?.trim();
+    if (et && serverTaskIds.has(et)) {
+      const s = serverItems.find((x) => (x.externalTaskId ?? "").trim() === et);
+      if (s) claimed.add(s.id);
+    }
+  }
+
+  const locals = prev
+    .filter((p) => {
+      if (p.status !== "generating") return false;
+      if (serverById.has(p.id)) return false;
+      const sg = p.studioGenerationId?.trim();
+      if (sg && serverById.has(sg)) return false;
+      const et = p.externalTaskId?.trim();
+      if (et && serverTaskIds.has(et)) return false;
+      return true;
+    })
+    .sort((a, b) => a.createdAt - b.createdAt);
+  if (!locals.length) return out;
+
+  const candidates = [...serverItems].sort((a, b) => a.createdAt - b.createdAt);
+  for (const local of locals) {
+    const label = normLabel(local.label);
+    if (!label) continue;
+    const localModel = (local.model ?? "").trim();
+    const match = candidates.find((s) => {
+      if (claimed.has(s.id)) return false;
+      if (s.status === "failed") return false;
+      if (normLabel(s.label) !== label) return false;
+      const serverModel = (s.model ?? "").trim();
+      if (localModel && serverModel && localModel !== serverModel) return false;
+      const dt = s.createdAt - local.createdAt;
+      return dt >= -TWIN_MATCH_BEFORE_MS && dt <= TWIN_MATCH_AFTER_MS;
+    });
+    if (match) {
+      claimed.add(match.id);
+      out.add(local.id);
+    }
+  }
+  return out;
+}
+
 /**
  * Merge server `studio_generations` rows (as history items) with optimistic / local-only rows.
  * Matches Create → Video behavior: keep “ready” items with a URL for 24h if the server list
@@ -67,8 +131,10 @@ export function mergeStudioHistoryWithServer(
    */
   const KEEP_REGISTERED_GENERATING_MS = 60 * 60 * 1000;
   const KEEP_READY_MS = 24 * 60 * 60 * 1000;
+  const twinLocalIds = findLocalTwinsOfServerRows(serverFilteredWithAspect, prev);
   const kept = prev.filter((i) => {
     if (serverIds.has(i.id)) return false;
+    if (twinLocalIds.has(i.id)) return false;
     const sg = i.studioGenerationId?.trim();
     if (sg && serverIds.has(sg)) {
       return false;
