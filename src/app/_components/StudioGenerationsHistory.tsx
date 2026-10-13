@@ -391,6 +391,7 @@ export function StudioGenerationsHistory({
       "bytedance/seedance-1.5-pro",
       "bytedance/seedance-2",
       "bytedance/seedance-2-fast",
+      "bytedance/seedance-2-5",
       "gemini-omni-video",
     ]);
     return allow.has(model);

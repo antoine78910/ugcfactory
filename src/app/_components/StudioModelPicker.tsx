@@ -25,7 +25,8 @@ export type StudioModelPickerIcon =
   | "gpt_image_2"
   | "image_pro"
   | "image_std"
-  | "grok";
+  | "grok"
+  | "qwen";
 
 export type StudioModelPickerItem = {
   id: string;
@@ -77,7 +78,9 @@ function ModelGlyph({ icon, active }: { icon: StudioModelPickerIcon; active: boo
 
   return (
     <div className={cn(box, active ? "border-white/25 bg-white/10" : "bg-white/[0.06]")}>
-      <span className={cn("text-[9px] font-semibold", active ? "text-white/90" : "text-white/45")}>?</span>
+      <span className={cn("text-[9px] font-semibold", active ? "text-white/90" : "text-white/45")}>
+        {icon === "qwen" ? "Qw" : "?"}
+      </span>
     </div>
   );
 }

@@ -3756,7 +3756,7 @@ export function WorkflowFlowWorkspace({
         }
         if (d.kind === "video") {
           const vm = resolveWorkflowVideoModelId(d.model ?? "");
-          if (vm === "bytedance/seedance-2" || vm === "bytedance/seedance-2-fast") {
+          if (vm === "bytedance/seedance-2" || vm === "bytedance/seedance-2-fast" || vm === "bytedance/seedance-2-5") {
             const h = pendingConnect.targetHandleId;
             if (h === "references" || h === "inImage" || h === "startImage" || h === "inVideo") {
               fileAccept = WORKFLOW_SEEDANCE_2_PRO_VIDEO_FILE_ACCEPT;

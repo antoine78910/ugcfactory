@@ -406,6 +406,7 @@ type VideoModelId =
   | "bytedance/seedance-1.5-pro"
   | "bytedance/seedance-2"
   | "bytedance/seedance-2-fast"
+  | "bytedance/seedance-2-5"
   | "veo3_lite"
   | "veo3_fast"
   | "veo3"
@@ -422,6 +423,7 @@ const MODEL_OPTIONS: { id: VideoModelId; label: string; family: VideoFamily }[] 
   { id: "bytedance/seedance-1.5-pro", label: "Seedance 1.5 Pro", family: "kie" },
   { id: "bytedance/seedance-2", label: "Seedance 2.0", family: "kie" },
   { id: "bytedance/seedance-2-fast", label: "Seedance 2.0 Fast", family: "kie" },
+  { id: "bytedance/seedance-2-5", label: "Seedance 2.5", family: "kie" },
   { id: "veo3_lite", label: "Veo 3.1 Lite", family: "veo" },
   { id: "veo3_fast", label: "Veo 3.1 Fast", family: "veo" },
   { id: "veo3", label: "Veo 3.1 Quality", family: "veo" },
@@ -522,6 +524,16 @@ const VIDEO_MODEL_PICKER_ITEMS: StudioModelPickerItem[] = [
     searchText: "seedance 1.5 pro bytedance",
   },
   {
+    id: "bytedance/seedance-2-5",
+    label: "Seedance 2.5",
+    subtitle: "Up to 30s · native 1080p",
+    icon: "seedance",
+    newBadge: true,
+    resolution: "480p / 720p / 1080p · 21:9–auto",
+    durationRange: studioVideoDurationRangeLabel("bytedance/seedance-2-5"),
+    searchText: "seedance 2.5 bytedance",
+  },
+  {
     id: "bytedance/seedance-2",
     label: "Seedance 2.0",
     subtitle: "Higher quality",
@@ -588,6 +600,7 @@ const VIDEO_MODEL_ACCESS_ORDER: VideoModelId[] = [
   "bytedance/seedance-2-fast",
   "bytedance/seedance-1.5-pro",
   "bytedance/seedance-2",
+  "bytedance/seedance-2-5",
   "kling-3.0/video",
   "veo3_lite",
   "veo3_fast",
@@ -1140,6 +1153,7 @@ export default function StudioVideoPanel({
         "bytedance/seedance-1.5-pro",
         "bytedance/seedance-2",
         "bytedance/seedance-2-fast",
+        "bytedance/seedance-2-5",
       ]);
       if (!allow.has(model)) {
         toast.error("Extend is not available for this model.");
@@ -5302,7 +5316,7 @@ export default function StudioVideoPanel({
                           <SelectItem value="720p" className={studioSelectItemClass}>
                             720p
                           </SelectItem>
-                          {modelId === "bytedance/seedance-2" ? (
+                          {modelId === "bytedance/seedance-2" || modelId === "bytedance/seedance-2-5" ? (
                             <SelectItem value="1080p" className={studioSelectItemClass}>
                               1080p
                             </SelectItem>

@@ -53,7 +53,11 @@ import {
   userMessageFromCaughtError,
 } from "@/lib/generationUserMessage";
 import { refundPlatformCredits } from "@/lib/refundPlatformCredits";
-import { studioVideoDurationSecOptions, studioVideoSupportsNativeAudio } from "@/lib/studioVideoModelCapabilities";
+import {
+  isKieSeedance2FamilyModelId,
+  studioVideoDurationSecOptions,
+  studioVideoSupportsNativeAudio,
+} from "@/lib/studioVideoModelCapabilities";
 import { uploadFileToCdn } from "@/lib/uploadBlobUrlToCdn";
 import { uploadBlobUrlToCdn } from "@/lib/uploadBlobUrlToCdn";
 import { parseWorkflowRunCorrelationFromLabel } from "@/lib/workflowRunCorrelation";
@@ -268,13 +272,16 @@ const kindConfig = {
 const IMAGE_MODELS: { value: string; label: string }[] = [
   { value: "pro", label: "NanoBanana Pro" },
   { value: "nano", label: "NanoBanana 2" },
+  { value: "nano_banana_2_1", label: "NanoBanana 2.1" },
   { value: "seedream_45", label: "Seedream 4.5" },
   { value: "seedream_50_lite", label: "Seedream 5.0 Lite" },
   { value: "seedream_50_pro", label: "Seedream 5.0 Pro" },
+  { value: "seedream_50_flash", label: "Seedream 5.0 Flash" },
   { value: "google_nano_banana", label: "Google Nano Banana" },
   { value: "gpt_image_2", label: "GPT Image 2" },
   { value: "gpt_image_2_5_flare", label: "GPT Image 2.5 Flare" },
   { value: "gpt_image_2_5_sunburst", label: "GPT Image 2.5 Sunburst" },
+  { value: "qwen_image_2_1", label: "Qwen Image 2.1" },
 ];
 
 const VIDEO_MODELS: { value: string; label: string }[] = [
@@ -286,6 +293,7 @@ const VIDEO_MODELS: { value: string; label: string }[] = [
   { value: "bytedance/seedance-1.5-pro", label: "Seedance 1.5 Pro" },
   { value: "bytedance/seedance-2", label: "Seedance 2.0" },
   { value: "bytedance/seedance-2-fast", label: "Seedance 2.0 Fast" },
+  { value: "bytedance/seedance-2-5", label: "Seedance 2.5" },
   { value: "veo3_lite", label: "Veo 3.1 Lite" },
   { value: "veo3_fast", label: "Veo 3.1 Fast" },
   { value: "veo3", label: "Veo 3.1 Quality" },
@@ -295,6 +303,7 @@ const VIDEO_CHAIN_SEEDANCE_MODELS: { value: string; label: string }[] = [
   { value: "bytedance/seedance-2-fast", label: "Seedance 2.0 Fast" },
   { value: "bytedance/seedance-1.5-pro", label: "Seedance 1.5 Pro" },
   { value: "bytedance/seedance-2", label: "Seedance 2.0" },
+  { value: "bytedance/seedance-2-5", label: "Seedance 2.5" },
 ];
 
 const MOTION_CONTROL_MODELS: { value: string; label: string }[] = [
@@ -1871,20 +1880,14 @@ function AdAssetNodeBase({ id, data, selected }: NodeProps<AdAssetNodeType>) {
   const videoModelSeedance2ProLike = useMemo(
     () =>
       data.kind === "video" &&
-      (resolvedVideoModelId === "bytedance/seedance-2" ||
-        resolvedVideoModelId === "bytedance/seedance-2-fast" ||
-        resolvedVideoModelId === "gemini-omni-video"),
+      (isKieSeedance2FamilyModelId(resolvedVideoModelId) || resolvedVideoModelId === "gemini-omni-video"),
     [data.kind, resolvedVideoModelId],
   );
 
   /** Seedance 2 / Fast / Gemini Omni: supports omni reference video uploads (`referenceVideoUrls`). */
   const seedance2ProLike = useMemo(() => {
     if (data.kind !== "video") return false;
-    return (
-      resolvedVideoModelId === "bytedance/seedance-2" ||
-      resolvedVideoModelId === "bytedance/seedance-2-fast" ||
-      resolvedVideoModelId === "gemini-omni-video"
-    );
+    return isKieSeedance2FamilyModelId(resolvedVideoModelId) || resolvedVideoModelId === "gemini-omni-video";
   }, [data.kind, resolvedVideoModelId]);
 
   /**
@@ -3594,8 +3597,7 @@ function AdAssetNodeBase({ id, data, selected }: NodeProps<AdAssetNodeType>) {
         }, promptSample="${promptsForRun[0]?.trim().slice(0, 120) ?? ""}".`,
       );
       const isSeedanceModel = model.startsWith("bytedance/seedance");
-      const seedance2ProLike =
-        resolvedVideoModelId === "bytedance/seedance-2" || resolvedVideoModelId === "bytedance/seedance-2-fast";
+      const seedance2ProLike = isKieSeedance2FamilyModelId(resolvedVideoModelId);
       const linkedVideoFromInPort = seedance2ProLike
         ? collectLinkedVideoUrlsForHandles(nodesForVideoInputs, edges, id, ["inVideo"])
         : [];
@@ -5719,9 +5721,7 @@ function AdAssetNodeBase({ id, data, selected }: NodeProps<AdAssetNodeType>) {
                 </span>
               ) : null}
 
-              {data.kind === "video" &&
-              (resolvedVideoModelId === "bytedance/seedance-2" ||
-                resolvedVideoModelId === "bytedance/seedance-2-fast") ? (
+              {data.kind === "video" && isKieSeedance2FamilyModelId(resolvedVideoModelId) ? (
                 <>
                   <input
                     ref={seedanceProVideoFileInputRef}

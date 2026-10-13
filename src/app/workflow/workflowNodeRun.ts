@@ -34,6 +34,7 @@ import {
   normalizeGeminiOmniResolution,
 } from "@/lib/geminiOmniVideo";
 import {
+  isKieSeedance2FamilyModelId,
   normalizeLegacySeedanceMarketModelId,
   studioVideoDurationSecOptions,
   validateStudioVideoJobDuration,
@@ -1012,6 +1013,7 @@ function workflowVideoDefaultDuration(modelId: string): number {
       return 8;
     case "bytedance/seedance-2":
     case "bytedance/seedance-2-fast":
+    case "bytedance/seedance-2-5":
       return 10;
     case "veo3_lite":
     case "veo3_fast":
@@ -1432,8 +1434,8 @@ export type WorkflowRunVideoParams = {
 export function workflowVideoModelHasStartFrame(modelId: string): boolean {
   const normalized = normalizeLegacySeedanceMarketModelId(modelId);
   if (normalized === "bytedance/seedance-1.5-pro") return true;
-  // Seedance 2 / Fast: we accept start/end frames as part of omni_reference media set.
-  if (normalized === "bytedance/seedance-2" || normalized === "bytedance/seedance-2-fast") return true;
+  // Seedance 2 / Fast / 2.5: we accept start/end frames as part of omni_reference media set.
+  if (isKieSeedance2FamilyModelId(normalized)) return true;
   if (normalized === GEMINI_OMNI_VIDEO_MODEL_ID) return true;
   if (modelId.startsWith("bytedance/seedance")) return false;
   return true;
@@ -1443,8 +1445,8 @@ export function workflowVideoModelHasStartFrame(modelId: string): boolean {
 export function workflowVideoModelHasEndFrame(modelId: string): boolean {
   const normalized = normalizeLegacySeedanceMarketModelId(modelId);
   if (normalized === "bytedance/seedance-1.5-pro") return true;
-  // Seedance 2 / Fast: end frame is allowed as part of omni_reference media set.
-  if (normalized === "bytedance/seedance-2" || normalized === "bytedance/seedance-2-fast") return true;
+  // Seedance 2 / Fast / 2.5: end frame is allowed as part of omni_reference media set.
+  if (isKieSeedance2FamilyModelId(normalized)) return true;
   if (modelId === "kling-3.0/video") return true;
   if (modelId === "veo3" || modelId === "veo3_fast" || modelId === "veo3_lite") return true;
   return false;
@@ -1472,7 +1474,7 @@ export function workflowVideoModelHasReferences(modelId: string): boolean {
 export function workflowVideoModelSupportsElements(modelId: string): boolean {
   if (modelId === "kling-3.0/video") return true;
   const n = normalizeLegacySeedanceMarketModelId(modelId);
-  if (n === "bytedance/seedance-2" || n === "bytedance/seedance-2-fast") return true;
+  if (isKieSeedance2FamilyModelId(n)) return true;
   return false;
 }
 
@@ -1505,7 +1507,7 @@ export function workflowVideoElementInputHandleAffectsImageMentions(
   // - Kling 3.0 requires **2–4 URLs per element**, which the workflow can't satisfy from its
   //   one-image-per-port pool, so we don't auto-emit @imageN tags for Kling 3.0 anymore.
   //   Kling 3.0 still gets first/last frame via `image_urls` (start + optional end frame).
-  const isSeedancePro = m === "bytedance/seedance-2" || m === "bytedance/seedance-2-fast";
+  const isSeedancePro = isKieSeedance2FamilyModelId(m);
   if (!isSeedancePro) return false;
   if (h === "startImage" || h === "references" || h === "inImage") return true;
   if (h === "endImage") return true;
@@ -1584,8 +1586,7 @@ export function workflowVideoOrderedElementImageRefs(params: {
 
   const startUrl = indexedStartFrame;
   const seedanceNormalized = normalizeLegacySeedanceMarketModelId(modelId);
-  const seedanceKie =
-    seedanceNormalized === "bytedance/seedance-2" || seedanceNormalized === "bytedance/seedance-2-fast";
+  const seedanceKie = isKieSeedance2FamilyModelId(seedanceNormalized);
 
   if (seedanceKie) {
     return dedupeKeepOrder(
@@ -1942,9 +1943,7 @@ async function runWorkflowVideoJobOnce(params: WorkflowRunVideoParams): Promise<
    * fields. Otherwise we stay on omni references.
    */
   const seedance15Kie = seedanceResolvedModel === "bytedance/seedance-1.5-pro";
-  const seedanceKie =
-    seedanceResolvedModel === "bytedance/seedance-2" ||
-    seedanceResolvedModel === "bytedance/seedance-2-fast";
+  const seedanceKie = isKieSeedance2FamilyModelId(seedanceResolvedModel);
   const seedanceMergedImageUrls = seedanceKie
     ? dedupeKeepOrder(
         [startUrl, endUrl, ...refUrls].filter((u): u is string => Boolean(u && u.trim())),
@@ -1998,8 +1997,7 @@ async function runWorkflowVideoJobOnce(params: WorkflowRunVideoParams): Promise<
     isSeedancePicker(modelId) &&
     !startUrl &&
     seedanceMergedImageUrls.length === 0 &&
-    seedanceResolvedModel !== "bytedance/seedance-2" &&
-    seedanceResolvedModel !== "bytedance/seedance-2-fast" &&
+    !isKieSeedance2FamilyModelId(seedanceResolvedModel) &&
     seedanceResolvedModel !== "bytedance/seedance-1.5-pro"
   ) {
     throw new Error("This model needs a reference image. Connect an image module or set a reference on the node.");

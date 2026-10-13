@@ -22,6 +22,7 @@ export const STUDIO_VIDEO_PICKER_IDS = [
   "bytedance/seedance-1.5-pro",
   "bytedance/seedance-2",
   "bytedance/seedance-2-fast",
+  "bytedance/seedance-2-5",
   "veo3_lite",
   "veo3_fast",
   "veo3",
@@ -60,6 +61,31 @@ export function studioVideoIsVeoPickerId(pickerId: string): boolean {
 }
 
 export type StudioVideoPickerId = (typeof STUDIO_VIDEO_PICKER_IDS)[number];
+
+/** @see https://docs.kie.ai/market/bytedance/seedance-2-5 */
+export const SEEDANCE_25_MARKET_MODEL_ID = "bytedance/seedance-2-5" as const;
+
+/**
+ * Kie Seedance 2.x family sharing the same `input` schema (first/last frame, multimodal refs,
+ * resolution, `adaptive` aspect, generate_audio, web_search).
+ */
+export function isKieSeedance2FamilyModelId(id: string): boolean {
+  return id === "bytedance/seedance-2" || id === "bytedance/seedance-2-fast" || id === SEEDANCE_25_MARKET_MODEL_ID;
+}
+
+export function isSeedance25ModelId(id: string): boolean {
+  return id === SEEDANCE_25_MARKET_MODEL_ID;
+}
+
+/** Max clip length (seconds) for the Seedance 2.x family. */
+export function seedance2FamilyMaxDurationSec(id: string): number {
+  return isSeedance25ModelId(id) ? 30 : 15;
+}
+
+/** Kie reference caps per request. Seedance 2.5: 30 images / 10 videos / 10 audios. */
+export function seedance2FamilyKieRefCaps(id: string): { images: number; videos: number; audios: number } {
+  return isSeedance25ModelId(id) ? { images: 30, videos: 10, audios: 10 } : { images: 9, videos: 3, audios: 3 };
+}
 
 function isKling26Resolved(model: string): boolean {
   return (
@@ -111,6 +137,8 @@ export function studioVideoDurationSecOptions(pickerId: string): string[] {
     case "bytedance/seedance-2":
     case "bytedance/seedance-2-fast":
       return Array.from({ length: 12 }, (_, i) => String(i + 4));
+    case SEEDANCE_25_MARKET_MODEL_ID:
+      return Array.from({ length: 27 }, (_, i) => String(i + 4));
     case "veo3_lite":
     case "veo3_fast":
     case "veo3":
@@ -145,7 +173,7 @@ export function studioVideoCreateAspectRatioOptions(pickerId: string): readonly 
   if (pickerId === "bytedance/seedance-1.5-pro") {
     return ["21:9", "16:9", "4:3", "1:1", "3:4", "9:16"];
   }
-  if (pickerId === "bytedance/seedance-2" || pickerId === "bytedance/seedance-2-fast") {
+  if (isKieSeedance2FamilyModelId(pickerId)) {
     return ["21:9", "16:9", "4:3", "1:1", "3:4", "9:16", "auto"];
   }
   return null;
@@ -165,8 +193,7 @@ export function studioVideoSupportsQualityPicker(pickerId: string): boolean {
 export function studioVideoSupportsSeedanceResolutionPicker(pickerId: string): boolean {
   return (
     pickerId === "bytedance/seedance-1.5-pro" ||
-    pickerId === "bytedance/seedance-2" ||
-    pickerId === "bytedance/seedance-2-fast"
+    isKieSeedance2FamilyModelId(pickerId)
   );
 }
 
@@ -200,7 +227,7 @@ export function studioVideoUsesSeedanceCompactReferenceUploads(pickerId: string)
 
 /** Studio Create: Seedance 2 / Fast use omni_reference mixed media instead of start/end frames. */
 export function studioVideoUsesSeedanceProOmniMediaUploads(pickerId: string): boolean {
-  return pickerId === "bytedance/seedance-2" || pickerId === "bytedance/seedance-2-fast";
+  return isKieSeedance2FamilyModelId(pickerId);
 }
 
 /** Studio Create: Gemini Omni — reference images + optional source video (trimmed). */
@@ -228,7 +255,7 @@ export function studioVideoIsSeedance15ProPickerId(pickerId: string): boolean {
 }
 
 export function studioVideoIsSeedance2ProPickerId(pickerId: string): boolean {
-  return pickerId === "bytedance/seedance-2" || pickerId === "bytedance/seedance-2-fast";
+  return isKieSeedance2FamilyModelId(pickerId);
 }
 
 /** Seedance models that bill via resolution tiers and accept `videoResolution` on generate. */
@@ -287,10 +314,12 @@ export function validateStudioVideoJobDuration(
     }
     return;
   }
-  if (resolvedModel === "bytedance/seedance-2" || resolvedModel === "bytedance/seedance-2-fast") {
+  if (isKieSeedance2FamilyModelId(resolvedModel)) {
     const d = Number(duration);
-    if (!Number.isFinite(d) || d < 4 || d > 15 || Math.round(d) !== d) {
-      throw new Error("Invalid duration for Seedance 2. Must be an integer from 4 to 15 seconds.");
+    const max = seedance2FamilyMaxDurationSec(resolvedModel);
+    if (!Number.isFinite(d) || d < 4 || d > max || Math.round(d) !== d) {
+      const label = isSeedance25ModelId(resolvedModel) ? "Seedance 2.5" : "Seedance 2";
+      throw new Error(`Invalid duration for ${label}. Must be an integer from 4 to ${max} seconds.`);
     }
     return;
   }

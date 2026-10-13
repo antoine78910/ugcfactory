@@ -2,6 +2,9 @@
 
 export const KIE_MODEL_NANO_BANANA_2 = "nano-banana-2";
 export const KIE_MODEL_NANO_BANANA_PRO = "nano-banana-pro";
+/** Same input schema as Nano Banana 2, max 10 `image_input`. @see https://docs.kie.ai/market/google/nanobanana-2-1 */
+export const KIE_MODEL_NANO_BANANA_2_1 = "nano-banana-2-1";
+export const KIE_NANO_BANANA_2_1_MAX_REFERENCE_IMAGES = 10;
 
 export type KieGoogleImageResolution = "1K" | "2K" | "4K";
 

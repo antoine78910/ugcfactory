@@ -7,6 +7,7 @@ import {
   isStudioGoogleNanoBananaPickerId,
   isStudioGptImage25PickerModelId,
   isStudioGptImage2PickerModelId,
+  isStudioQwenImage21PickerModelId,
   isStudioSeedreamImagePickerId,
   isStudioUnifiedSeedreamPickerId,
 } from "@/lib/studioImageModels";
@@ -313,6 +314,33 @@ export const IMAGE_MODEL = {
   seedream_50_pro_image_to_image: fixedImageModelCredits({
     model: "seedream_50_pro_image_to_image",
     credits: 2,
+    fal_list_price_usd: null,
+  }),
+  /** Seedream 5.0 Flash (KIE): $0.0162 per image, 1K and 2K priced the same. */
+  seedream_50_flash: fixedImageModelCredits({
+    model: "seedream_50_flash",
+    credits: 1,
+    fal_list_price_usd: null,
+  }),
+  seedream_50_flash_text_to_image: fixedImageModelCredits({
+    model: "seedream_50_flash_text_to_image",
+    credits: 1,
+    fal_list_price_usd: null,
+  }),
+  seedream_50_flash_image_to_image: fixedImageModelCredits({
+    model: "seedream_50_flash_image_to_image",
+    credits: 1,
+    fal_list_price_usd: null,
+  }),
+  /** Qwen Image 2.1 (KIE): 1K $0.02, 2K $0.04. */
+  qwen_image_2_1_1k: gptImage2Tier({
+    model: "qwen_image_2_1_1k",
+    cost_usd: 0.02,
+    fal_list_price_usd: null,
+  }),
+  qwen_image_2_1_2k: gptImage2Tier({
+    model: "qwen_image_2_1_2k",
+    cost_usd: 0.04,
     fal_list_price_usd: null,
   }),
 };
@@ -690,6 +718,9 @@ export function studioImageCreditsPerOutput(opts: {
     if (opts.resolution === "4K") return IMAGE_MODEL.gpt_image_2_5_4k.credits;
     if (opts.resolution === "2K") return IMAGE_MODEL.gpt_image_2_5_2k.credits;
     return IMAGE_MODEL.gpt_image_2_5_1k.credits;
+  }
+  if (isStudioQwenImage21PickerModelId(opts.studioModel)) {
+    return opts.resolution === "1K" ? IMAGE_MODEL.qwen_image_2_1_1k.credits : IMAGE_MODEL.qwen_image_2_1_2k.credits;
   }
   if (isStudioSeedreamImagePickerId(opts.studioModel) || isStudioUnifiedSeedreamPickerId(opts.studioModel)) {
     return IMAGE_MODEL[opts.studioModel].credits;
@@ -1154,13 +1185,21 @@ export const SEEDANCE_15_PRO_PROVIDER_USD_PER_SECOND = {
   "1080p": 0.45,
 } as const;
 
+/** KIE Seedance 2.5 $/s without video input (kie.ai/seedance-2-5). */
+export const SEEDANCE_25_PROVIDER_USD_PER_SECOND = {
+  "480p": 0.14,
+  "720p": 0.315,
+  "1080p": 0.79,
+} as const;
+
 export type SeedanceBillingResolution = keyof typeof SEEDANCE_2_PROVIDER_USD_PER_SECOND;
 
-export type SeedanceBillingVariant = "seedance-1-5-pro" | "seedance-2" | "seedance-2-fast";
+export type SeedanceBillingVariant = "seedance-1-5-pro" | "seedance-2" | "seedance-2-fast" | "seedance-2-5";
 
 export function seedanceVariantFromMarketModelId(modelId: string): SeedanceBillingVariant {
   const id = normalizeLegacySeedanceMarketModelId(modelId);
   if (id === "bytedance/seedance-1.5-pro") return "seedance-1-5-pro";
+  if (id === "bytedance/seedance-2-5") return "seedance-2-5";
   if (id.includes("seedance-2-fast")) return "seedance-2-fast";
   return "seedance-2";
 }
@@ -1174,7 +1213,9 @@ export function seedanceCreditsPerSecond(opts: {
       ? SEEDANCE_15_PRO_PROVIDER_USD_PER_SECOND[opts.resolution]
       : opts.variant === "seedance-2"
         ? SEEDANCE_2_PROVIDER_USD_PER_SECOND[opts.resolution]
-        : SEEDANCE_2_FAST_PROVIDER_USD_PER_SECOND[opts.resolution];
+        : opts.variant === "seedance-2-5"
+          ? SEEDANCE_25_PROVIDER_USD_PER_SECOND[opts.resolution]
+          : SEEDANCE_2_FAST_PROVIDER_USD_PER_SECOND[opts.resolution];
   const retailPerSec = our * 2;
   return Math.max(1, Math.round(retailPerSec / VIDEO_DYNAMIC_CREDIT_USD));
 }
@@ -1252,7 +1293,8 @@ export function calculateVideoCreditsForModel(opts: VideoCreditOptions): number 
     case "bytedance/seedance-2":
     case "bytedance/seedance-2-fast-preview":
     case "bytedance/seedance-2-fast-preview-vip":
-    case "bytedance/seedance-2-fast": {
+    case "bytedance/seedance-2-fast":
+    case "bytedance/seedance-2-5": {
       const resolution = seedanceResolutionFromVideoOptions(opts);
       const variant = seedanceVariantFromMarketModelId(
         normalizeLegacySeedanceMarketModelId(opts.modelId),

@@ -31,6 +31,9 @@ import { getUserPlan } from "@/lib/supabase/getUserPlan";
 import { isKieServableReferenceImageUrl } from "@/lib/kieSoraReferenceImage";
 import {
   validateStudioVideoJobDuration,
+  isKieSeedance2FamilyModelId,
+  seedance2FamilyKieRefCaps,
+  seedance2FamilyMaxDurationSec,
   studioVideoIsSeedance2ProPickerId,
   studioVideoSupportsReferenceElements,
   normalizeLegacySeedanceMarketModelId,
@@ -322,11 +325,6 @@ function mapAspectRatioForKieSeedance2(raw: string | undefined): string {
   }
 }
 
-/** Seedance 2.0 reference caps (@see docs.kie.ai/market/bytedance/seedance-2). */
-const KIE_SEEDANCE2_MAX_REF_IMAGES = 9;
-const KIE_SEEDANCE2_MAX_REF_VIDEOS = 3;
-const KIE_SEEDANCE2_MAX_REF_AUDIOS = 3;
-
 function partitionSeedanceReferenceUrls(ordered: string[]): {
   imgs: string[];
   vids: string[];
@@ -356,7 +354,7 @@ function maxPromptMediaMention(prompt: string, kind: "image" | "video" | "audio"
 }
 
 function seedanceMarketModelSupportsCompactReferenceUrls(raw: string): boolean {
-  return raw === "bytedance/seedance-2" || raw === "bytedance/seedance-2-fast";
+  return isKieSeedance2FamilyModelId(raw);
 }
 
 function normalizeSeedanceGeneratePrompt(rawPrompt: string): string {
@@ -544,7 +542,7 @@ export async function POST(req: Request) {
   }
   if (compactNorm.urls.length > 0 && !seedanceMarketModelSupportsCompactReferenceUrls(rawModel)) {
     return NextResponse.json(
-      { error: "`seedancePreviewImageUrls` is only valid for Seedance 2.0 or Seedance 2.0 Fast." },
+      { error: "`seedancePreviewImageUrls` is only valid for Seedance 2.0, 2.0 Fast or 2.5." },
       { status: 400 },
     );
   }
@@ -922,14 +920,19 @@ export async function POST(req: Request) {
         model,
       });
     } else if (rawModel.startsWith("bytedance/seedance")) {
-      if (rawModel !== "bytedance/seedance-2" && rawModel !== "bytedance/seedance-2-fast") {
+      if (!isKieSeedance2FamilyModelId(rawModel)) {
         return NextResponse.json(
           {
-            error: `Unsupported Seedance model: ${rawModel}. Use bytedance/seedance-1.5-pro, bytedance/seedance-2, or bytedance/seedance-2-fast.`,
+            error: `Unsupported Seedance model: ${rawModel}. Use bytedance/seedance-1.5-pro, bytedance/seedance-2, bytedance/seedance-2-fast, or bytedance/seedance-2-5.`,
           },
           { status: 400 },
         );
       }
+      const kieRefCaps = seedance2FamilyKieRefCaps(rawModel);
+      const KIE_SEEDANCE2_MAX_REF_IMAGES = kieRefCaps.images;
+      const KIE_SEEDANCE2_MAX_REF_VIDEOS = kieRefCaps.videos;
+      const KIE_SEEDANCE2_MAX_REF_AUDIOS = kieRefCaps.audios;
+      const seedanceMaxDuration = seedance2FamilyMaxDurationSec(rawModel);
 
       if (hasKieEndImage && !hasKieReferenceImage && !useCompactSeedancePreviewRefs) {
         return NextResponse.json(
@@ -963,9 +966,9 @@ export async function POST(req: Request) {
           : seedanceResolutionTier;
 
       const kieDuration = Math.round(duration);
-      if (!Number.isFinite(kieDuration) || kieDuration < 4 || kieDuration > 15) {
+      if (!Number.isFinite(kieDuration) || kieDuration < 4 || kieDuration > seedanceMaxDuration) {
         return NextResponse.json(
-          { error: "Seedance requires a clip duration between 4 and 15 seconds." },
+          { error: `Seedance requires a clip duration between 4 and ${seedanceMaxDuration} seconds.` },
           { status: 400 },
         );
       }

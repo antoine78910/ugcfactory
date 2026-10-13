@@ -49,8 +49,10 @@ import {
 import {
   isStudioGptImage25PickerModelId,
   isStudioImageKiePickerModelId,
+  isStudioQwenImage21PickerModelId,
   isStudioSeedreamImagePickerId,
   studioImageModelSupportsResolutionPicker,
+  studioImageResolutionOptions,
   type StudioImageKiePickerModelId,
 } from "@/lib/studioImageModels";
 import { STUDIO_IMAGE_TAB_KINDS } from "@/lib/studioGenerationKinds";
@@ -77,6 +79,11 @@ const ASPECT_RATIOS_PRO = [
 
 const PRO_RESOLUTIONS = ["1K", "2K", "4K"] as const;
 
+/** Kie Seedream 5.0 Flash `aspect_ratio` enum (required, no auto). */
+const SEEDREAM_FLASH_ASPECT_RATIOS = ["1:1", "4:3", "3:4", "16:9", "9:16", "2:3", "3:2", "21:9"] as const;
+/** Kie Qwen Image 2.1 `aspect_ratio` enum (`auto` follows the first reference on image-to-image). */
+const QWEN_IMAGE_21_ASPECT_RATIOS = ["auto", "1:1", "4:3", "3:4", "3:2", "2:3", "16:9", "9:16", "21:9", "9:21"] as const;
+
 type StudioImagePanelProps = {
   /** From history / lightbox: open Voice Changer with this video loaded. */
   onChangeVoice?: (item: StudioHistoryItem) => void;
@@ -99,6 +106,14 @@ const IMAGE_MODEL_PICKER_ITEMS: StudioModelPickerItem[] = [
     searchText: "nanobanana 2 standard google",
   },
   {
+    id: "nano_banana_2_1",
+    label: "NanoBanana 2.1",
+    icon: "google",
+    newBadge: true,
+    ...studioImagePickerCardHints("nano_banana_2_1"),
+    searchText: "nanobanana 2.1 nano banana google gemini",
+  },
+  {
     id: "seedream_45",
     label: "Seedream 4.5",
     icon: "seedream",
@@ -119,6 +134,22 @@ const IMAGE_MODEL_PICKER_ITEMS: StudioModelPickerItem[] = [
     newBadge: true,
     ...studioImagePickerCardHints("seedream_50_pro"),
     searchText: "seedream 5.0 pro text to image image to image",
+  },
+  {
+    id: "seedream_50_flash",
+    label: "Seedream 5.0 Flash",
+    icon: "seedream",
+    newBadge: true,
+    ...studioImagePickerCardHints("seedream_50_flash"),
+    searchText: "seedream 5.0 flash fast text to image image to image",
+  },
+  {
+    id: "qwen_image_2_1",
+    label: "Qwen Image 2.1",
+    icon: "qwen",
+    newBadge: true,
+    ...studioImagePickerCardHints("qwen_image_2_1"),
+    searchText: "qwen image 2.1 alibaba text to image image to image",
   },
   {
     id: "google_nano_banana",
@@ -158,13 +189,16 @@ const COMING_SOON_IMAGE_MODEL_IDS = new Set<string>();
 const STUDIO_LIGHTBOX_EDIT_MODEL_OPTIONS: StudioImageLightboxEditModelOption[] = [
   { value: "pro", label: "NanoBanana Pro" },
   { value: "nano", label: "NanoBanana 2" },
+  { value: "nano_banana_2_1", label: "NanoBanana 2.1" },
   { value: "seedream_45", label: "Seedream 4.5" },
   { value: "seedream_50_lite", label: "Seedream 5.0 Lite" },
   { value: "seedream_50_pro", label: "Seedream 5.0 Pro" },
+  { value: "seedream_50_flash", label: "Seedream 5.0 Flash" },
   { value: "google_nano_banana", label: "Google Nano Banana" },
   { value: "gpt_image_2", label: "GPT Image 2" },
   { value: "gpt_image_2_5_flare", label: "GPT Image 2.5 Flare" },
   { value: "gpt_image_2_5_sunburst", label: "GPT Image 2.5 Sunburst" },
+  { value: "qwen_image_2_1", label: "Qwen Image 2.1" },
 ];
 
 async function uploadReferenceFile(file: File): Promise<string> {
@@ -446,8 +480,10 @@ export default function StudioImagePanel({ onChangeVoice }: StudioImagePanelProp
   // Saved-avatar picker is intentionally kept only in the Video tab (single place in the app).
 
   const aspectOptions = useMemo(() => {
-    if (model === "nano") return NANO_BANANA_2_ASPECT_RATIOS;
+    if (model === "nano" || model === "nano_banana_2_1") return NANO_BANANA_2_ASPECT_RATIOS;
     if (model === "pro" || isStudioGptImage25PickerModelId(model)) return ["auto", ...ASPECT_RATIOS_PRO] as const;
+    if (isStudioQwenImage21PickerModelId(model)) return QWEN_IMAGE_21_ASPECT_RATIOS;
+    if (model.includes("seedream_50_flash")) return SEEDREAM_FLASH_ASPECT_RATIOS;
     if (isStudioSeedreamImagePickerId(model)) return ASPECT_RATIOS_PRO;
     return NANO_BANANA_2_ASPECT_RATIOS;
   }, [model]);
@@ -460,6 +496,11 @@ export default function StudioImagePanel({ onChangeVoice }: StudioImagePanelProp
       else setAspect("auto");
     }
   }, [model, aspectOptions, aspect]);
+
+  useEffect(() => {
+    const allowed = studioImageResolutionOptions(model);
+    if (!allowed.includes(resolution)) setResolution(allowed[allowed.length - 1]!);
+  }, [model, resolution]);
 
   useEffect(() => {
     // Personal Kie key (BYOK) unlocks all image models in the picker; do not force a downgrade.
@@ -872,7 +913,7 @@ export default function StudioImagePanel({ onChangeVoice }: StudioImagePanelProp
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent position="popper" className={studioSelectContentClass}>
-                  {PRO_RESOLUTIONS.map((r) => (
+                  {studioImageResolutionOptions(model).map((r) => (
                     <SelectItem key={r} value={r} className={studioSelectItemClass}>
                       {r}
                     </SelectItem>

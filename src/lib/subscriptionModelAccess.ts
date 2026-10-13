@@ -11,8 +11,15 @@ import {
   isStudioGoogleNanoBananaPickerId,
   isStudioGptImage25PickerModelId,
   isStudioGptImage2PickerModelId,
+  isStudioNanoBanana21PickerId,
+  isStudioQwenImage21PickerModelId,
   isStudioSeedreamImagePickerId,
 } from "@/lib/studioImageModels";
+
+/** Newer Kie image pickers gated at the same tier as NanoBanana Pro. */
+function isStudioExtraKieImagePickerId(id: string): boolean {
+  return isStudioNanoBanana21PickerId(id) || isStudioQwenImage21PickerModelId(id);
+}
 import { STUDIO_VIDEO_EDIT_PICKER_IDS } from "@/lib/studioVideoEditModels";
 
 /** Includes free (credit packs / demo). */
@@ -52,6 +59,7 @@ const VIDEO_MIN_RANK: Record<string, number> = {
   "bytedance/seedance-1.5-pro": 2,
   "bytedance/seedance-2": 2,
   "bytedance/seedance-2-fast": 2,
+  "bytedance/seedance-2-5": 2,
   "kling-3.0/video": 2,
   veo3_lite: 2,
   veo3_fast: 2,
@@ -87,7 +95,8 @@ function isKnownStudioImagePickerId(pickerId: string): boolean {
     isStudioSeedreamImagePickerId(id) ||
     isStudioGoogleNanoBananaPickerId(id) ||
     isStudioGptImage2PickerModelId(id) ||
-    isStudioGptImage25PickerModelId(id)
+    isStudioGptImage25PickerModelId(id) ||
+    isStudioExtraKieImagePickerId(id)
   );
 }
 
@@ -105,7 +114,7 @@ export function canUseStudioImagePickerModel(planId: AccountPlanId, pickerId: st
   if (isStudioGoogleNanoBananaPickerId(id)) {
     return planRank(planId) >= IMAGE_MIN_RANK.pro;
   }
-  if (isStudioGptImage2PickerModelId(id) || isStudioGptImage25PickerModelId(id)) {
+  if (isStudioGptImage2PickerModelId(id) || isStudioGptImage25PickerModelId(id) || isStudioExtraKieImagePickerId(id)) {
     return planRank(planId) >= IMAGE_MIN_RANK.pro;
   }
   return false;
@@ -177,7 +186,7 @@ export function minPlanForStudioImagePicker(pickerId: string): AccountPlanId {
   if (isStudioGoogleNanoBananaPickerId(id)) {
     return planIdAtMinRank(IMAGE_MIN_RANK.pro);
   }
-  if (isStudioGptImage2PickerModelId(id) || isStudioGptImage25PickerModelId(id)) {
+  if (isStudioGptImage2PickerModelId(id) || isStudioGptImage25PickerModelId(id) || isStudioExtraKieImagePickerId(id)) {
     return planIdAtMinRank(IMAGE_MIN_RANK.pro);
   }
   return "scale";
@@ -229,6 +238,7 @@ const STUDIO_VIDEO_LABELS: Record<string, string> = {
   "bytedance/seedance-1.5-pro": "Seedance 1.5 Pro",
   "bytedance/seedance-2": "Seedance 2.0",
   "bytedance/seedance-2-fast": "Seedance 2.0 Fast",
+  "bytedance/seedance-2-5": "Seedance 2.5",
   veo3_lite: "Veo 3.1 Lite",
   veo3_fast: "Veo 3.1 Fast",
   veo3: "Veo 3.1 Quality",
@@ -250,6 +260,7 @@ export const STUDIO_VIDEO_IDS_ORDERED: readonly string[] = [
   "bytedance/seedance-2-fast",
   "bytedance/seedance-1.5-pro",
   "bytedance/seedance-2",
+  "bytedance/seedance-2-5",
   "kling-3.0/video",
   "veo3_lite",
   "veo3_fast",
@@ -281,6 +292,13 @@ const STUDIO_IMAGE_PICKER_LABELS: Record<string, string> = {
   seedream_50_pro: "Seedream 5.0 Pro",
   seedream_50_pro_text_to_image: "Seedream 5.0 Pro",
   seedream_50_pro_image_to_image: "Seedream 5.0 Pro",
+  seedream_50_flash: "Seedream 5.0 Flash",
+  seedream_50_flash_text_to_image: "Seedream 5.0 Flash",
+  seedream_50_flash_image_to_image: "Seedream 5.0 Flash",
+  nano_banana_2_1: "NanoBanana 2.1",
+  qwen_image_2_1: "Qwen Image 2.1",
+  qwen_image_2_1_text_to_image: "Qwen Image 2.1",
+  qwen_image_2_1_image_to_image: "Qwen Image 2.1",
   google_nano_banana: "NanoBanana 2",
   nanobanana_standard: "NanoBanana 2",
   google_nano_banana_edit: "NanoBanana 2",
@@ -416,11 +434,24 @@ export const SUBSCRIPTION_MODEL_MATRIX_ROWS: SubscriptionModelMatrixRow[] = [
     label: "GPT Image 2.5",
     tiers: tierBools(IMAGE_MIN_RANK.pro),
   },
+  {
+    label: "NanoBanana 2.1",
+    tiers: tierBools(IMAGE_MIN_RANK.pro),
+  },
+  {
+    label: "Seedream 5.0 Flash",
+    tiers: tierBools(IMAGE_MIN_RANK.pro),
+  },
+  {
+    label: "Qwen Image 2.1",
+    tiers: tierBools(IMAGE_MIN_RANK.pro),
+  },
   { label: "Kling 2.5 Turbo", tiers: tierBools(VIDEO_MIN_RANK["kling-2.5-turbo/video"]) },
   { label: "Kling 2.6", tiers: tierBools(VIDEO_MIN_RANK["kling-2.6/video"]) },
   { label: "Seedance 1.5 Pro", tiers: tierBools(VIDEO_MIN_RANK["bytedance/seedance-1.5-pro"]) },
   { label: "Seedance 2.0", tiers: tierBools(VIDEO_MIN_RANK["bytedance/seedance-2"]) },
   { label: "Seedance 2.0 Fast", tiers: tierBools(VIDEO_MIN_RANK["bytedance/seedance-2-fast"]) },
+  { label: "Seedance 2.5", tiers: tierBools(VIDEO_MIN_RANK["bytedance/seedance-2-5"]) },
   {
     label: "Kling 3.0",
     tiers: tierBools(VIDEO_MIN_RANK["kling-3.0/video"]),

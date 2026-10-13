@@ -3,9 +3,12 @@ import { kieMarketCreateTask } from "@/lib/kieMarket";
 import { normalizeKieNanoBananaImageInputUrls } from "@/lib/kieNanoBananaImageInputUrls";
 import {
   buildKieGoogleImageInput,
+  KIE_MODEL_NANO_BANANA_2_1,
+  KIE_NANO_BANANA_2_1_MAX_REFERENCE_IMAGES,
   kieMarketModelForStudioImage,
   type KieGoogleImageResolution,
 } from "@/lib/kieGoogleImage";
+import { buildKieQwenImage21Input, kieMarketModelForQwenImage21Picker } from "@/lib/kieQwenImage21";
 import { buildKieGptImage2Input, kieMarketModelForGptImage2Picker } from "@/lib/kieGptImage2";
 import { buildKieGptImage25Input, kieMarketModelForGptImage25Picker } from "@/lib/kieGptImage25";
 import {
@@ -17,6 +20,8 @@ import { hasPersonalApiKey } from "@/lib/personalApiBypass";
 import {
   isStudioGptImage25ResolvedPickerId,
   isStudioGptImage2ResolvedPickerId,
+  isStudioNanoBanana21PickerId,
+  isStudioQwenImage21ResolvedPickerId,
   isStudioSeedreamImagePickerId,
   resolveStudioImageModelForReferences,
   studioGptImage25PickerRequiresReferenceImages,
@@ -180,10 +185,35 @@ export async function createStudioKieImageTasks(input: StudioKieImageTaskInput):
     return { taskIds, model, kieModel };
   }
 
-  const imageUrls = await normalizeKieNanoBananaImageInputUrls(imageUrlsRaw);
+  if (isStudioQwenImage21ResolvedPickerId(model)) {
+    const normalizedRefs = await normalizeKieNanoBananaImageInputUrls(imageUrlsRaw);
+    if (model === "qwen_image_2_1_image_to_image" && !normalizedRefs?.length) {
+      throw new Error("Add at least one reference image for Qwen Image 2.1 image-to-image.");
+    }
+    const kieModel = kieMarketModelForQwenImage21Picker(model);
+    const aspectFor = input.aspectRatio ?? input.imageSize ?? "auto";
+    const qwenInput = buildKieQwenImage21Input({
+      pickerId: model,
+      prompt,
+      aspectRatio: typeof aspectFor === "string" ? aspectFor : "auto",
+      resolution,
+      imageUrls: normalizedRefs,
+    });
+    const runQwen = () => kieMarketCreateTask({ model: kieModel, callBackUrl, input: qwenInput }, personalKey);
+    if (num <= 1) {
+      const taskId = await runQwen();
+      return { taskId, model, kieModel };
+    }
+    const taskIds = await Promise.all(Array.from({ length: num }, () => runQwen()));
+    return { taskIds, model, kieModel };
+  }
+
+  const imageUrlsAll = await normalizeKieNanoBananaImageInputUrls(imageUrlsRaw);
+  const isNano21 = isStudioNanoBanana21PickerId(model);
+  const imageUrls = isNano21 ? imageUrlsAll?.slice(0, KIE_NANO_BANANA_2_1_MAX_REFERENCE_IMAGES) : imageUrlsAll;
   const resolutionNano = resolution as KieGoogleImageResolution;
   const googleModel = model === "pro" ? "pro" : "nano";
-  const kieModel = kieMarketModelForStudioImage(googleModel);
+  const kieModel = isNano21 ? KIE_MODEL_NANO_BANANA_2_1 : kieMarketModelForStudioImage(googleModel);
   const aspectFor = input.aspectRatio ?? input.imageSize ?? "auto";
 
   const runOne = () =>

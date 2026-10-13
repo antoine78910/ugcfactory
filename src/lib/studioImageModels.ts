@@ -4,10 +4,13 @@ export const STUDIO_UNIFIED_IMAGE_PICKER_IDS = [
   "seedream_45",
   "seedream_50_lite",
   "seedream_50_pro",
+  "seedream_50_flash",
   "google_nano_banana",
+  "nano_banana_2_1",
   "gpt_image_2",
   "gpt_image_2_5_flare",
   "gpt_image_2_5_sunburst",
+  "qwen_image_2_1",
 ] as const;
 
 export const STUDIO_LEGACY_IMAGE_PICKER_IDS = [
@@ -17,6 +20,8 @@ export const STUDIO_LEGACY_IMAGE_PICKER_IDS = [
   "seedream_50_lite_image_to_image",
   "seedream_50_pro_text_to_image",
   "seedream_50_pro_image_to_image",
+  "seedream_50_flash_text_to_image",
+  "seedream_50_flash_image_to_image",
   "nanobanana_standard",
   "google_nano_banana_edit",
   "gpt_image_2_text_to_image",
@@ -25,18 +30,23 @@ export const STUDIO_LEGACY_IMAGE_PICKER_IDS = [
   "gpt_image_2_5_flare_image_to_image",
   "gpt_image_2_5_sunburst_text_to_image",
   "gpt_image_2_5_sunburst_image_to_image",
+  "qwen_image_2_1_text_to_image",
+  "qwen_image_2_1_image_to_image",
 ] as const;
 
 export const STUDIO_SEEDREAM_IMAGE_PICKER_IDS = [
   "seedream_45",
   "seedream_50_lite",
   "seedream_50_pro",
+  "seedream_50_flash",
   "seedream_45_text_to_image",
   "seedream_45_image_to_image",
   "seedream_50_lite_text_to_image",
   "seedream_50_lite_image_to_image",
   "seedream_50_pro_text_to_image",
   "seedream_50_pro_image_to_image",
+  "seedream_50_flash_text_to_image",
+  "seedream_50_flash_image_to_image",
 ] as const;
 
 export type StudioUnifiedImagePickerId = (typeof STUDIO_UNIFIED_IMAGE_PICKER_IDS)[number];
@@ -53,7 +63,10 @@ export type ResolvedStudioImageKiePickerModelId =
   | "gpt_image_2_5_flare_text_to_image"
   | "gpt_image_2_5_flare_image_to_image"
   | "gpt_image_2_5_sunburst_text_to_image"
-  | "gpt_image_2_5_sunburst_image_to_image";
+  | "gpt_image_2_5_sunburst_image_to_image"
+  | "nano_banana_2_1"
+  | "qwen_image_2_1_text_to_image"
+  | "qwen_image_2_1_image_to_image";
 
 export function isStudioSeedreamImagePickerId(id: string): id is StudioSeedreamImagePickerId {
   return (STUDIO_SEEDREAM_IMAGE_PICKER_IDS as readonly string[]).includes(id);
@@ -61,8 +74,37 @@ export function isStudioSeedreamImagePickerId(id: string): id is StudioSeedreamI
 
 export function isStudioUnifiedSeedreamPickerId(
   id: string,
-): id is Extract<StudioUnifiedImagePickerId, "seedream_45" | "seedream_50_lite" | "seedream_50_pro"> {
-  return id === "seedream_45" || id === "seedream_50_lite" || id === "seedream_50_pro";
+): id is Extract<StudioUnifiedImagePickerId, "seedream_45" | "seedream_50_lite" | "seedream_50_pro" | "seedream_50_flash"> {
+  return id === "seedream_45" || id === "seedream_50_lite" || id === "seedream_50_pro" || id === "seedream_50_flash";
+}
+
+/** Google Nano Banana 2.1 (`nano-banana-2-1`). */
+export function isStudioNanoBanana21PickerId(id: string): id is "nano_banana_2_1" {
+  return id === "nano_banana_2_1";
+}
+
+const QWEN_IMAGE_21_PICKER_IDS = [
+  "qwen_image_2_1",
+  "qwen_image_2_1_text_to_image",
+  "qwen_image_2_1_image_to_image",
+] as const;
+
+export function isStudioQwenImage21PickerModelId(id: string): id is (typeof QWEN_IMAGE_21_PICKER_IDS)[number] {
+  return (QWEN_IMAGE_21_PICKER_IDS as readonly string[]).includes(id);
+}
+
+export function isStudioQwenImage21ResolvedPickerId(
+  id: string,
+): id is "qwen_image_2_1_text_to_image" | "qwen_image_2_1_image_to_image" {
+  return id === "qwen_image_2_1_text_to_image" || id === "qwen_image_2_1_image_to_image";
+}
+
+/** Resolution choices shown in Studio for models with a resolution picker. */
+export function studioImageResolutionOptions(id: string): readonly ("1K" | "2K" | "4K")[] {
+  if (id.includes("seedream_50_flash") || id.includes("seedream_50_pro") || isStudioQwenImage21PickerModelId(id)) {
+    return ["1K", "2K"];
+  }
+  return ["1K", "2K", "4K"];
 }
 
 export function isStudioGoogleNanoBananaPickerId(
@@ -111,7 +153,15 @@ export function isStudioGptImage25ResolvedPickerId(
 
 /** Quality/resolution row for models that expose 1K / 2K / 4K (or Seedream 5 Pro basic/high). */
 export function studioImageModelSupportsResolutionPicker(id: string): boolean {
-  return id === "nano" || id === "pro" || isStudioGptImage25PickerModelId(id) || id.includes("seedream_50_pro");
+  return (
+    id === "nano" ||
+    id === "pro" ||
+    isStudioNanoBanana21PickerId(id) ||
+    isStudioGptImage25PickerModelId(id) ||
+    isStudioQwenImage21PickerModelId(id) ||
+    id.includes("seedream_50_pro") ||
+    id.includes("seedream_50_flash")
+  );
 }
 
 export function isStudioImageKiePickerModelId(id: string): id is StudioImageKiePickerModelId {
@@ -123,7 +173,8 @@ export function studioSeedreamPickerRequiresReferenceImages(id: StudioSeedreamIm
   return (
     id === "seedream_45_image_to_image" ||
     id === "seedream_50_lite_image_to_image" ||
-    id === "seedream_50_pro_image_to_image"
+    id === "seedream_50_pro_image_to_image" ||
+    id === "seedream_50_flash_image_to_image"
   );
 }
 
@@ -147,6 +198,14 @@ export function resolveStudioImageModelForReferences(
       return hasReferenceImages ? "seedream_50_lite_image_to_image" : "seedream_50_lite_text_to_image";
     case "seedream_50_pro":
       return hasReferenceImages ? "seedream_50_pro_image_to_image" : "seedream_50_pro_text_to_image";
+    case "seedream_50_flash":
+    case "seedream_50_flash_text_to_image":
+    case "seedream_50_flash_image_to_image":
+      return hasReferenceImages ? "seedream_50_flash_image_to_image" : "seedream_50_flash_text_to_image";
+    case "qwen_image_2_1":
+    case "qwen_image_2_1_text_to_image":
+    case "qwen_image_2_1_image_to_image":
+      return hasReferenceImages ? "qwen_image_2_1_image_to_image" : "qwen_image_2_1_text_to_image";
     case "gpt_image_2":
       return hasReferenceImages ? "gpt_image_2_image_to_image" : "gpt_image_2_text_to_image";
     case "gpt_image_2_text_to_image":

@@ -37,6 +37,21 @@ export function studioImagePickerCardHints(id: StudioImageKiePickerModelId): {
         resolution: "1K / 2K",
         durationRange: "Text or reference image",
       };
+    case "seedream_50_flash":
+      return {
+        resolution: "1K / 2K",
+        durationRange: "Fast, up to 10 references",
+      };
+    case "nano_banana_2_1":
+      return {
+        resolution: "1K / 2K / 4K",
+        durationRange: "Up to 10 references",
+      };
+    case "qwen_image_2_1":
+      return {
+        resolution: "1K / 2K",
+        durationRange: "Text or up to 10 references",
+      };
     case "google_nano_banana":
       return {
         resolution: "Google pipeline",
