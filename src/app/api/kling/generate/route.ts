@@ -32,6 +32,7 @@ import { isKieServableReferenceImageUrl } from "@/lib/kieSoraReferenceImage";
 import {
   validateStudioVideoJobDuration,
   isKieSeedance2FamilyModelId,
+  isSeedance25ModelId,
   seedance2FamilyKieRefCaps,
   seedance2FamilyMaxDurationSec,
   studioVideoIsSeedance2ProPickerId,
@@ -1231,6 +1232,14 @@ export async function POST(req: Request) {
           },
           { status: 502 },
         );
+      }
+
+      const refVideos = kieInput.reference_video_urls;
+      if (isSeedance25ModelId(rawModel) && Array.isArray(refVideos) && refVideos.length > 0) {
+        // Seedance 2.5 classifies reference-video jobs as video editing: output ratio and length
+        // must follow the input video, otherwise the task fails on the provider side.
+        kieInput.aspect_ratio = "adaptive";
+        kieInput.duration = -1;
       }
 
       const taskId = await kieMarketCreateTask({ model: rawModel, input: kieInput }, personalKey);
