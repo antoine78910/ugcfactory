@@ -38,6 +38,7 @@ import { findCreatorTemplateByProductUrl, type CreatorProductTemplate } from "@/
 import { isInfluencerAccount } from "@/lib/influencerAccounts";
 import { UploadBusyOverlay } from "@/app/_components/UploadBusyOverlay";
 import { guardedFetch } from "@/lib/guardedFetch";
+import { restrictedCreatorKnown } from "@/lib/creatorFormatsNotice";
 import { dispatchPersonalApiKeyRequired } from "@/lib/personalApiKeyEvents";
 import { absolutizeImageUrl } from "@/lib/imageUrl";
 import {
@@ -1617,6 +1618,7 @@ export default function LinkToAdUniverse({
   /** Read-only balance gate (opens billing modal). Use immediately before any paid LTA step. */
   const hasLtaCreditsFor = useCallback(
     (cost: number, opts?: { presentation?: "studio_billing" }): boolean => {
+      if (influencerRef.current || restrictedCreatorKnown()) return false;
       if (ltaTemplateLocksRef.current) return true;
       if (isPlatformCreditBypassActive()) return true;
       const k = Math.max(0, Math.floor(cost));

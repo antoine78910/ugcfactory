@@ -14,6 +14,7 @@ import { isStudioImageKiePickerModelId } from "@/lib/studioImageModels";
 import { logGenerationFailure, userFacingProviderErrorOrDefault } from "@/lib/generationUserMessage";
 import { serverLog } from "@/lib/serverLog";
 import { getEnv } from "@/lib/env";
+import { creatorGenerationBlocked } from "@/lib/creatorGenerationGate";
 import { requireSupabaseUser } from "@/lib/supabase/requireUser";
 import { getUserPlan } from "@/lib/supabase/getUserPlan";
 import { mergeNanoPromptForApi, splitNanoPromptBodyForEditing } from "@/lib/linkToAdUniverse";
@@ -73,6 +74,8 @@ export async function POST(req: Request) {
     serverLog("nanobanana_generate_unauth", {});
     return response;
   }
+  const creatorBlock = creatorGenerationBlocked(user);
+  if (creatorBlock) return creatorBlock;
 
   let body: Body;
   try {

@@ -10,6 +10,15 @@ export function canEditWorkflowTemplates(email: string | null | undefined): bool
   return email?.trim().toLowerCase() === WORKFLOW_TEMPLATE_EDITOR_EMAIL;
 }
 
+function hasCreatorMetadata(user: User): boolean {
+  const appMeta = (user.app_metadata ?? {}) as Record<string, unknown>;
+  const userMeta = (user.user_metadata ?? {}) as Record<string, unknown>;
+  if (appMeta.influencer === true || userMeta.influencer === true) return true;
+  const appKind = typeof appMeta.account_kind === "string" ? appMeta.account_kind.trim().toLowerCase() : "";
+  const userKind = typeof userMeta.account_kind === "string" ? userMeta.account_kind.trim().toLowerCase() : "";
+  return appKind === "influencer" || appKind === "creator" || userKind === "influencer" || userKind === "creator";
+}
+
 /**
  * Influencer demo accounts. They get the static-ad site templates in the workflow navbar.
  * Mark a real account with `app_metadata.influencer = true` (service role) or
@@ -17,13 +26,16 @@ export function canEditWorkflowTemplates(email: string | null | undefined): bool
  */
 export function isInfluencerAccount(user: User | null | undefined): boolean {
   if (!user) return false;
-  const appMeta = (user.app_metadata ?? {}) as Record<string, unknown>;
-  const userMeta = (user.user_metadata ?? {}) as Record<string, unknown>;
-  if (appMeta.influencer === true || userMeta.influencer === true) return true;
-  const appKind = typeof appMeta.account_kind === "string" ? appMeta.account_kind.trim().toLowerCase() : "";
-  const userKind = typeof userMeta.account_kind === "string" ? userMeta.account_kind.trim().toLowerCase() : "";
-  if (appKind === "influencer" || appKind === "creator" || userKind === "influencer" || userKind === "creator") {
-    return true;
-  }
+  if (hasCreatorMetadata(user)) return true;
   return isPrimaryAdminEmail(sessionUserEmail(user));
+}
+
+/**
+ * Ecom Efficiency creator handoff. Locked to Link to Ad + static workflow templates.
+ * Primary admins stay on the normal product even if they preview influencer templates.
+ */
+export function isRestrictedCreatorAccount(user: User | null | undefined): boolean {
+  if (!user) return false;
+  if (isPrimaryAdminEmail(sessionUserEmail(user))) return false;
+  return hasCreatorMetadata(user);
 }

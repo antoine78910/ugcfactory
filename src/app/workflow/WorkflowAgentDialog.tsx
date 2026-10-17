@@ -12,6 +12,7 @@ import {
 import { useCallback, useEffect, useRef, useState } from "react";
 import { toast } from "sonner";
 
+import { creatorGenerationAllowed } from "@/lib/creatorFormatsNotice";
 import { cn } from "@/lib/utils";
 import { uploadFileToCdn } from "@/lib/uploadBlobUrlToCdn";
 import type { WorkflowProjectStateV1 } from "./workflowProjectStorage";
@@ -75,6 +76,7 @@ export function WorkflowAgentDialog({ open, onOpenChange, project, onApply, read
 
   const runAgent = useCallback(async () => {
     if (readOnly) return;
+    if (!(await creatorGenerationAllowed())) return;
     if (!instruction.trim() && !html.trim() && imageUrls.length === 0) {
       toast.error("Add an instruction, HTML, or a screenshot.");
       return;

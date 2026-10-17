@@ -7,15 +7,23 @@ import { toast } from "sonner";
 
 import { saveAndEnablePersonalApiKey } from "@/app/_components/CreditsPlanContext";
 import {
+  dispatchCreatorFormatsNotice,
+  noteRestrictedCreator,
+  restrictedCreatorKnown,
+} from "@/lib/creatorFormatsNotice";
+import { isRestrictedCreatorAccount } from "@/lib/influencerAccounts";
+import {
   PERSONAL_API_KEY_REQUIRED_EVENT,
   type PersonalApiKeyRequiredDetail,
 } from "@/lib/personalApiKeyEvents";
+import { useSupabaseBrowserClient } from "@/lib/supabase/BrowserSupabaseProvider";
 
 /**
  * Shown when a free-plan user tries to generate without a personal Kie API key.
  * Keys stay in localStorage and are sent with generation requests (BYOK via kie.ai).
  */
 export default function PersonalApiKeyModal() {
+  const supabase = useSupabaseBrowserClient();
   const [open, setOpen] = useState(false);
   const [message, setMessage] = useState<string | null>(null);
   const [kieKey, setKieKey] = useState("");
@@ -24,12 +32,26 @@ export default function PersonalApiKeyModal() {
   useEffect(() => {
     function handler(e: Event) {
       const ce = e as CustomEvent<PersonalApiKeyRequiredDetail>;
-      setMessage(typeof ce.detail?.message === "string" ? ce.detail.message : null);
-      setOpen(true);
+      void (async () => {
+        if (restrictedCreatorKnown()) {
+          dispatchCreatorFormatsNotice();
+          return;
+        }
+        if (supabase) {
+          const { data } = await supabase.auth.getUser();
+          if (isRestrictedCreatorAccount(data.user)) {
+            noteRestrictedCreator(true);
+            dispatchCreatorFormatsNotice();
+            return;
+          }
+        }
+        setMessage(typeof ce.detail?.message === "string" ? ce.detail.message : null);
+        setOpen(true);
+      })();
     }
     window.addEventListener(PERSONAL_API_KEY_REQUIRED_EVENT, handler as EventListener);
     return () => window.removeEventListener(PERSONAL_API_KEY_REQUIRED_EVENT, handler as EventListener);
-  }, []);
+  }, [supabase]);
 
   const close = useCallback(() => setOpen(false), []);
 

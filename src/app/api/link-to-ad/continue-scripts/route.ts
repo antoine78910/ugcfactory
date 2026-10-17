@@ -2,6 +2,7 @@ export const runtime = "nodejs";
 export const maxDuration = 300;
 
 import { NextResponse } from "next/server";
+import { creatorGenerationBlocked } from "@/lib/creatorGenerationGate";
 import { requireSupabaseUser } from "@/lib/supabase/requireUser";
 import { createInternalFetchFromRequest } from "@/lib/linkToAd/internalFetch";
 import { runContinueScriptsPipeline } from "@/lib/linkToAd/runInitialPipeline";
@@ -9,8 +10,10 @@ import { runContinueScriptsPipeline } from "@/lib/linkToAd/runInitialPipeline";
 type Body = { runId?: string; videoDurationSeconds?: number };
 
 export async function POST(req: Request) {
-  const { response } = await requireSupabaseUser();
+  const { user, response } = await requireSupabaseUser();
   if (response) return response;
+  const creatorBlock = creatorGenerationBlocked(user);
+  if (creatorBlock) return creatorBlock;
 
   const body = (await req.json().catch(() => null)) as Body | null;
   const runId = typeof body?.runId === "string" ? body.runId.trim() : "";

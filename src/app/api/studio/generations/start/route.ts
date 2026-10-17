@@ -1,6 +1,7 @@
 export const runtime = "nodejs";
 
 import { NextResponse } from "next/server";
+import { creatorGenerationBlocked } from "@/lib/creatorGenerationGate";
 import { requireSupabaseUser } from "@/lib/supabase/requireUser";
 import { hasPersonalApiKey } from "@/lib/personalApiBypass";
 import { assertPersonalApiForFreePlan } from "@/lib/personalApiRequired";
@@ -50,6 +51,8 @@ type Body = {
 export async function POST(req: Request) {
   const { supabase, user, response } = await requireSupabaseUser();
   if (response) return response;
+  const creatorBlock = creatorGenerationBlocked(user);
+  if (creatorBlock) return creatorBlock;
 
   let body: Body;
   try {

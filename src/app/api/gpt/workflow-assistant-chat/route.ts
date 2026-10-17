@@ -5,6 +5,7 @@ import { NextResponse } from "next/server";
 import { WORKFLOW_IMAGE_TO_JSON_DEVELOPER } from "@/app/workflow/workflowImageToJsonPreset";
 import { claudeMessagesText, claudeMessagesTextWithImages } from "@/lib/claudeResponses";
 import { openaiResponsesText, openaiResponsesTextWithImages } from "@/lib/openaiResponses";
+import { creatorGenerationBlocked } from "@/lib/creatorGenerationGate";
 import { requireSupabaseUser } from "@/lib/supabase/requireUser";
 
 type AssistantModel = "claude-sonnet-4-5" | "gpt-5o";
@@ -38,8 +39,10 @@ function filterHttpsImageUrls(raw: unknown): string[] {
 }
 
 export async function POST(req: Request) {
-  const { response } = await requireSupabaseUser();
+  const { user, response } = await requireSupabaseUser();
   if (response) return response;
+  const creatorBlock = creatorGenerationBlocked(user);
+  if (creatorBlock) return creatorBlock;
 
   const body = (await req.json().catch(() => null)) as Body | null;
   const prompt = typeof body?.prompt === "string" ? body.prompt.trim() : "";

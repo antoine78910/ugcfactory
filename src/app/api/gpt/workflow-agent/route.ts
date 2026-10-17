@@ -5,6 +5,7 @@ import { NextResponse } from "next/server";
 import { parseWorkflowAgentPlan } from "@/app/workflow/workflowAgentOps";
 import { claudeMessagesText, claudeMessagesTextWithImages } from "@/lib/claudeResponses";
 import { openaiResponsesText, openaiResponsesTextWithImages } from "@/lib/openaiResponses";
+import { creatorGenerationBlocked } from "@/lib/creatorGenerationGate";
 import { requireSupabaseUser } from "@/lib/supabase/requireUser";
 
 type Body = {
@@ -78,8 +79,10 @@ function stripHeavyHtml(html: string): string {
 }
 
 export async function POST(req: Request) {
-  const { response } = await requireSupabaseUser();
+  const { user: authUser, response } = await requireSupabaseUser();
   if (response) return response;
+  const creatorBlock = creatorGenerationBlocked(authUser);
+  if (creatorBlock) return creatorBlock;
 
   const body = (await req.json().catch(() => null)) as Body | null;
   const instruction = typeof body?.instruction === "string" ? body.instruction.trim() : "";

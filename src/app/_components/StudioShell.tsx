@@ -25,10 +25,17 @@ import {
   Languages,
   X,
 } from "lucide-react";
+import {
+  dispatchCreatorFormatsNotice,
+  isCreatorAllowedPath,
+  noteRestrictedCreator,
+} from "@/lib/creatorFormatsNotice";
+import { isRestrictedCreatorAccount } from "@/lib/influencerAccounts";
 import { useSupabaseBrowserClient } from "@/lib/supabase/BrowserSupabaseProvider";
 import SidebarAccountMenu from "@/app/_components/SidebarAccountMenu";
 import CreditLowBanner from "@/app/_components/CreditLowBanner";
 import OutOfCreditsModal from "@/app/_components/OutOfCreditsModal";
+import CreatorFormatsNotice from "@/app/_components/CreatorFormatsNotice";
 import PersonalApiKeyModal from "@/app/_components/PersonalApiKeyModal";
 import StudioGenerationsBackgroundPoll from "@/app/_components/StudioGenerationsBackgroundPoll";
 import { useCreditsPlan } from "@/app/_components/CreditsPlanContext";
@@ -194,6 +201,7 @@ function StudioShellInner({
   const pathname = usePathname();
   const router = useRouter();
   const [email, setEmail] = useState("");
+  const [creatorLocked, setCreatorLocked] = useState(false);
   const { planDisplayName } = useCreditsPlan();
   /** User preference for collapsed rail; applied only on md+ (see `navCollapsed` below). */
   const [navCollapsedPref, setNavCollapsedPref] = useState(false);
@@ -334,8 +342,16 @@ function StudioShellInner({
         data: { user },
       } = await supabase.auth.getUser();
       setEmail(user?.email ?? "");
+      const locked = isRestrictedCreatorAccount(user);
+      setCreatorLocked(locked);
+      noteRestrictedCreator(locked);
     })();
   }, [supabase]);
+
+  useEffect(() => {
+    if (!creatorLocked || isCreatorAllowedPath(pathname)) return;
+    dispatchCreatorFormatsNotice({ redirectOnClose: true });
+  }, [creatorLocked, pathname]);
 
   async function onSignOut() {
     try {
@@ -485,7 +501,7 @@ function StudioShellInner({
                 </button>
               </div>
             )}
-            <SidebarCreditsBar collapsed={navCollapsed} />
+            {creatorLocked ? null : <SidebarCreditsBar collapsed={navCollapsed} />}
           </div>
 
           <div className="studio-sidebar-scroll min-h-0 min-w-0 flex-1 overflow-y-auto overflow-x-hidden overscroll-y-contain touch-pan-y">
@@ -580,6 +596,11 @@ function StudioShellInner({
                             return;
                           }
                           event.preventDefault();
+                          if (creatorLocked && !isCreatorAllowedPath(href)) {
+                            dispatchCreatorFormatsNotice();
+                            setMobileNavOpen(false);
+                            return;
+                          }
                           navigateCustomLink(href);
                         }}
                       >
@@ -596,7 +617,14 @@ function StudioShellInner({
                         type="button"
                         className={cn(navButtonClass(active), navCollapsed && "px-2.5 py-3.5")}
                         title={label}
-                        onClick={() => onStudioSectionChange!(id)}
+                        onClick={() => {
+                          if (creatorLocked && id !== "link_to_ad") {
+                            dispatchCreatorFormatsNotice();
+                            setMobileNavOpen(false);
+                            return;
+                          }
+                          onStudioSectionChange!(id);
+                        }}
                       >
                         <span
                           className={cn("flex min-w-0 items-center gap-2.5", navCollapsed && "justify-center")}
@@ -616,6 +644,12 @@ function StudioShellInner({
                       href={sectionHref(id, studioProjectId ?? null)}
                       className={cn(navButtonClass(active), navCollapsed && "px-2.5 py-3.5")}
                       title={label}
+                      onClick={(event) => {
+                        if (!creatorLocked || id === "link_to_ad") return;
+                        event.preventDefault();
+                        dispatchCreatorFormatsNotice();
+                        setMobileNavOpen(false);
+                      }}
                     >
                       <span className={cn("flex min-w-0 items-center gap-2.5", navCollapsed && "justify-center")}>
                         <NavIcon
@@ -643,7 +677,14 @@ function StudioShellInner({
                       navCollapsed && "px-2.5 py-3.5",
                     )}
                     title={PROJECTS_NAV.label}
-                    onClick={() => onStudioSectionChange!(PROJECTS_NAV.id)}
+                    onClick={() => {
+                      if (creatorLocked) {
+                        dispatchCreatorFormatsNotice();
+                        setMobileNavOpen(false);
+                        return;
+                      }
+                      onStudioSectionChange!(PROJECTS_NAV.id);
+                    }}
                   >
                     <span className={cn("flex min-w-0 items-center gap-2.5", navCollapsed && "justify-center")}>
                       <ProjectsNavIcon
@@ -663,6 +704,12 @@ function StudioShellInner({
                       navCollapsed && "px-2.5 py-3.5",
                     )}
                     title={PROJECTS_NAV.label}
+                    onClick={(event) => {
+                      if (!creatorLocked) return;
+                      event.preventDefault();
+                      dispatchCreatorFormatsNotice();
+                      setMobileNavOpen(false);
+                    }}
                   >
                     <span className={cn("flex min-w-0 items-center gap-2.5", navCollapsed && "justify-center")}>
                       <ProjectsNavIcon
@@ -685,6 +732,7 @@ function StudioShellInner({
               onLogout={onSignOut}
               planLabel={planDisplayName}
               collapsed={navCollapsed}
+              hideBilling={creatorLocked}
             />
           </div>
         </aside>
@@ -706,9 +754,10 @@ function StudioShellInner({
       </main>
 
       <StudioGenerationsBackgroundPoll />
-      <CreditLowBanner />
-      <OutOfCreditsModal />
+      {creatorLocked ? null : <CreditLowBanner />}
+      {creatorLocked ? null : <OutOfCreditsModal />}
       <PersonalApiKeyModal />
+      <CreatorFormatsNotice />
     </div>
   );
 }

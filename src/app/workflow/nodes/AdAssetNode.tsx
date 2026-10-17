@@ -44,6 +44,7 @@ import {
   isPlatformCreditBypassActive,
   useCreditsPlan,
 } from "@/app/_components/CreditsPlanContext";
+import { creatorGenerationAllowed } from "@/lib/creatorFormatsNotice";
 import { dispatchPersonalApiKeyRequired } from "@/lib/personalApiKeyEvents";
 import { WorkflowMediaTrimDialog } from "../WorkflowMediaTrimDialog";
 import {
@@ -2390,6 +2391,10 @@ function AdAssetNodeBase({ id, data, selected }: NodeProps<AdAssetNodeType>) {
       resultListSlotIndex?: number;
     }) => {
     if (generating) return;
+    if (!(await creatorGenerationAllowed())) {
+      emitRunFinished(false);
+      return;
+    }
     setLastGenerationError(null);
     setLastGenerationErrorDetails(null);
     setErrorDetailsOpen(false);

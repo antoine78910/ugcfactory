@@ -1,5 +1,10 @@
 "use client";
 
+import {
+  CREATOR_TEMPLATES_ONLY,
+  dispatchCreatorFormatsNotice,
+  restrictedCreatorKnown,
+} from "@/lib/creatorFormatsNotice";
 import { PERSONAL_API_KEY_REQUIRED } from "@/lib/personalApiRequiredCode";
 import { dispatchPersonalApiKeyRequired } from "@/lib/personalApiKeyEvents";
 
@@ -29,13 +34,21 @@ export async function guardedFetch(
         code?: string;
         message?: string;
       };
+      if (data?.error === CREATOR_TEMPLATES_ONLY || data?.code === CREATOR_TEMPLATES_ONLY) {
+        dispatchCreatorFormatsNotice();
+        return { blocked: true, response };
+      }
       if (
         data?.error === PERSONAL_API_KEY_REQUIRED ||
         data?.code === PERSONAL_API_KEY_REQUIRED
       ) {
-        dispatchPersonalApiKeyRequired({
-          message: typeof data.message === "string" ? data.message : undefined,
-        });
+        if (restrictedCreatorKnown()) {
+          dispatchCreatorFormatsNotice();
+        } else {
+          dispatchPersonalApiKeyRequired({
+            message: typeof data.message === "string" ? data.message : undefined,
+          });
+        }
         return { blocked: true, response };
       }
     } catch {
@@ -68,6 +81,10 @@ export async function guardedFetch(
 
   if (typeof window !== "undefined") {
     if (detail.planId === "free") {
+      if (restrictedCreatorKnown()) {
+        dispatchCreatorFormatsNotice();
+        return { blocked: true, response };
+      }
       dispatchPersonalApiKeyRequired({
         message:
           "On the free plan, add your Kie API key so generations are billed on your Kie account.",

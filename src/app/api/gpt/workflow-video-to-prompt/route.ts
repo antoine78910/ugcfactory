@@ -7,6 +7,7 @@ import {
   WORKFLOW_VIDEO_TO_PROMPT_USER_PROMPT,
 } from "@/app/workflow/workflowVideoToPromptPreset";
 import { claudeMessagesTextWithImages } from "@/lib/claudeResponses";
+import { creatorGenerationBlocked } from "@/lib/creatorGenerationGate";
 import { requireSupabaseUser } from "@/lib/supabase/requireUser";
 
 type Body = {
@@ -27,8 +28,10 @@ function sanitizeHttpsUrls(raw: unknown, max = 12): string[] {
 }
 
 export async function POST(req: Request) {
-  const { response } = await requireSupabaseUser();
+  const { user, response } = await requireSupabaseUser();
   if (response) return response;
+  const creatorBlock = creatorGenerationBlocked(user);
+  if (creatorBlock) return creatorBlock;
 
   const body = (await req.json().catch(() => null)) as Body | null;
   const prompt = typeof body?.prompt === "string" && body.prompt.trim()

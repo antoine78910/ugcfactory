@@ -10,6 +10,8 @@ type Props = {
   planLabel?: string;
   /** Narrow sidebar: avatar trigger only. */
   collapsed?: boolean;
+  /** Ecom Efficiency creators don't buy credits or a Youry plan. */
+  hideBilling?: boolean;
 };
 
 export default function SidebarAccountMenu({
@@ -17,6 +19,7 @@ export default function SidebarAccountMenu({
   onLogout,
   planLabel = "Free",
   collapsed = false,
+  hideBilling = false,
 }: Props) {
   const [open, setOpen] = useState(false);
   const rootRef = useRef<HTMLDivElement>(null);
@@ -78,24 +81,28 @@ export default function SidebarAccountMenu({
               : "absolute bottom-full left-0 right-0 z-[6000] mb-2 overflow-hidden rounded-xl border border-white/10 bg-[#0a0a0f] py-1 shadow-[0_-12px_48px_rgba(0,0,0,0.65)]"
           }
         >
-          <Link
-            href="/credits"
-            role="menuitem"
-            className="flex w-full items-center gap-3 px-3 py-2.5 text-left text-sm text-white/90 transition-colors hover:bg-white/[0.06]"
-            onClick={() => setOpen(false)}
-          >
-            <DollarSign className="h-4 w-4 shrink-0 text-white/70" strokeWidth={1.75} />
-            Credits
-          </Link>
-          <Link
-            href="/subscription"
-            role="menuitem"
-            className="flex w-full items-center gap-3 px-3 py-2.5 text-left text-sm text-white/90 transition-colors hover:bg-white/[0.06]"
-            onClick={() => setOpen(false)}
-          >
-            <Settings className="h-4 w-4 shrink-0 text-white/70" strokeWidth={1.75} />
-            Subscription
-          </Link>
+          {hideBilling ? null : (
+            <Link
+              href="/credits"
+              role="menuitem"
+              className="flex w-full items-center gap-3 px-3 py-2.5 text-left text-sm text-white/90 transition-colors hover:bg-white/[0.06]"
+              onClick={() => setOpen(false)}
+            >
+              <DollarSign className="h-4 w-4 shrink-0 text-white/70" strokeWidth={1.75} />
+              Credits
+            </Link>
+          )}
+          {hideBilling ? null : (
+            <Link
+              href="/subscription"
+              role="menuitem"
+              className="flex w-full items-center gap-3 px-3 py-2.5 text-left text-sm text-white/90 transition-colors hover:bg-white/[0.06]"
+              onClick={() => setOpen(false)}
+            >
+              <Settings className="h-4 w-4 shrink-0 text-white/70" strokeWidth={1.75} />
+              Subscription
+            </Link>
+          )}
           <Link
             href="/support"
             role="menuitem"
