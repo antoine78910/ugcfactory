@@ -70,7 +70,10 @@ const DEFAULT_SPACE_ID = "08d5d5c7-409a-44a0-8843-66ec5ed9d08b";
 const MAX_SELFIE_BYTES = 15 * 1024 * 1024;
 const MAX_AUTO_RETRIES = 2;
 const SLOT_TIMEOUT_MS = 12 * 60 * 1000;
-const TASK_START_CONCURRENCY = 6;
+/** Kie rejects bursts ("call frequency is too high"), so starts are throttled and retried. */
+const TASK_START_CONCURRENCY = 3;
+const TASK_START_RETRY_DELAYS_MS = [2000, 5000, 10000];
+const REFRESH_CONCURRENCY = 6;
 
 export class PersonaError extends Error {
   constructor(
@@ -328,24 +331,36 @@ export async function planPersonaSlots(gender: PersonaGender, selfieUrl: string)
 
 async function startSlotTask(slot: PersonaSlot): Promise<void> {
   slot.startedAt = new Date().toISOString();
-  try {
-    const created = await createStudioKieImageTasks({
-      prompt: slot.prompt,
-      model: slot.model as StudioImageKiePickerModelId,
-      numImages: 1,
-      resolution: slot.resolution as NanoBananaProResolution,
-      aspectRatio: slot.aspectRatio as NanoBananaProAspectRatio,
-      imageUrls: slot.imageUrls,
-    });
-    const taskId = created.taskId ?? created.taskIds?.[0] ?? null;
-    if (!taskId) throw new Error("No task id from provider.");
-    slot.taskId = taskId;
-    slot.status = "pending";
-    slot.error = null;
-  } catch (err) {
-    slot.taskId = null;
-    markSlotFailed(slot, err instanceof Error ? err.message : String(err));
+  let lastError = "";
+  for (let attempt = 0; attempt <= TASK_START_RETRY_DELAYS_MS.length; attempt++) {
+    if (attempt > 0) await new Promise((r) => setTimeout(r, TASK_START_RETRY_DELAYS_MS[attempt - 1]));
+    try {
+      const created = await createStudioKieImageTasks({
+        prompt: slot.prompt,
+        model: slot.model as StudioImageKiePickerModelId,
+        numImages: 1,
+        resolution: slot.resolution as NanoBananaProResolution,
+        aspectRatio: slot.aspectRatio as NanoBananaProAspectRatio,
+        imageUrls: slot.imageUrls,
+      });
+      const taskId = created.taskId ?? created.taskIds?.[0] ?? null;
+      if (!taskId) throw new Error("No task id from provider.");
+      slot.taskId = taskId;
+      slot.status = "pending";
+      slot.error = null;
+      slot.startedAt = new Date().toISOString();
+      return;
+    } catch (err) {
+      lastError = err instanceof Error ? err.message : String(err);
+      if (!isRateLimitError(lastError)) break;
+    }
   }
+  slot.taskId = null;
+  markSlotFailed(slot, lastError);
+}
+
+function isRateLimitError(message: string): boolean {
+  return /\b429\b|frequency is too high|rate limit|too many requests/i.test(message);
 }
 
 /** Final failure: fall back to the previous image when a regeneration did not succeed. */
@@ -375,6 +390,13 @@ function computeStatus(run: PersonaRun): PersonaRunStatus {
 }
 
 async function refreshSlot(run: PersonaRun, slot: PersonaSlot): Promise<boolean> {
+  // A task that never started (provider rejected it) gets the same automatic retries as a failed task.
+  if (slot.status === "failed" && !slot.imageUrl && slot.autoRetries < MAX_AUTO_RETRIES) {
+    slot.autoRetries += 1;
+    serverLog("persona.slot.auto_retry", { externalId: run.externalId, slot: slot.index, reason: slot.error });
+    await startSlotTask(slot);
+    return true;
+  }
   if (slot.status !== "pending" || !slot.taskId) return false;
   let finished: "success" | "fail" | null = null;
   let resultUrl: string | null = null;
@@ -478,7 +500,7 @@ export async function refreshPersonaRun(externalId: string): Promise<PersonaRun>
   if (!run) throw new PersonaError("No persona run for this user.", 404, "not_found");
   if (run.validatedAt) return run;
   const changed: boolean[] = [];
-  await runWithConcurrency(run.slots, TASK_START_CONCURRENCY, async (slot) => {
+  await runWithConcurrency(run.slots, REFRESH_CONCURRENCY, async (slot) => {
     changed.push(await refreshSlot(run, slot));
   });
   const nextStatus = computeStatus(run);
