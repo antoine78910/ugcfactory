@@ -182,16 +182,45 @@ export function collectWorkflowGroupRunnableIds(groupId: string, nodes: Node[]):
 export function buildWorkflowRunParallelWaves(runnableIds: string[], edges: Edge[]): string[][] {
   if (!runnableIds.length) return [];
   const runSet = new Set(runnableIds);
+  const incoming = new Map<string, string[]>();
+  for (const e of edges) {
+    if (!e.source || !e.target || e.source === e.target) continue;
+    if (!incoming.has(e.target)) incoming.set(e.target, []);
+    incoming.get(e.target)!.push(e.source);
+  }
+
+  // Direct edges only miss assistant → prompt list → image. Walk through non-runnable
+  // nodes so the image wave waits until the assistant has actually finished.
+  const predsOf = new Map<string, string[]>();
+  for (const id of runnableIds) {
+    const preds: string[] = [];
+    const seenPred = new Set<string>();
+    const stack = [...(incoming.get(id) ?? [])];
+    const seen = new Set<string>([id]);
+    while (stack.length) {
+      const src = stack.pop()!;
+      if (seen.has(src)) continue;
+      seen.add(src);
+      if (runSet.has(src)) {
+        if (!seenPred.has(src)) {
+          seenPred.add(src);
+          preds.push(src);
+        }
+        continue;
+      }
+      for (const up of incoming.get(src) ?? []) stack.push(up);
+    }
+    predsOf.set(id, preds);
+  }
+
   const indegree = new Map<string, number>();
   const children = new Map<string, string[]>();
   for (const id of runnableIds) {
-    indegree.set(id, 0);
+    indegree.set(id, predsOf.get(id)?.length ?? 0);
     children.set(id, []);
   }
-  for (const e of edges) {
-    if (!runSet.has(e.source) || !runSet.has(e.target) || e.source === e.target) continue;
-    children.get(e.source)!.push(e.target);
-    indegree.set(e.target, (indegree.get(e.target) ?? 0) + 1);
+  for (const id of runnableIds) {
+    for (const pred of predsOf.get(id) ?? []) children.get(pred)!.push(id);
   }
 
   const waves: string[][] = [];

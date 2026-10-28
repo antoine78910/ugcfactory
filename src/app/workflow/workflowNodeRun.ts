@@ -82,6 +82,58 @@ export function stripStickyHtmlToText(html: string): string {
   return h.replace(/<[^>]+>/g, " ").replace(/\s+/g, " ").trim();
 }
 
+/**
+ * Assistant / prompt-list text written during a run, before React commits node data.
+ * Group runs dispatch the next module in the same turn as `node-run-finished`, so
+ * `getNodes()` still has the previous output. Without this, the image step sees an
+ * empty assistant and the chain stops.
+ */
+const liveAssistantOutputs = new Map<string, string>();
+const livePromptLists = new Map<string, { lines?: string[]; contentKind?: "text" | "media" }>();
+
+export function noteLiveAssistantOutput(nodeId: string, text: string): void {
+  const id = nodeId.trim();
+  if (!id) return;
+  liveAssistantOutputs.set(id, text.trim());
+}
+
+export function noteLivePromptListPatch(
+  nodeId: string,
+  patch: { lines?: unknown; contentKind?: unknown },
+): void {
+  const id = nodeId.trim();
+  if (!id) return;
+  const prev = livePromptLists.get(id) ?? {};
+  const next: { lines?: string[]; contentKind?: "text" | "media" } = { ...prev };
+  if (Array.isArray(patch.lines)) {
+    next.lines = patch.lines.map((x) => (typeof x === "string" ? x : ""));
+  }
+  if (patch.contentKind === "text" || patch.contentKind === "media") {
+    next.contentKind = patch.contentKind;
+  }
+  if (next.lines || next.contentKind) livePromptLists.set(id, next);
+}
+
+/** Assistant output, preferring text recorded synchronously during the current run. */
+export function workflowAssistantOutputText(n: Node | undefined): string {
+  if (!n || n.type !== "adAsset") return "";
+  const d = n.data as AdAssetNodeData;
+  if (d.kind !== "assistant") return "";
+  if (liveAssistantOutputs.has(n.id)) return (liveAssistantOutputs.get(n.id) ?? "").trim();
+  return (d.assistantOutput ?? "").trim();
+}
+
+function promptListDataOf(n: Node): PromptListNodeData {
+  const d = n.data as PromptListNodeData;
+  const live = livePromptLists.get(n.id);
+  if (!live) return d;
+  return {
+    ...d,
+    ...(live.lines ? { lines: live.lines } : {}),
+    ...(live.contentKind ? { contentKind: live.contentKind } : {}),
+  };
+}
+
 function textFromUpstreamNode(n: Node): string {
   if (n.type === "textPrompt") {
     const d = n.data as TextPromptNodeData;
@@ -96,13 +148,18 @@ function textFromUpstreamNode(n: Node): string {
   if (n.type === "adAsset") {
     const d = n.data as AdAssetNodeData;
     if (d.kind === "assistant") {
-      const out = (d.assistantOutput ?? "").trim();
-      if (out) return out;
+      if (liveAssistantOutputs.has(n.id)) {
+        const out = (liveAssistantOutputs.get(n.id) ?? "").trim();
+        if (out) return out;
+      } else {
+        const out = (d.assistantOutput ?? "").trim();
+        if (out) return out;
+      }
     }
     return (d.prompt ?? "").trim();
   }
   if (n.type === "promptList") {
-    const d = n.data as PromptListNodeData;
+    const d = promptListDataOf(n);
     return (d.lines ?? []).map((x) => x.trim()).filter(Boolean).join("\n\n");
   }
   return "";
@@ -301,12 +358,12 @@ export function collectWorkflowBatchPrompts(
     if (!src) continue;
     if (src.type === "promptList") {
       const srcHandle = e.sourceHandle ?? "out";
-      const srcKind = promptListOutputKind(src.data as PromptListNodeData);
+      const listData = promptListDataOf(src);
+      const srcKind = promptListOutputKind(listData);
       const canEmitText = srcHandle === "outText" || (srcHandle === "out" && srcKind === "text");
       if (!canEmitText) continue;
       hasList = true;
-      const d = src.data as PromptListNodeData;
-      for (const line of (d.lines ?? []).map((x) => x.trim()).filter(Boolean)) {
+      for (const line of (listData.lines ?? []).map((x) => x.trim()).filter(Boolean)) {
         flat.push(appendLocal(line));
       }
       continue;
@@ -325,7 +382,7 @@ export function collectWorkflowBatchPrompts(
     if (!src) continue;
     if (src.type === "promptList") {
       const srcHandle = e.sourceHandle ?? "out";
-      const srcKind = promptListOutputKind(src.data as PromptListNodeData);
+      const srcKind = promptListOutputKind(promptListDataOf(src));
       const canEmitText = srcHandle === "outText" || (srcHandle === "out" && srcKind === "text");
       if (!canEmitText) continue;
     }
@@ -393,7 +450,7 @@ export function collectUpstreamAssistantTexts(
     if (!src || src.type !== "adAsset") continue;
     const d = src.data as AdAssetNodeData;
     if (d.kind !== "assistant") continue;
-    const out = (d.assistantOutput ?? "").trim();
+    const out = workflowAssistantOutputText(src);
     const text = out || (d.prompt ?? "").trim();
     if (!text || seen.has(text)) continue;
     seen.add(text);
@@ -414,7 +471,7 @@ export function collectLinkedPromptTexts(nodes: Node[], edges: Edge[], targetNod
     if (!src) continue;
     if (src.type === "promptList") {
       const srcHandle = e.sourceHandle ?? "out";
-      const srcKind = promptListOutputKind(src.data as PromptListNodeData);
+      const srcKind = promptListOutputKind(promptListDataOf(src));
       const canEmitText = srcHandle === "outText" || (srcHandle === "out" && srcKind === "text");
       if (!canEmitText) continue;
     }
@@ -444,7 +501,7 @@ export function collectLinkedPromptTextsForHandles(
     if (!src) continue;
     if (src.type === "promptList") {
       const srcHandle = e.sourceHandle ?? "out";
-      const srcKind = promptListOutputKind(src.data as PromptListNodeData);
+      const srcKind = promptListOutputKind(promptListDataOf(src));
       const canEmitText = srcHandle === "outText" || (srcHandle === "out" && srcKind === "text");
       if (!canEmitText) continue;
     }

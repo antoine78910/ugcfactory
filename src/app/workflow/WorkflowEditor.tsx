@@ -215,6 +215,8 @@ import type { StickyNoteNodeData } from "./workflowStickyNoteTypes";
 import {
   appendMissingWorkflowVideoElementImageTags,
   collectUpstreamAssistantTexts,
+  noteLiveAssistantOutput,
+  noteLivePromptListPatch,
   estimateWorkflowAdAssetRunCredits,
   resolveWorkflowVideoModelId,
   WORKFLOW_SEEDANCE_2_PRO_VIDEO_FILE_ACCEPT,
@@ -3218,6 +3220,26 @@ export function WorkflowFlowWorkspace({
       >,
     ) => {
       if (!nodeId || !patch || Object.keys(patch).length === 0) return;
+      if (typeof patch.assistantOutput === "string") {
+        noteLiveAssistantOutput(nodeId, patch.assistantOutput);
+      }
+      if (Array.isArray(patch.lines) || patch.contentKind === "text" || patch.contentKind === "media") {
+        noteLivePromptListPatch(nodeId, {
+          lines: patch.lines,
+          contentKind: patch.contentKind,
+        });
+      }
+      const live = nodesEdgesRef.current;
+      if (live?.nodes.some((n) => n.id === nodeId)) {
+        nodesEdgesRef.current = {
+          nodes: live.nodes.map((n) =>
+            n.id === nodeId
+              ? ({ ...n, data: { ...n.data, ...patch } } as WorkflowCanvasNode)
+              : n,
+          ),
+          edges: live.edges,
+        };
+      }
       setProject((prev) => {
         let touched = false;
         const nextPages = prev.pages.map((p) => {
@@ -4319,8 +4341,9 @@ export function WorkflowFlowWorkspace({
         toast.message(toastTitle, { description: creditsLabel });
         for (let i = 0; i < orderedRunIds.length; i++) {
           const nodeId = orderedRunIds[i]!;
+          const done = waitForNodeRun(nodeId);
           dispatchNodeRun(nodeId, snapNodes, snapEdges);
-          const ok = await waitForNodeRun(nodeId);
+          const ok = await done;
           if (!ok) {
             toast.error("Run chain stopped", {
               description: `Node ${i + 1}/${orderedRunIds.length} failed or timed out.`,
@@ -4359,8 +4382,9 @@ export function WorkflowFlowWorkspace({
           const wave = waves[w]!;
           const results = await Promise.all(
             wave.map(async (nodeId) => {
+              const done = waitForNodeRun(nodeId);
               dispatchNodeRun(nodeId, snapNodes, snapEdges);
-              return { nodeId, ok: await waitForNodeRun(nodeId) };
+              return { nodeId, ok: await done };
             }),
           );
           const failed = results.filter((r) => !r.ok);

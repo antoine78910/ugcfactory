@@ -93,6 +93,7 @@ import {
   collectLinkedPromptTexts,
   collectLinkedPromptTextsForHandles,
   collectUpstreamAssistantTexts,
+  workflowAssistantOutputText,
   composeWorkflowPrompt,
   workflowTextInputTargetHandles,
   WORKFLOW_ASSISTANT_TEXT_TARGET_HANDLES,
@@ -2390,7 +2391,9 @@ function AdAssetNodeBase({ id, data, selected }: NodeProps<AdAssetNodeType>) {
       resultListNodeId?: string;
       resultListSlotIndex?: number;
     }) => {
-    if (generating) return;
+    // A stale spinner (no provider task) must not swallow a group step: the chain
+    // waits for `node-run-finished`, and nothing else would emit it.
+    if (generating && data.pendingWorkflowRun) return;
     if (!(await creatorGenerationAllowed())) {
       emitRunFinished(false);
       return;
@@ -2475,7 +2478,7 @@ function AdAssetNodeBase({ id, data, selected }: NodeProps<AdAssetNodeType>) {
         if (!src || src.type !== "adAsset") return false;
         const sd = src.data as AdAssetNodeData;
         if (sd.kind !== "assistant") return false;
-        return !((sd.assistantOutput ?? "").trim() || (sd.prompt ?? "").trim());
+        return !(workflowAssistantOutputText(src) || (sd.prompt ?? "").trim());
       });
       if (wiredAssistantWithoutOutput) {
         toast.error("Run the assistant first", {
@@ -3839,6 +3842,7 @@ function AdAssetNodeBase({ id, data, selected }: NodeProps<AdAssetNodeType>) {
     data.label,
     data.motionBackgroundSource,
     data.motionInputDurationSec,
+    data.pendingWorkflowRun,
     data.referenceMediaKind,
     data.referencePreviewUrl,
     data.videoDurationSec,
