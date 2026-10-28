@@ -16,6 +16,12 @@ export function isEphemeralOrUnstableMediaUrl(url: string): boolean {
   if (u.includes("theapi.app")) return true;
   if (u.includes("/ephemeral/")) return true;
   if (u.includes("temp.") && u.includes("cdn")) return true;
+  // Kie image results land on tempfile.aiquickdraw.com and 404 after a few days.
+  // Videos on that host stay for the cron (live archival of large files OOMs the server).
+  if (u.includes("aiquickdraw.com") || u.includes("tempfile.")) {
+    if (/\.(mp4|webm|mov|m4v)(\?|$)/i.test(u)) return false;
+    return true;
+  }
   return false;
 }
 

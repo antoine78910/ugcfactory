@@ -5,7 +5,11 @@ import { NextResponse } from "next/server";
 import { requireSupabaseUser } from "@/lib/supabase/requireUser";
 import { createSupabaseServiceClient } from "@/lib/supabase/admin";
 import { STUDIO_GENERATION_IN_PROGRESS_STATUSES } from "@/lib/studioGenerationsPoll";
-import { persistStudioMediaUrls, isStudioMediaPublicUrl } from "@/lib/studioGenerationsMedia";
+import {
+  isEphemeralOrUnstableMediaUrl,
+  isStudioMediaPublicUrl,
+  persistStudioMediaUrls,
+} from "@/lib/studioGenerationsMedia";
 import { getUserCreditBalance } from "@/lib/creditGrants";
 import { isMissingCompletedAtColumnError, isMissingCreditBalanceAfterColumnError } from "@/lib/studioGenerationsSchemaCompat";
 
@@ -38,40 +42,42 @@ export async function POST(req: Request) {
     return NextResponse.json({ error: "Missing taskId or resultUrl" }, { status: 400 });
   }
 
-  const { data: matchRow } = await supabase
+  const { data: matchRows } = await supabase
     .from("studio_generations")
-    .select("id")
+    .select("id, status")
     .eq("user_id", user.id)
     .eq("external_task_id", taskId)
-    .in("status", [...STUDIO_GENERATION_IN_PROGRESS_STATUSES])
-    .maybeSingle();
-
-  const rowId = matchRow?.id as string | undefined;
+    .order("created_at", { ascending: false })
+    .limit(1);
+  const matchRow = matchRows?.[0];
+  const rowId = (matchRow?.id as string | undefined) ?? `task-${taskId.slice(0, 80)}`;
+  const inProgress = (STUDIO_GENERATION_IN_PROGRESS_STATUSES as readonly string[]).includes(
+    String(matchRow?.status ?? ""),
+  );
 
   let finalUrl = resultUrl;
-  if (!isStudioMediaPublicUrl(resultUrl) && rowId) {
+  if (!isStudioMediaPublicUrl(resultUrl) && isEphemeralOrUnstableMediaUrl(resultUrl)) {
     const admin = createSupabaseServiceClient();
     if (admin) {
       try {
-        // Live mode: only inline-archive truly ephemeral URLs (theapi.app etc.)
-        // to keep memory bounded under heavy concurrency. Stable provider URLs
-        // (Kling/Veo/Kie) are returned as-is and the cron will archive them
-        // shortly. This is what prevents Vercel "instance ran out of memory"
-        // 500s when 100 video generations finish simultaneously and the client
-        // concurrently calls /complete for each.
-        const { urls, complete } = await persistStudioMediaUrls({
+        // Copy Kie tempfile / other short-lived image URLs into studio-media before
+        // the workflow stores them. Videos stay on the provider URL for the cron.
+        const { urls } = await persistStudioMediaUrls({
           admin,
           userId: user.id,
           rowId,
           urls: [resultUrl],
           mode: "live",
         });
-        if (complete && urls[0]) finalUrl = urls[0];
-        else if (urls[0] && isStudioMediaPublicUrl(urls[0])) finalUrl = urls[0];
+        if (urls[0] && isStudioMediaPublicUrl(urls[0])) finalUrl = urls[0];
       } catch (e) {
         console.error("[completeStudioTask] archival failed, keeping original URL:", e);
       }
     }
+  }
+
+  if (matchRow?.id && !inProgress && isStudioMediaPublicUrl(finalUrl)) {
+    await supabase.from("studio_generations").update({ result_urls: [finalUrl] }).eq("id", matchRow.id);
   }
 
   // Snapshot balance after completion — at this point the client has already
